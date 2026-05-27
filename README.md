@@ -68,5 +68,9 @@ Connect Oratorio to a DotCraft session and let the Agent manage your board.
 
 ## Credits
 
-Oratorio is built on [DotCraft](https://github.com/DotHarness/dotcraft), the
+Inspired by [openai/symphony](https://github.com/openai/symphony) and built on [DotCraft](https://github.com/DotHarness/dotcraft), the
 Agent Harness and AppServer runtime that powers its agent execution workflow.
+
+## License
+
+Apache License 2.0

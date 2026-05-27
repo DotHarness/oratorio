@@ -56,4 +56,8 @@ dotnet run --project server/Oratorio.Server.csproj
 
 ## 致谢
 
-Oratorio 构建在 [DotCraft](https://github.com/DotHarness/dotcraft) 之上，由 DotCraft 提供 Agent Harness 与 AppServer runtime。
+本项目受 [openai/symphony](https://github.com/openai/symphony) 启发，构建在 [DotCraft](https://github.com/DotHarness/dotcraft) 之上，由 DotCraft 提供 Agent Harness 与 AppServer runtime。
+
+## License
+
+Apache License 2.0
