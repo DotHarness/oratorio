@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="none" viewBox="0 0 48 48">
+  <title>Oratorio</title>
+  <rect width="40" height="40" x="4" y="4" fill="#10212b" rx="10"/>
+  <path fill="#4a7fa5" d="M22.781 5.387a2.3 2.3 0 0 1 2.438 0l14.75 9.31A2.32 2.32 0 0 1 41.05 16.7v14.6a2.32 2.32 0 0 1-1.081 2.003l-14.75 9.31a2.3 2.3 0 0 1-2.438 0l-14.75-9.31A2.32 2.32 0 0 1 6.95 31.3V16.7a2.32 2.32 0 0 1 1.081-2.003z"/>
+  <path fill="#10212b" d="M24 10.78c7.43 0 13.45 5.918 13.45 13.22S31.43 37.22 24 37.22 10.55 31.302 10.55 24 16.57 10.78 24 10.78"/>
+  <path fill="#e8f3f8" fill-rule="evenodd" d="M24 12.9c6.2 0 11.25 4.96 11.25 11.1S30.2 35.1 24 35.1 12.75 30.14 12.75 24 17.8 12.9 24 12.9m0 5.15c-3.36 0-6.08 2.66-6.08 5.95s2.72 5.95 6.08 5.95 6.08-2.66 6.08-5.95-2.72-5.95-6.08-5.95" clip-rule="evenodd"/>
+  <path stroke="#7fc3df" stroke-linecap="round" stroke-width="2.4" d="M19.15 21.3h9.7M19.15 26.5h7.1"/>
+  <path stroke="#f0c76a" stroke-linecap="round" stroke-width="3.25" d="m15.6 33.1 18-18.2"/>
+  <circle cx="34.55" cy="13.95" r="2.35" fill="#fff8db"/>
+  <circle cx="14.9" cy="33.85" r="1.65" fill="#fff8db"/>
+</svg>
