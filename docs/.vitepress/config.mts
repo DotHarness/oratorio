@@ -2,7 +2,7 @@ import { defineConfig, type DefaultTheme } from 'vitepress'
 import { withMermaid } from 'vitepress-plugin-mermaid'
 import { withIcon } from './theme/icons'
 
-const repo = 'https://github.com/AkiKurisu/oratorio'
+const repo = 'https://github.com/DotHarness/oratorio'
 const base = process.env.VITEPRESS_BASE ?? (process.env.GITHUB_ACTIONS ? '/oratorio/' : '/')
 
 function escapeMustaches(value: string): string {
@@ -30,7 +30,7 @@ const enSidebar: DefaultTheme.Sidebar = [
     items: [
       { text: withIcon('matrix', 'Local Support Matrix'), link: '/local-support' },
       { text: withIcon('hammer', 'Development'), link: '/development' },
-      { text: withIcon('tag', 'GitHub Releases'), link: 'https://github.com/AkiKurisu/oratorio/releases' }
+      { text: withIcon('tag', 'GitHub Releases'), link: 'https://github.com/DotHarness/oratorio/releases' }
     ]
   }
 ]
@@ -56,7 +56,7 @@ const zhSidebar: DefaultTheme.Sidebar = [
     items: [
       { text: withIcon('matrix', '本地能力矩阵'), link: '/zh/local-support' },
       { text: withIcon('hammer', '开发指南'), link: '/zh/development' },
-      { text: withIcon('tag', 'GitHub Releases'), link: 'https://github.com/AkiKurisu/oratorio/releases' }
+      { text: withIcon('tag', 'GitHub Releases'), link: 'https://github.com/DotHarness/oratorio/releases' }
     ]
   }
 ]
