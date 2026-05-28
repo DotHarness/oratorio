@@ -402,6 +402,31 @@ comment-only finding:
   `requiresLargerChange`, `cannotAnchorSafely`, `investigateOnly`, or
   `leftSideOrDeletion`.
 
+Review Draft copy requirements:
+
+- default review prose is restrained English engineering copy with no
+  greetings, filler, raw JSON, or repeated machine-readable draft payload in
+  the final response;
+- `summary.body` uses four fixed lines: `Reviewed: <base>...<head>`,
+  `Outcome: <clean | N actionable findings | blocked>`,
+  `Scope checked: <2-4 high-risk areas inspected>`, and
+  `Notes: <important caveats, skipped anchors, or non-blocking context>`;
+- clean reviews must clearly state that the current head was reviewed and no
+  required changes were found, use `Outcome: clean`, set `majorCount`,
+  `minorCount`, and `suggestionCount` to `0`, and submit `comments: []`;
+- inline finding `title` values are concise imperative or problem statements;
+- inline finding `body` values use the shape `Why this matters`, `When it
+  fails`, and `Suggested direction`;
+- `suggestionReplacement` is used only for exact, small, right-side code
+  changes that can be safely published as native suggestions;
+- `commentOnlyReason` is used for investigation-only findings, larger
+  refactors, unsafe anchors, human decisions, and left-side or deletion notes;
+- `RED` means a likely bug affecting correctness, security, data loss, or a
+  broken workflow; `YELLOW` means an investigation flag, maintainability risk,
+  or lower-confidence issue;
+- informational explanations stay in `summary.body` or are omitted. They must
+  not become noisy FYI inline comments.
+
 `summary.suggestionCount` means accepted concrete code suggestions only. The
 server derives and persists this value from accepted inline comments with
 `suggestionReplacement`; if the agent-submitted count differs, Oratorio stores

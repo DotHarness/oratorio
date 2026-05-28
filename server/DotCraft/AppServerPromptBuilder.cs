@@ -9,6 +9,30 @@ namespace Oratorio.Server.DotCraft;
 
 public sealed class AppServerPromptBuilder(OratorioDbContext db)
 {
+    private const string ReviewDraftIntroInstructions = """
+        - Always call the available oratorio.SubmitReviewDraft tool before your final response; it is required even when the PR/MR is clean.
+        - If you find no actionable issues, submit a summary-only draft with majorCount 0, minorCount 0, suggestionCount 0, a concise body stating that the current head was reviewed and no required changes were found, and comments: [].
+        - Write Review Draft text in restrained English engineering prose: no greetings, no filler, no raw JSON in final response, and no repeated machine-readable draft in the final answer.
+        - Format summary.body with these labels: Reviewed: <base>...<head>; Outcome: <clean | N actionable findings | blocked>; Scope checked: <2-4 high-risk areas inspected>; Notes: <important caveats, skipped anchors, or non-blocking context>.
+        - Clean reviews must use the summary-only format with Outcome: clean, state that the current head was reviewed and no required changes were found, set majorCount 0, minorCount 0, suggestionCount 0, and comments: [].
+        - Prioritize actionable findings over FYI noise: submit inline comments only for bugs or flags that are useful for the operator or author to act on.
+        - Treat RED inline findings as likely bugs affecting correctness, security, data loss, or a broken workflow; treat YELLOW as investigate flags, maintainability risks, or lower-confidence issues.
+        - Write inline finding titles as concise imperative/problem statements, and write bodies with Why this matters, When it fails, and Suggested direction.
+        - Keep informational explanations in summary.body or omit them; do not submit noisy FYI inline comments.
+        """;
+
+    private const string ReviewDraftDiffInstructions = """
+        - Do not treat git show HEAD or HEAD^..HEAD as the complete PR/MR review range.
+        - For large PRs/MRs, inspect local git diff shards such as file lists, stats, and focused per-path diffs instead of relying on a single full diff.
+        - Prioritize high-risk changed files and submit only high-confidence inline findings with precise repository-relative paths and changed-line anchors.
+        - Inline findings must anchor to a commentable changed/context line in the PR/MR diff, not an arbitrary full-file line number.
+        - For each fixable RIGHT-side inline finding, include an exact suggestionReplacement that can be published as a native GitHub/GitLab suggested change.
+        - For non-suggestion findings, omit suggestionReplacement and provide commentOnlyReason as one of: needsHumanDecision, requiresLargerChange, cannotAnchorSafely, investigateOnly, leftSideOrDeletion.
+        - If oratorio.SubmitReviewDraft fails with reviewDraftAnchorNotCommentable, choose a valid line from the returned commentable ranges and call oratorio.SubmitReviewDraft again before your final response.
+        - Count only accepted concrete code suggestions in suggestionCount; do not count prose-only findings or follow-up ideas as suggestions.
+        - Do not place machine-readable review JSON in the final answer.
+        """;
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
@@ -292,21 +316,12 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
 
         if (run.Purpose == RunPurpose.ReviewAnalysis && item.Source is "github" or "gitlab" && item.Kind == ItemKind.PullRequest)
         {
-            prompt.AppendLine("- Always call the available oratorio.SubmitReviewDraft tool before your final response; it is required even when the PR/MR is clean.");
-            prompt.AppendLine("- If you find no actionable issues, submit a summary-only draft with majorCount 0, minorCount 0, suggestionCount 0, a concise body stating that the current head was reviewed and no required changes were found, and comments: [].");
+            prompt.AppendLine(ReviewDraftIntroInstructions);
             if (reviewDiff is not null)
             {
                 prompt.AppendLine("- First inspect the Review diff range file list/stat and focused per-path diffs before concluding the PR/MR is clean.");
             }
-            prompt.AppendLine("- Do not treat git show HEAD or HEAD^..HEAD as the complete PR/MR review range.");
-            prompt.AppendLine("- For large PRs/MRs, inspect local git diff shards such as file lists, stats, and focused per-path diffs instead of relying on a single full diff.");
-            prompt.AppendLine("- Prioritize high-risk changed files and submit only high-confidence inline findings with precise repository-relative paths and changed-line anchors.");
-            prompt.AppendLine("- Inline findings must anchor to a commentable changed/context line in the PR/MR diff, not an arbitrary full-file line number.");
-            prompt.AppendLine("- For each fixable RIGHT-side inline finding, include an exact suggestionReplacement that can be published as a native GitHub/GitLab suggested change.");
-            prompt.AppendLine("- If an inline finding cannot safely include a concrete replacement, omit suggestionReplacement and provide commentOnlyReason as one of: needsHumanDecision, requiresLargerChange, cannotAnchorSafely, investigateOnly, leftSideOrDeletion.");
-            prompt.AppendLine("- If oratorio.SubmitReviewDraft fails with reviewDraftAnchorNotCommentable, choose a valid line from the returned commentable ranges and call oratorio.SubmitReviewDraft again before your final response.");
-            prompt.AppendLine("- Count only accepted concrete code suggestions in suggestionCount; do not count prose-only findings or follow-up ideas as suggestions.");
-            prompt.AppendLine("- Do not place machine-readable review JSON in the final answer.");
+            prompt.AppendLine(ReviewDraftDiffInstructions);
         }
         if (requiredDynamicTools.Contains("oratorio.SubmitFollowUpDraft", StringComparer.Ordinal))
         {

@@ -1915,6 +1915,17 @@ public sealed class OratorioApiTests
         Assert.Contains("high-confidence inline findings", prompt);
         Assert.Contains("commentable changed/context line", prompt);
         Assert.Contains("fixable RIGHT-side inline finding", prompt);
+        Assert.Contains("restrained English engineering prose", prompt);
+        Assert.Contains("no raw JSON in final response", prompt);
+        Assert.Contains("Format summary.body with these labels: Reviewed: <base>...<head>; Outcome: <clean | N actionable findings | blocked>; Scope checked: <2-4 high-risk areas inspected>; Notes:", prompt);
+        Assert.Contains("Clean reviews must use the summary-only format with Outcome: clean", prompt);
+        Assert.Contains("current head was reviewed and no required changes were found", prompt);
+        Assert.Contains("Prioritize actionable findings over FYI noise", prompt);
+        Assert.Contains("RED inline findings as likely bugs", prompt);
+        Assert.Contains("YELLOW as investigate flags", prompt);
+        Assert.Contains("Why this matters, When it fails, and Suggested direction", prompt);
+        Assert.Contains("For non-suggestion findings, omit suggestionReplacement and provide commentOnlyReason", prompt);
+        Assert.Contains("do not submit noisy FYI inline comments", prompt);
         Assert.Contains("reviewDraftAnchorNotCommentable", prompt);
         Assert.Contains("do not count prose-only findings", prompt);
         Assert.Contains("Base workspace:", prompt);
@@ -2679,6 +2690,11 @@ public sealed class OratorioApiTests
         Assert.Equal(0, draft.SuggestionCount);
         Assert.Equal(0, draft.AcceptedCount);
         Assert.Empty(draft.Comments);
+        Assert.Contains("Reviewed: base123...abc123", draft.SummaryBody);
+        Assert.Contains("Outcome: clean", draft.SummaryBody);
+        Assert.Contains("Scope checked:", draft.SummaryBody);
+        Assert.Contains("Notes:", draft.SummaryBody);
+        Assert.Contains("current head was reviewed and no required changes were found", draft.SummaryBody);
     }
 
     [Theory]
@@ -5360,7 +5376,10 @@ internal sealed class FakeAppServerClient(
                                 _ => 1
                             },
                             body = outcome == FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft
-                                ? "Reviewed the current head and found no required changes."
+                                ? "Reviewed: base123...abc123\n"
+                                  + "Outcome: clean\n"
+                                  + "Scope checked: diff range, changed files, review anchors\n"
+                                  + "Notes: The current head was reviewed and no required changes were found."
                                 : "Review draft summary from DotCraft."
                         },
                         comments
@@ -5418,7 +5437,10 @@ internal sealed class FakeAppServerClient(
                             majorCount = 0,
                             minorCount = 0,
                             suggestionCount = 0,
-                            body = "Reviewed the current head and found no required changes."
+                            body = "Reviewed: base123...abc123\n"
+                                   + "Outcome: clean\n"
+                                   + "Scope checked: diff range, changed files, review anchors\n"
+                                   + "Notes: The current head was reviewed and no required changes were found."
                         },
                         comments = Array.Empty<object>()
                     }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
