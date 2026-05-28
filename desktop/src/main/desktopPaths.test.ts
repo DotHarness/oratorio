@@ -4,6 +4,7 @@ import {
   resolveDesktopConfigPath,
   resolveDesktopPreferencesPath,
   resolveDesktopSettingsRoot,
+  resolveDesktopStateRoot,
   type DesktopPathApp,
 } from './desktopPaths'
 
@@ -23,5 +24,6 @@ describe('desktop paths', () => {
     expect(resolveDesktopSettingsRoot(app)).toBe(join(home, '.oratorio'))
     expect(resolveDesktopConfigPath(app)).toBe(join(home, '.oratorio', 'config.json'))
     expect(resolveDesktopPreferencesPath(app)).toBe(join(home, '.oratorio', 'preferences.json'))
+    expect(resolveDesktopStateRoot(app)).toBe(join(home, '.oratorio'))
   })
 })

@@ -4,7 +4,7 @@ import net from 'net'
 import { join, resolve } from 'path'
 import { EventEmitter } from 'events'
 import type { App } from 'electron'
-import { resolveDesktopConfigPath } from './desktopPaths'
+import { resolveDesktopConfigPath, resolveDesktopStateRoot } from './desktopPaths'
 
 export type OratorioServerState = 'stopped' | 'starting' | 'running' | 'error'
 
@@ -175,12 +175,14 @@ export class OratorioServerManager extends EventEmitter {
   }
 
   private spawnServer(serverUrl: string): void {
+    const stateRoot = this.resolveStateRoot()
+
     const env = {
       ...process.env,
       ...this.env,
       ASPNETCORE_URLS: serverUrl,
       ORATORIO_CONFIG_PATH: this.resolveConfigPath(),
-      ORATORIO_STATE_ROOT: this.resolveStateRoot()
+      ORATORIO_STATE_ROOT: stateRoot
     }
 
     const command = this.app.isPackaged ? this.resolvePackagedServer() : 'dotnet'
@@ -239,7 +241,7 @@ export class OratorioServerManager extends EventEmitter {
   }
 
   private resolveStateRoot(): string {
-    return this.env.ORATORIO_STATE_ROOT?.trim() || join(this.app.getPath('userData'), 'state')
+    return this.env.ORATORIO_STATE_ROOT?.trim() || resolveDesktopStateRoot(this.app)
   }
 }
 

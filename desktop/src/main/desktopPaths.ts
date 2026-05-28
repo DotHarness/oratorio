@@ -16,3 +16,7 @@ export function resolveDesktopConfigPath(app: DesktopPathApp): string {
 export function resolveDesktopPreferencesPath(app: DesktopPathApp): string {
   return join(resolveDesktopSettingsRoot(app), 'preferences.json')
 }
+
+export function resolveDesktopStateRoot(app: DesktopPathApp): string {
+  return resolveDesktopSettingsRoot(app)
+}
