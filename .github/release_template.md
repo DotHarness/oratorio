@@ -1,0 +1,3 @@
+# Oratorio {{ VERSION }}
+
+{{ CHANGELOG }}

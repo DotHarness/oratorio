@@ -1,0 +1,287 @@
+name: Build Multi-Platform
+
+on:
+  push:
+    branches: [ master, main ]
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches: [ master, main ]
+    types: [labeled]
+  workflow_dispatch:
+
+jobs:
+  test:
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'build')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Oratorio
+        uses: actions/checkout@v6
+        with:
+          path: oratorio
+
+      - name: Checkout DotCraft
+        uses: actions/checkout@v6
+        with:
+          repository: DotHarness/dotcraft
+          path: dotcraft
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore .NET dependencies
+        run: dotnet restore Oratorio.sln
+        working-directory: oratorio
+
+      - name: Run .NET tests
+        run: dotnet test Oratorio.sln --configuration Release --no-restore
+        working-directory: oratorio
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: oratorio/desktop/package-lock.json
+
+      - name: Install desktop dependencies
+        run: npm ci
+        working-directory: oratorio/desktop
+
+      - name: Run desktop tests
+        run: npm test
+        working-directory: oratorio/desktop
+
+  build:
+    needs: test
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'build')
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15-intel]
+        include:
+          - os: ubuntu-latest
+            os_name: linux
+            runtime_id: linux-x64
+            server_output_name: Oratorio-Server-linux-x64
+            server_archive: Oratorio-Server-linux-x64.tar.gz
+          - os: windows-latest
+            os_name: windows
+            runtime_id: win-x64
+            server_output_name: Oratorio-Server-win-x64
+            server_archive: Oratorio-Server-win-x64.zip
+          - os: macos-15-intel
+            os_name: macos
+            runtime_id: osx-x64
+            server_output_name: Oratorio-Server-macos-x64
+            server_archive: Oratorio-Server-macos-x64.tar.gz
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout Oratorio
+        uses: actions/checkout@v6
+        with:
+          path: oratorio
+
+      - name: Checkout DotCraft
+        uses: actions/checkout@v6
+        with:
+          repository: DotHarness/dotcraft
+          path: dotcraft
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore server dependencies
+        run: dotnet restore server/Oratorio.Server.csproj
+        working-directory: oratorio
+
+      - name: Publish server
+        run: dotnet publish server/Oratorio.Server.csproj -c Release -r ${{ matrix.runtime_id }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:PublishIISAssets=false -p:DebugType=None -p:DebugSymbols=false -o ./publish/${{ matrix.server_output_name }}
+        working-directory: oratorio
+
+      - name: Create server archive for Linux/macOS
+        if: runner.os != 'Windows'
+        run: |
+          cd publish/${{ matrix.server_output_name }}
+          tar -czf ../../${{ matrix.server_archive }} *
+          cd ../..
+        working-directory: oratorio
+
+      - name: Create server archive for Windows
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path publish/${{ matrix.server_output_name }}/* -DestinationPath ${{ matrix.server_archive }}
+        working-directory: oratorio
+
+      - name: Upload server artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.server_output_name }}
+          path: oratorio/${{ matrix.server_archive }}
+          if-no-files-found: error
+
+      - name: Setup Node.js
+        if: runner.os != 'Linux'
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: oratorio/desktop/package-lock.json
+
+      - name: Install desktop dependencies
+        if: runner.os != 'Linux'
+        run: npm ci
+        working-directory: oratorio/desktop
+
+      - name: Stage server for desktop - Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path desktop/resources/server) {
+            Remove-Item -Recurse -Force desktop/resources/server
+          }
+          New-Item -ItemType Directory -Force -Path desktop/resources/server | Out-Null
+          Copy-Item -Path publish/${{ matrix.server_output_name }}/* -Destination desktop/resources/server/ -Recurse -Force
+        working-directory: oratorio
+
+      - name: Stage server for desktop - macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          rm -rf desktop/resources/server
+          mkdir -p desktop/resources/server
+          cp -R publish/${{ matrix.server_output_name }}/. desktop/resources/server/
+        working-directory: oratorio
+
+      - name: Clean desktop dist
+        if: runner.os != 'Linux'
+        shell: bash
+        run: rm -rf desktop/dist
+        working-directory: oratorio
+
+      - name: Build desktop app
+        if: runner.os != 'Linux'
+        run: |
+          npm run build
+          npx electron-builder --publish never
+        working-directory: oratorio/desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Prepare Windows installer artifact
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p desktop/dist/installer
+          mv desktop/dist/*Setup*.exe desktop/dist/installer/ || true
+        working-directory: oratorio
+
+      - name: Upload desktop installer - Windows
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v6
+        with:
+          name: Oratorio-Installer-win-x64
+          path: oratorio/desktop/dist/installer/*.exe
+          if-no-files-found: error
+
+      - name: Upload desktop artifact - macOS
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v6
+        with:
+          name: Oratorio-macos-x64-dmg
+          path: oratorio/desktop/dist/*.dmg
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Oratorio
+        uses: actions/checkout@v6
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+
+      - name: Rename artifacts with version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "Version: $VERSION"
+
+          mkdir -p release
+
+          for file in artifacts/Oratorio-Server-*/Oratorio-Server-*.tar.gz; do
+            [ -f "$file" ] || continue
+            platform=$(basename "$file" | sed 's/Oratorio-Server-\(.*\)-x64.tar.gz/\1/')
+            new_name="Oratorio-${VERSION}-server-${platform}-x64.tar.gz"
+            cp "$file" "release/$new_name"
+            echo "Renamed: $(basename "$file") -> $new_name"
+          done
+
+          for file in artifacts/Oratorio-Server-*/Oratorio-Server-*.zip; do
+            [ -f "$file" ] || continue
+            platform=$(basename "$file" | sed 's/Oratorio-Server-\(.*\)-x64.zip/\1/')
+            new_name="Oratorio-${VERSION}-server-${platform}-x64.zip"
+            cp "$file" "release/$new_name"
+            echo "Renamed: $(basename "$file") -> $new_name"
+          done
+
+          for file in artifacts/Oratorio-Installer-win-x64/*.exe; do
+            [ -f "$file" ] || continue
+            new_name="Oratorio-${VERSION}-win-x64-Setup.exe"
+            cp "$file" "release/$new_name"
+            echo "Renamed: $(basename "$file") -> $new_name"
+          done
+
+          for file in artifacts/Oratorio-macos-x64-dmg/*.dmg; do
+            [ -f "$file" ] || continue
+            new_name="Oratorio-${VERSION}-macos-x64.dmg"
+            cp "$file" "release/$new_name"
+            echo "Renamed: $(basename "$file") -> $new_name"
+          done
+
+          echo "Final release files:"
+          ls -lh release/
+
+          actual_count=$(find release -maxdepth 1 -type f | wc -l | tr -d ' ')
+          if [ "$actual_count" != "5" ]; then
+            echo "Expected 5 release files, found $actual_count."
+            exit 1
+          fi
+
+      - name: Prepare Release Notes
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          REPO=${{ github.repository }}
+
+          if [ -f ".github/release_template.md" ]; then
+            sed \
+              -e "s|{{ VERSION }}|$VERSION|g" \
+              -e "s|{{ REPO }}|$REPO|g" \
+              -e "s|{{ CHANGELOG }}|- See auto-generated notes below.|g" \
+              ".github/release_template.md" > "release_notes.md"
+          else
+            echo "Automatic release $VERSION" > "release_notes.md"
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          body_path: release_notes.md
+          append_body: true
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
