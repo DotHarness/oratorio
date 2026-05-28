@@ -21,13 +21,14 @@ const enSidebar: DefaultTheme.Sidebar = [
     text: 'Configure',
     items: [
       { text: withIcon('workspace', 'Connect to DotCraft'), link: '/dotcraft-workspaces' },
-      { text: withIcon('cog', 'Configuration Reference'), link: '/configuration' },
+      { text: withIcon('github', 'GitHub Integration'), link: '/github' },
       { text: withIcon('gitlab', 'GitLab Integration'), link: '/gitlab' }
     ]
   },
   {
     text: 'Reference',
     items: [
+      { text: withIcon('cog', 'Configuration Reference'), link: '/configuration' },
       { text: withIcon('matrix', 'Local Support Matrix'), link: '/local-support' },
       { text: withIcon('hammer', 'Development'), link: '/development' },
       { text: withIcon('tag', 'GitHub Releases'), link: 'https://github.com/DotHarness/oratorio/releases' }
@@ -47,13 +48,14 @@ const zhSidebar: DefaultTheme.Sidebar = [
     text: '配置',
     items: [
       { text: withIcon('workspace', '接入 DotCraft'), link: '/zh/dotcraft-workspaces' },
-      { text: withIcon('cog', '配置参考'), link: '/zh/configuration' },
+      { text: withIcon('github', 'GitHub 集成'), link: '/zh/github' },
       { text: withIcon('gitlab', 'GitLab 集成'), link: '/zh/gitlab' }
     ]
   },
   {
     text: '参考',
     items: [
+      { text: withIcon('cog', '配置参考'), link: '/zh/configuration' },
       { text: withIcon('matrix', '本地能力矩阵'), link: '/zh/local-support' },
       { text: withIcon('hammer', '开发指南'), link: '/zh/development' },
       { text: withIcon('tag', 'GitHub Releases'), link: 'https://github.com/DotHarness/oratorio/releases' }
@@ -64,15 +66,15 @@ const zhSidebar: DefaultTheme.Sidebar = [
 const enNav: DefaultTheme.NavItem[] = [
   { text: 'Overview', link: '/' },
   { text: 'Getting Started', link: '/getting-started' },
-  { text: 'Configure', link: '/configuration' },
-  { text: 'Reference', link: '/local-support' }
+  { text: 'Configure', link: '/dotcraft-workspaces' },
+  { text: 'Reference', link: '/configuration' }
 ]
 
 const zhNav: DefaultTheme.NavItem[] = [
   { text: '总览', link: '/zh/' },
   { text: '快速开始', link: '/zh/getting-started' },
-  { text: '配置', link: '/zh/configuration' },
-  { text: '参考', link: '/zh/local-support' }
+  { text: '配置', link: '/zh/dotcraft-workspaces' },
+  { text: '参考', link: '/zh/configuration' }
 ]
 
 export default withMermaid(defineConfig({

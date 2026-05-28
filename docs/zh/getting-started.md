@@ -61,8 +61,8 @@ Oratorio Desktop 启动时会显示一个简短的启动画面，等待本地 se
 
 如果希望 Oratorio 镜像真实的 Issue 与 PR，在 Settings → Credentials 中填入工作来源凭据：
 
-- **GitHub** —— 填入 GitHub App ID、Private Key、Webhook Secret。App Installation 按 owner 分组（例如 `github.com/your-org`），同一 owner 下的仓库共用一个 Installation。
-- **GitLab** —— 在每个 project 卡片填入 Project Access Token、Webhook Secret、Standard Webhooks 签名 Token。完整的 Scope 与 Webhook URL 见 [GitLab 集成](/zh/gitlab)。
+- **GitHub** —— 完整连接建议使用 GitHub App。见 [GitHub 集成](/zh/github)。
+- **GitLab** —— 在每个 GitLab 项目卡片上填入 Token。见 [GitLab 集成](/zh/gitlab)。
 
 ![Settings → Credentials，包含 GitHub 与 GitLab 字段](https://github.com/DotHarness/resources/raw/master/oratorio/settings-credentials-light.png)
 
@@ -105,7 +105,8 @@ Oratorio Desktop 启动时会显示一个简短的启动画面，等待本地 se
 | 你想做的 | 文档 |
 |---|---|
 | 看完整的 Settings 参考 | [配置参考](/zh/configuration) |
-| 配置 GitLab Token、Webhook 与合并门控 | [GitLab 集成](/zh/gitlab) |
+| 配置 GitHub 仓库、Webhook 与回写 | [GitHub 集成](/zh/github) |
+| 配置 GitLab 项目、Webhook 与回写 | [GitLab 集成](/zh/gitlab) |
 | 了解哪些能力可离线运行、哪些依赖 GitHub / GitLab | [本地能力矩阵](/zh/local-support) |
 | 构建、测试与贡献代码 | [开发指南](/zh/development) |
 | 理解 Oratorio 如何接入 DotCraft | [Oratorio 如何接入 DotCraft](/zh/dotcraft-workspaces) |

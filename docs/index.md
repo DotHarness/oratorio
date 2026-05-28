@@ -144,6 +144,7 @@ lastUpdated: false
         </p>
         <div class="or-actions">
           <a class="or-button or-button--primary" href="./getting-started">Walk through setup</a>
+          <a class="or-button" href="./github">GitHub guide</a>
           <a class="or-button" href="./configuration">Configuration reference</a>
           <a class="or-button" href="./gitlab">GitLab guide</a>
         </div>

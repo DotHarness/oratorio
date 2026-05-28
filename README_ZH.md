@@ -2,7 +2,7 @@
 
 ![Oratorio](https://github.com/DotHarness/resources/raw/master/oratorio/banner.png)
 
-[English](./README.md) · [文档](./docs/index.md) · [快速开始](./docs/getting-started.md) · [DotCraft](https://github.com/DotHarness/dotcraft)
+[English](./README.md) · [文档](https://dotharness.github.io/oratorio/zh/) · [快速开始](https://dotharness.github.io/oratorio/zh/getting-started) · [DotCraft](https://github.com/DotHarness/dotcraft)
 
 让 Agent 在看板中与你一同协作项目。
 
@@ -35,7 +35,7 @@ dotnet build Oratorio.sln
 dotnet run --project server/Oratorio.Server.csproj
 ```
 
-环境要求、代码平台配置、Release 构建和测试命令见 [开发指南](./docs/development.md)。
+环境要求、代码平台配置、Release 构建和测试命令见 [开发指南](https://dotharness.github.io/oratorio/zh/development)。
 
 ## 连接 DotCraft
 
@@ -48,11 +48,12 @@ dotnet run --project server/Oratorio.Server.csproj
 
 | 目标 | 文档 |
 |------|------|
-| 安装、运行并理解第一次本地流程 | [快速开始](./docs/getting-started.md) |
-| 构建、测试和参与开发 | [开发指南](./docs/development.md) |
-| 配置 Settings、状态路径、GitHub/GitLab 与 DotCraft 路由 | [配置指南](./docs/configuration.md) |
-| 配置 GitLab 项目、Token、Webhook 和 MR 交付 | [GitLab 集成配置](./docs/gitlab.md) |
-| 查看哪些能力可本地运行，哪些仍依赖外部代码平台 | [本地支持矩阵](./docs/local-support.md) |
+| 安装、运行并理解第一次本地流程 | [快速开始](https://dotharness.github.io/oratorio/zh/getting-started) |
+| 构建、测试和参与开发 | [开发指南](https://dotharness.github.io/oratorio/zh/development) |
+| 查看 Settings 字段、状态路径、DotCraft 路由与自动化策略 | [配置指南](https://dotharness.github.io/oratorio/zh/configuration) |
+| 配置 GitHub 项目、GitHub App、Webhook 和 PR 交付 | [GitHub 集成配置](https://dotharness.github.io/oratorio/zh/github) |
+| 配置 GitLab 项目、Token、Webhook 和 MR 交付 | [GitLab 集成配置](https://dotharness.github.io/oratorio/zh/gitlab) |
+| 查看哪些能力可本地运行，哪些仍依赖外部代码平台 | [本地支持矩阵](https://dotharness.github.io/oratorio/zh/local-support) |
 
 ## 致谢
 

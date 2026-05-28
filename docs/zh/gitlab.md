@@ -1,120 +1,89 @@
 # GitLab 集成
 
-Oratorio 支持把 GitLab issue 和 merge request 作为 Task 同步到看板，并在启用写入后发布 note、MR discussion、commit status，以及把 implementation draft 交付为 GitLab MR。
+当你希望 Oratorio 把真实的 GitLab Issue 和 Merge Request 拉进看板时，可以接入 GitLab。Oratorio 能同步工作项、保持卡片更新、展示最新讨论；在你允许回写后，还能把留言、审阅反馈、审阅状态和交付出的 Merge Request 写回 GitLab。
 
 > [!NOTE]
-> 本页只涉及 GitLab 特定的配置 —— token、webhook、合并 gate。Settings 和 Configuration Overlay 的通用说明见 [配置参考](/zh/configuration)；agent 运行时前置条件见 [DotCraft 工作区](/zh/dotcraft-workspaces)。每个 GitLab project 在被 dispatch 之前仍需要一条工作区映射。
+> 如果是第一次设置 Oratorio，请先从 [快速开始](/zh/getting-started) 开始。本页只讲 GitLab 相关配置。DotCraft 设置见 [接入 DotCraft](/zh/dotcraft-workspaces)；完整字段说明见 [配置参考](/zh/configuration)。
 
-## Token 和权限
+## 开始之前
 
-GitLab v1 使用 token 配置，不包含 OAuth 连接流程。Oratorio 按 GitLab project profile 保存 token；每个 configured project 都需要自己的 profile。推荐优先使用 project access token，因为它的影响范围只覆盖单个项目；group access token 或 personal access token 可用，但影响范围更大，可以把同一个 token 填到多个 project profile 中。
+你需要准备：
 
-建议最小权限：
+- 目标 GitLab 项目的访问权限；
+- 每个项目各自的 GitLab Token；
+- 已经在 DotCraft 中打开并可用的同一个项目；
+- 如果想用 Webhook 自动更新看板，还需要一个 GitLab 能访问到的 Oratorio server 地址。
 
-- 读同步：`read_api`，并且 token 身份能读取目标 project。
-- 代码读取和交付：`read_repository` 与 `write_repository`。
-- note、discussion、commit status 和 MR 创建：`api`。
+如果 Oratorio 只在你的电脑上本地运行，GitLab 访问不到它，也没关系。手动同步和定时同步仍然可用。
 
-GitLab 写入会以目标 project profile 的 token 身份出现在 GitLab 中。Settings 只显示每个 project profile 的 token 是否存在；保存后不会回显明文。
+## 在 Oratorio 中添加项目
 
-## Endpoint 和项目路径
+打开 **Settings → Credentials → GitLab**。
 
-GitLab.com 可使用默认 endpoint：
+- GitLab.com 可以保留默认地址。
+- 自建 GitLab 填入 GitLab 服务器主页地址即可，不需要自己补 GitLab API 路径。
+- 打开 **GitLab read sync**，用于导入 Issue 和 Merge Request。
+- 只有当你希望 Oratorio 写回留言、审阅状态或交付 Merge Request 时，才打开 **GitLab writes**。
 
-```text
-https://gitlab.com
-```
+然后进入 **Settings → Projects**，添加一条 GitLab 项目。
 
-self-managed GitLab 使用实例根 URL，例如：
+- 在 **GitLab project** 中填入 GitLab 里看到的项目路径。带 subgroup 的路径也支持。
+- 在 **DotCraft workspace** 中选择已经交给 DotCraft 使用的本地项目目录。
+- 在同一张项目卡片上填入 GitLab Token，以及你准备给 Webhook 使用的 secret 或 signing token。
 
-```text
-https://gitlab.company.example
-```
+保存设置。如果 Oratorio 提示需要重启，请先重启本地 server，再测试连接。
 
-GitLab API URL 由 endpoint 自动派生为 `<endpoint>/api/v4`；Desktop 设置只需要配置实例根 URL。
+## 创建 GitLab Token
 
-项目路径使用 GitLab 的 path-with-namespace：
+大多数团队优先使用 **Project Access Token**，因为它只作用于一个项目。Group Token 或 Personal Token 也能用，但范围更大，需要更谨慎地保存和分发。
 
-```text
-group/project
-group/subgroup/project
-```
+按你想开启的能力，选择尽量小的权限：
 
-Settings 的 Projects 页会把 GitLab project 保存为 canonical source key，例如：
+| 你想做的事 | GitLab 中需要允许的访问 |
+|---|---|
+| 只导入 Issue 和 Merge Request | read API access |
+| 读取仓库信息用于审阅 | repository read access |
+| 把实现结果交付成 Merge Request | repository write access |
+| 发布留言、讨论、审阅状态或 Merge Request | API access |
 
-```text
-gitlab:gitlab.company.example/group/subgroup/project
-```
+Oratorio 保存后不会再显示 Token 明文。想保留原值就留空；想替换就粘贴新值并保存。
 
-这个 key 用于 DotCraft workspace routing，避免 GitHub 和 GitLab 出现相同 `group/project` 时产生歧义。
+## 添加 GitLab Webhook
 
-GitLab project card 同时也是 profile 编辑入口。每个 profile key 是：
+Webhook 不是必需的，但它能让 Oratorio 更快感知 GitLab 中的变化。
 
-```text
-gitlab:<host>/<group[/subgroup]/project>
-```
+在 GitLab 项目的 Webhook 设置中，添加一个地址：你的 Oratorio server 地址后面接上 /api/v1/sources/gitlab/webhook。
 
-profile 包含：
+Webhook 使用的 secret 或 signing token，要和 Oratorio 项目卡片中保存的值一致。事件建议开启 Issue、Merge Request、comment 或 note 相关事件。保存后，如果 GitLab 提供测试按钮，可以先测试一次，再回到 Oratorio 的 **Settings → Sources** 查看状态。
 
-- token kind label，例如 `projectAccessToken`、`groupAccessToken` 或 `personalAccessToken`；
-- GitLab API token；
-- webhook secret token；
-- Standard Webhooks signing token。
+如果测试无法到达 Oratorio，通常是因为 GitLab 访问不到你的 Oratorio server。本地桌面会话通常不能直接接收 GitLab cloud 发来的 Webhook。
 
-移除 GitLab project 会在下一次 Settings 保存时移除对应 profile secret。修改 GitLab endpoint host 后，旧 host 的 profile secret 不会带到新 host，需要重新配置 profile。
+## 同步与审阅
 
-## Webhook
+打开 **Settings → Sources** 可以查看 GitLab 状态。
 
-GitLab webhook URL 是 Oratorio server 的 GitLab webhook endpoint：
+- 想立刻导入时，点击 **Pull now**。
+- 想让 Oratorio 定期检查 GitLab，可以开启定时同步。
+- 只有在需要重新检查整个项目时，才使用 full repair。
 
-```text
-/api/v1/sources/gitlab/webhook
-```
+在 Oratorio 中审阅 GitLab Merge Request 时：
 
-支持两种验证模式：
+- **通过** 会在 GitLab 中记录一条通过的 Oratorio 审阅状态。
+- **要求修改** 会留下反馈，并记录这次 Oratorio 审阅仍需处理。
+- **作废** 会记录这项工作不应继续推进。
 
-- secret token：从匹配 project profile 读取并校验 GitLab 的 `X-Gitlab-Token`。
-- Standard Webhooks signing token：从匹配 project profile 读取，优先使用，适合需要签名验证的部署。
-
-Webhook payload 必须包含 project path。Oratorio 会先按 payload project 选择 profile，再验证 signing headers 或 `X-Gitlab-Token`。configured project 缺少 profile 或缺少对应 secret 时会返回 `403`。
-
-本地开发可以启用 local webhook bypass，但只应在本机测试环境使用。
-
-## 定时同步
-
-Settings 的 Sources 页可以为 GitHub 和 GitLab 分别开启定时拉取。默认关闭；
-开启后第一次自动拉取会发生在 `当前时间 + 间隔`，不会立刻发起请求。
-
-- 默认间隔是 5 分钟。
-- 可配置范围是 1 分钟到 24 小时。
-- 定时同步只运行 incremental sync；Full repair 仍然只能手动触发。
-- 如果 provider 的 read capability 不可用，开关会禁用，并提示先完成读同步配置。
-- 后台定时失败只显示在对应 provider 卡片内，不会弹全局 toast。
-
-## Commit Status Merge Gate
-
-Oratorio 对 GitLab MR 的 approve/request changes/reject 决策会写入 `oratorio/review` commit status：
-
-- approve 写入成功状态；
-- request changes 或 reject 写入失败状态；
-- re-review 不写 GitLab 状态。
-
-如果希望 GitLab 阻止未通过 Oratorio review 的 MR 合并，可以在 GitLab 项目设置中把 `oratorio/review` 作为需要通过的 status check 或外部状态门禁。
-
-## 已知限制
-
-- Oratorio v1 不调用 GitLab MR Approval API。
-- request changes 在 GitLab 中表现为 note 和失败 commit status，不等同于 GitHub 的 review state。
-- Review Draft 发布到 GitLab 时，一个 Oratorio draft 可能创建多个 GitLab MR discussions。
-- GitLab webhook 创建仍需在 GitLab 项目中手动配置。
+GitLab 的原生审阅状态和 GitHub 不完全一样，所以 Oratorio 会用留言和审阅状态把你的决定显示在 GitLab 中。
 
 ## 排查
 
-- 缺少 token：Sources 页会显示 read/write capability 缺少 credential。
-- endpoint 错误：检查 endpoint 不包含 userinfo、query 或 fragment；diagnostics 会显示清理后的 URL。
-- project 未配置：确认 Settings 的 Projects 中包含 GitLab project path。
-- profile 缺失：在 Settings 的 GitLab project card 上配置 project profile token；provider 可能显示 `partial`，表示部分 project 可用、部分 project 缺 profile。
-- workspace 未映射：在 Projects 页把 canonical GitLab key 映射到本地 DotCraft workspace。
-- sync 失败：Sources 页会显示最近失败项目和错误信息。
-- write 失败：Task detail 的 Source Write audit 和 Sources 页 diagnostics 会显示最近 GitLab write failure。
-- delivery 失败：确认 token 有 `write_repository` 和 `api`，本地 workspace 是目标 GitLab project 的 clone，并且目标 branch 可 push。修正权限后重试 delivery 会复用已经完成的 commit 和 branch push，只补建缺失的 MR。
+**看不到 GitLab 卡片。** 检查 read sync 是否开启、项目路径是否正确、项目是否填了 Token，以及项目是否映射到了 DotCraft workspace。
+
+**一个项目能用，另一个不能。** 每个 GitLab 项目都需要自己的项目卡片和 Token。回到 **Settings → Projects** 检查对应卡片。
+
+**Webhook 没有更新。** 确认 Webhook 地址能被 GitLab 访问、secret 或 signing token 一致，并且事件包含 Issue、Merge Request 和 note。
+
+**回写失败。** 确认 GitLab writes 已开启、Token 权限足够，并且本地 workspace 是同一个 GitLab 项目的 clone。
+
+**无法创建 Merge Request。** 确认 Token 可以推送分支并创建 Merge Request，目标分支也允许新的 Merge Request。
+
+**修改了 GitLab server 地址。** 保存后请重新填写项目 Token。Oratorio 会把不同 GitLab host 上的项目视为不同连接。

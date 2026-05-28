@@ -1,123 +1,89 @@
 # GitLab Integration
 
-Oratorio can sync GitLab issues and merge requests onto the board. When writes are enabled, it can publish notes, MR discussions, commit statuses, and deliver implementation drafts as GitLab MRs.
+Connect GitLab when you want Oratorio to bring real GitLab issues and merge requests onto the board. Oratorio can import work, keep cards fresh, show the latest conversation, and, when you allow writes, publish notes, review feedback, review status, and delivered merge requests back to GitLab.
 
 > [!NOTE]
-> This page covers GitLab-specific setup — tokens, webhooks, the merge gate. The general [Configuration Reference](/configuration) covers Settings and the Configuration Overlay; the [DotCraft Workspaces](/dotcraft-workspaces) page covers the agent runtime prerequisite. Each GitLab project still needs a workspace mapping before dispatch can target it.
+> If you are setting up Oratorio for the first time, start with [Getting Started](/getting-started). This page covers the GitLab-specific pieces. For DotCraft setup, see [Connect to DotCraft](/dotcraft-workspaces); for every Settings field, see [Configuration Reference](/configuration).
 
-## Tokens and Permissions
+## Before You Start
 
-GitLab v1 uses token-based setup and does not include an OAuth connection flow. Oratorio stores tokens in GitLab project profiles; each configured project needs its own profile. Prefer a project access token when possible because its blast radius is limited to one project. Group access tokens and personal access tokens also work, but they can cover more projects and may be entered into multiple project profiles.
+You will need:
 
-Recommended minimum scopes:
+- access to the GitLab project you want to connect;
+- a GitLab token for each project;
+- the same project opened and working in DotCraft;
+- a reachable Oratorio server address if you want GitLab webhooks to update the board automatically.
 
-- Read sync: `read_api`, with project read access for the token identity.
-- Repository read and delivery: `read_repository` and `write_repository`.
-- Notes, discussions, commit statuses, and MR creation: `api`.
+If Oratorio is only running on your laptop and GitLab cannot reach it, that is fine. Manual sync and scheduled sync still work.
 
-GitLab writes appear in GitLab as the target project profile's token identity. Settings only shows whether each project profile has a token; plaintext is never returned after save.
+## Add The Project In Oratorio
 
-## Endpoint and Project Path
+Open **Settings → Credentials → GitLab**.
 
-GitLab.com can use the default endpoint:
+- Keep the default GitLab endpoint for GitLab.com.
+- For a self-managed GitLab server, enter the server's main address. You do not need to add the GitLab API path yourself.
+- Turn on **GitLab read sync** to import issues and merge requests.
+- Turn on **GitLab writes** only when you want Oratorio to publish notes, review status, or delivered merge requests back to GitLab.
 
-```text
-https://gitlab.com
-```
+Then open **Settings → Projects** and add a GitLab project row.
 
-For self-managed GitLab, use the instance root URL:
+- In **GitLab project**, enter the project path as it appears in GitLab, such as a group and project name. Subgroups are supported.
+- In **DotCraft workspace**, choose the local folder already opened in DotCraft.
+- On the same project card, add the GitLab token and any webhook secret you plan to use.
 
-```text
-https://gitlab.company.example
-```
+Save the settings. If Oratorio asks for a restart, restart the local server before testing the connection.
 
-The GitLab API URL is derived from the endpoint as `<endpoint>/api/v4`; Desktop settings only need the instance root URL.
+## Create The GitLab Token
 
-Project paths use GitLab's path-with-namespace:
+For most teams, a **Project Access Token** is the best fit because it is limited to one project. A group token or personal token can also work, but it can reach more than one project, so treat it with extra care.
 
-```text
-group/project
-group/subgroup/project
-```
+Use the smallest access that matches what you want Oratorio to do:
 
-The Projects page stores GitLab projects as canonical source keys, for example:
+| What you want | GitLab access to allow |
+|---|---|
+| Import issues and merge requests only | read API access |
+| Read repository details for review | repository read access |
+| Deliver implementation work as a merge request | repository write access |
+| Publish notes, discussions, review status, or merge requests | API access |
 
-```text
-gitlab:gitlab.company.example/group/subgroup/project
-```
+Oratorio never shows saved token values again. To keep an existing token, leave the field empty. To replace it, paste a new value and save.
 
-This key is used for DotCraft workspace routing so GitHub and GitLab projects with the same `group/project` display remain unambiguous.
+## Add A GitLab Webhook
 
-The GitLab project card is also the profile editing surface. Each profile key is:
+Webhooks are optional, but they make Oratorio react faster when an issue or merge request changes in GitLab.
 
-```text
-gitlab:<host>/<group[/subgroup]/project>
-```
+In GitLab, open the project webhook settings and add a webhook that points to your Oratorio server address followed by /api/v1/sources/gitlab/webhook.
 
-The profile contains:
+Use the same secret or signing token that you saved on the GitLab project card in Oratorio. Enable events for issues, merge requests, and comments or notes. After saving, use GitLab's test button if available, then check **Settings → Sources** in Oratorio for webhook status.
 
-- token kind label, such as `projectAccessToken`, `groupAccessToken`, or `personalAccessToken`;
-- GitLab API token;
-- webhook secret token;
-- Standard Webhooks signing token.
+If the webhook test cannot reach Oratorio, check whether your Oratorio server is available from GitLab. A local-only desktop session usually cannot receive GitLab cloud webhooks directly.
 
-Removing a GitLab project removes its profile secrets on the next Settings save. Changing the GitLab endpoint host does not carry old-host profile secrets to the new host; configure new profiles for the new instance.
+## Sync And Review
 
-## Webhooks
+Open **Settings → Sources** to see GitLab status.
 
-Use the Oratorio server GitLab webhook endpoint as the GitLab webhook URL:
+- Use **Pull now** when you want an immediate import.
+- Turn on a schedule if you want Oratorio to check GitLab periodically.
+- Use full repair only when you want Oratorio to re-check the whole configured project.
 
-```text
-/api/v1/sources/gitlab/webhook
-```
+When you review a GitLab merge request from Oratorio:
 
-Two verification modes are supported:
+- **Approve** records a passing Oratorio review status in GitLab.
+- **Ask for changes** leaves feedback and records that the Oratorio review still needs work.
+- **Reject** records that the work should not move forward.
 
-- Secret token read from the matching project profile and checked against GitLab's `X-Gitlab-Token`.
-- Standard Webhooks signing token read from the matching project profile, preferred for signed deployments.
-
-The webhook payload must include a project path. Oratorio selects that project's profile first, then verifies signing headers or `X-Gitlab-Token`. A configured project with no profile or no matching secret returns `403`.
-
-Local webhook bypass is available for local development only.
-
-## Scheduled Sync
-
-Settings > Sources can enable scheduled pulls separately for GitHub and GitLab.
-Schedules are off by default; when one is enabled, the first automatic pull runs
-at `now + interval` and does not fire immediately.
-
-- The default interval is 5 minutes.
-- Valid intervals range from 1 minute to 24 hours.
-- Scheduled sync only runs incremental sync; Full repair stays manual.
-- If provider read capability is unavailable, the switch is disabled and points
-  the operator to complete read-sync setup first.
-- Background schedule failures appear only inside the affected provider card and
-  do not raise global toast notifications.
-
-## Commit Status Merge Gate
-
-For GitLab MRs, Oratorio approve/request changes/reject decisions write the `oratorio/review` commit status:
-
-- approve writes a success status;
-- request changes or reject writes a failed status;
-- re-review does not write GitLab status.
-
-To block merges until Oratorio review passes, configure the GitLab project to require the `oratorio/review` status check or external status gate.
-
-## Known Limits
-
-- Oratorio v1 does not call the GitLab MR Approval API.
-- Request changes appears in GitLab as a note plus failed commit status; it is not the same as GitHub's review state.
-- Publishing one Oratorio Review Draft to GitLab can create multiple GitLab MR discussions.
-- GitLab webhook creation is still configured manually in GitLab.
+GitLab does not have the same native review states as GitHub, so Oratorio uses notes and review status to make the decision visible in GitLab.
 
 ## Troubleshooting
 
-- Missing token: Sources shows read/write capability as missing credentials.
-- Invalid endpoint: verify that the endpoint has no userinfo, query, or fragment; diagnostics show the sanitized URL.
-- Missing project: confirm the GitLab project path is configured in Settings > Projects.
-- Missing profile: configure the project profile token on the GitLab project card. The provider may show `partial` when some projects work and others are missing profiles.
-- Missing workspace route: map the canonical GitLab key to a local DotCraft workspace in Projects.
-- Failed sync: Sources shows recent failed projects and errors.
-- Failed write: Task detail Source Write audit and Sources diagnostics show recent GitLab write failures.
-- Failed delivery: confirm the token has `write_repository` and `api`, the local workspace is a clone of the target GitLab project, and the target branch can be pushed. After fixing permissions, retrying delivery reuses completed commits and branch pushes, then creates only the missing MR.
+**No GitLab cards appear.** Check that read sync is on, the project path is correct, the project has a token, and the project is mapped to a DotCraft workspace.
+
+**One project works but another does not.** Each GitLab project needs its own project card and token. Re-open **Settings → Projects** and check the affected card.
+
+**Webhook updates do not arrive.** Confirm the webhook URL is reachable from GitLab, the secret or signing token matches, and the webhook includes issue, merge request, and note events.
+
+**Writes fail.** Confirm GitLab writes are on, the token has the access needed for the action, and the local workspace is a clone of the same GitLab project.
+
+**Delivery cannot create a merge request.** Confirm the token can push branches and create merge requests, and that the target branch accepts new merge requests.
+
+**You changed the GitLab server address.** Re-enter the project tokens after saving. Oratorio treats projects on a different GitLab host as separate connections.

@@ -59,8 +59,8 @@ That's it. One connection, one save.
 
 If you want Oratorio to mirror real issues and pull requests, connect one source in Settings → Credentials:
 
-- **GitHub** — provide your GitHub App ID, private key, and webhook secret. App installations are grouped per owner (e.g. `github.com/your-org`); repositories under the same owner share one installation.
-- **GitLab** — provide a project access token, webhook secret, and Standard Webhooks signing token on each project card. See [GitLab Integration](/gitlab) for the exact scopes and webhook URLs.
+- **GitHub** — use a GitHub App for the full connection. See [GitHub Integration](/github).
+- **GitLab** — add a token on each GitLab project card. See [GitLab Integration](/gitlab).
 
 <img src="https://github.com/DotHarness/resources/raw/master/oratorio/settings-credentials-light.png" alt="Settings → Credentials, with GitHub and GitLab fields" />
 
@@ -103,7 +103,8 @@ That's a full cycle — task created, agent worked, you decided.
 | What you want to do | Where |
 |---|---|
 | Read the full Settings reference | [Configuration Reference](/configuration) |
-| Set up GitLab tokens, webhooks, and the merge gate | [GitLab Integration](/gitlab) |
+| Set up GitHub repositories, webhooks, and write-back | [GitHub Integration](/github) |
+| Set up GitLab projects, webhooks, and write-back | [GitLab Integration](/gitlab) |
 | Check what works offline vs needs GitHub / GitLab | [Local Support Matrix](/local-support) |
 | Build, test, contribute | [Development Guide](/development) |
 | Understand how Oratorio plugs into DotCraft | [How Oratorio plugs in](/dotcraft-workspaces) |

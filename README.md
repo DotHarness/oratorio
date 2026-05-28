@@ -2,7 +2,7 @@
 
 ![Oratorio](https://github.com/DotHarness/resources/raw/master/oratorio/banner.png)
 
-[中文](./README_ZH.md) · [Documentation](./docs/en/index.md) · [Getting Started](./docs/en/getting-started.md) · [DotCraft](https://github.com/DotHarness/dotcraft)
+[中文](./README_ZH.md) · [Documentation](https://dotharness.github.io/oratorio/) · [Getting Started](https://dotharness.github.io/oratorio/getting-started) · [DotCraft](https://github.com/DotHarness/dotcraft)
 
 The project board where agents collaborate with you.
 
@@ -48,7 +48,7 @@ dotnet run --project server/Oratorio.Server.csproj
 ```
 
 Requirements, source setup, release builds, and test commands live in the
-[development guide](./docs/en/development.md).
+[development guide](https://dotharness.github.io/oratorio/development).
 
 ## Connect with DotCraft
 
@@ -60,11 +60,12 @@ Connect Oratorio to a DotCraft session and let the Agent manage your board.
 
 | Goal | Document |
 |------|----------|
-| Install, run, and understand the first local flow | [Getting Started](./docs/en/getting-started.md) |
-| Build, test, and contribute to the codebase | [Development](./docs/en/development.md) |
-| Configure Settings, state paths, GitHub/GitLab, and DotCraft routing | [Configuration](./docs/en/configuration.md) |
-| Configure GitLab projects, tokens, webhooks, and MR delivery | [GitLab Integration](./docs/en/gitlab.md) |
-| Check what works locally and what still depends on external sources | [Local Support Matrix](./docs/en/local-support.md) |
+| Install, run, and understand the first local flow | [Getting Started](https://dotharness.github.io/oratorio/getting-started) |
+| Build, test, and contribute to the codebase | [Development](https://dotharness.github.io/oratorio/development) |
+| Review Settings fields, state paths, DotCraft routing, and automation policy | [Configuration](https://dotharness.github.io/oratorio/configuration) |
+| Configure GitHub repositories, GitHub App, webhooks, and PR delivery | [GitHub Integration](https://dotharness.github.io/oratorio/github) |
+| Configure GitLab projects, tokens, webhooks, and MR delivery | [GitLab Integration](https://dotharness.github.io/oratorio/gitlab) |
+| Check what works locally and what still depends on external sources | [Local Support Matrix](https://dotharness.github.io/oratorio/local-support) |
 
 ## Credits
 
