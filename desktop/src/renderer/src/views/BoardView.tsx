@@ -14,8 +14,7 @@ import { parseTaskSearchQuery, taskMatchesSearch } from '../lib/taskSearch'
 import type { GitHubSourceStatus, GitHubSyncJob, MockOutcome, RunnerMode, UiNotice, WorkItem } from '../lib/types'
 import {
   activeTaskStatusColumns,
-  checkIcon,
-  checkLabel,
+  cardCheckBadge,
   queueLabelBadges,
   sourceLifecycleBadge,
   sourceMetaLabel,
@@ -516,12 +515,7 @@ function TaskCard({
         <div className="task-card-footer">
           {sourceLifecycleBadge(item)}
           <span className={`state-pill ${stateClassName(item.state)}`}>{stateLabels[item.state]}</span>
-          <Tooltip content={`oratorio/review: ${checkLabel(item.check)}`}>
-            <span className={`mini-check ${item.check}`}>
-              {checkIcon(item.check)}
-              <span className="chip-text">{checkLabel(item.check)}</span>
-            </span>
-          </Tooltip>
+          {cardCheckBadge(item)}
           {queueLabelBadges(item)}
         </div>
       </div>

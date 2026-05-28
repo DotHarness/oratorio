@@ -960,6 +960,25 @@ export function checkIcon(check: CheckState) {
   return <CircleDot size={18} />
 }
 
+export function cardCheckBadge(item: WorkItem) {
+  if (item.check === 'notConfigured') {
+    return null
+  }
+
+  if (item.check === 'pending' && (item.state === 'dispatching' || item.state === 'running')) {
+    return null
+  }
+
+  return (
+    <Tooltip content={`oratorio/review: ${checkLabel(item.check)}`}>
+      <span className={`mini-check ${item.check}`}>
+        {checkIcon(item.check)}
+        <span className="chip-text">{checkLabel(item.check)}</span>
+      </span>
+    </Tooltip>
+  )
+}
+
 export function stateFilterIcon(tab: 'all' | ItemState) {
   if (tab === 'all') return <ListFilter size={16} />
   if (tab === 'awaitingReview') return <Eye size={16} />

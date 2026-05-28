@@ -235,12 +235,18 @@ Status pills follow one of three visual modes by lifecycle category:
 | Category | Examples | Treatment |
 | --- | --- | --- |
 | Success | `Approved`, `Passing` | Filled success-tint background, on-tint label, optional check icon |
-| Attention | `Attention`, `Failed`, `Locked`, `Not configured` | Outlined with attention or destructive border + matching icon, neutral surface |
-| Neutral | `Discovered`, `Awaiting review`, `Pending` | Outlined neutral border, neutral label |
+| Attention | `Attention`, `Failed`, `Locked` | Outlined with attention or destructive border + matching icon, neutral surface |
+| Neutral | `Discovered`, `Awaiting review`, `Pending` when not redundant | Outlined neutral border, neutral label |
 
 A single card must not mix pill modes for the same logical category — for
 example, an `Approved` filled pill next to a `Passing` outlined pill is a
 regression. Status pills that share a card use the same mode.
+
+Kanban card footers hide review/check pills that do not add card-level triage
+signal. `Not configured` is never shown on cards, and `Pending` is hidden when
+the lifecycle pill already says `Dispatching` or `Running`. Full check state
+remains available in the detail page and status drawer where `oratorio/review`
+has enough context.
 
 ---
 
