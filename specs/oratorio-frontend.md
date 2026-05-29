@@ -215,8 +215,8 @@ visual treatment and may not borrow another class's treatment:
 | --- | --- | --- |
 | Source chip | Where the task lives (Local, GitHub repo, GitLab project) | Compact pill with provider icon at the shared chip-icon size |
 | Kind chip | Work kind (PR, Issue, Local task) | Compact pill with kind icon at the same chip-icon size as the source chip |
-| Status pill | Lifecycle/check state | Themed pill following the status-pill modes below |
-| Micro-status dot | Active-attention indicator | Filled circle at the dot-indicator size token |
+| Status pill | Lifecycle/check state, shown only when it adds signal beyond the column | Themed pill following the status-pill modes below |
+| Micro-status dot | Always-on per-card lifecycle indicator | Filled circle at the dot-indicator size token, colored by state |
 
 Source chip and kind chip icons must render at the same optical weight. Both
 use the `chip-icon` size token and the global lucide stroke width. Provider
@@ -242,9 +242,19 @@ A single card must not mix pill modes for the same logical category — for
 example, an `Approved` filled pill next to a `Passing` outlined pill is a
 regression. Status pills that share a card use the same mode.
 
-Kanban card footers hide review/check pills that do not add card-level triage
+The micro-status dot is the always-on per-card lifecycle indicator; the footer
+status pill is shown only when it adds signal beyond the card's column. Kanban
+card footers therefore hide lifecycle pills that merely restate the column —
+`Discovered` in `To do`, `Awaiting review` in `In review`, and `Approved` in
+`Done` — relying on the column, the colored dot, and the accent edge instead.
+`Running` renders as an animated spinner (no text); `Dispatching`, `Failed`, and
+the terminal `Rejected` / `Archived` keep their themed pills. The full lifecycle
+pill — including `Discovered`, `Awaiting review`, and `Approved` — remains on the
+status drawer and detail page, which are not column-grouped.
+
+Card footers also hide review/check pills that do not add card-level triage
 signal. `Not configured` is never shown on cards, and `Pending` is hidden when
-the lifecycle pill already says `Dispatching` or `Running`. Full check state
+the lifecycle state is already `Dispatching` or `Running`. Full check state
 remains available in the detail page and status drawer where `oratorio/review`
 has enough context.
 

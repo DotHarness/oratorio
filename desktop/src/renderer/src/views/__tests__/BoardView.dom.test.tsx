@@ -112,7 +112,7 @@ describe('BoardView task card DOM', () => {
     expect(doneCard.className).not.toContain('board-item-row')
   })
 
-  it('hides redundant pending check status on running cards', () => {
+  it('shows a spinner instead of a Running pill and hides redundant pending check on running cards', () => {
     const running = makeItem({
       id: 'running-1',
       title: 'Run check noise',
@@ -126,8 +126,39 @@ describe('BoardView task card DOM', () => {
     renderBoard([running])
 
     const card = screen.getByRole('button', { name: /Run check noise/ })
-    expect(within(card).getAllByText('Running')).toHaveLength(1)
+    expect(within(card).queryByText('Running')).not.toBeInTheDocument()
+    expect(card.querySelector('.state-spinner')).toBeInTheDocument()
+    expect(card.querySelector('.state-spinner .spin-icon')).toBeInTheDocument()
+    expect(card.querySelector('.state-pill')).not.toBeInTheDocument()
     expect(card.querySelector('.mini-check')).not.toBeInTheDocument()
+  })
+
+  it('hides lifecycle pills that only restate the column', () => {
+    const discovered = makeItem({ id: 'todo-2', title: 'Column-echo discovered', shortId: 'DEF-8', taskStatus: 'todo', state: 'discovered', labels: [] })
+    const awaiting = makeItem({ id: 'review-1', title: 'Column-echo awaiting', shortId: 'DEF-9', taskStatus: 'in_review', state: 'awaitingReview', labels: [] })
+    const approved = makeItem({ id: 'done-2', title: 'Column-echo approved', shortId: 'DEF-10', taskStatus: 'done', state: 'approved', labels: [] })
+
+    renderBoard([discovered, awaiting, approved])
+
+    for (const [title, dotState] of [
+      ['Column-echo discovered', 'discovered'],
+      ['Column-echo awaiting', 'awaiting-review'],
+      ['Column-echo approved', 'approved'],
+    ] as const) {
+      const card = screen.getByRole('button', { name: new RegExp(title) })
+      expect(card.querySelector('.state-pill')).not.toBeInTheDocument()
+      expect(card.querySelector(`.state-dot.${dotState}`)).toBeInTheDocument()
+    }
+  })
+
+  it('keeps the lifecycle pill for failed cards', () => {
+    const failed = makeItem({ id: 'failed-1', title: 'Run blew up', shortId: 'DEF-11', taskStatus: 'in_progress', state: 'failed', labels: [] })
+
+    renderBoard([failed])
+
+    const card = screen.getByRole('button', { name: /Run blew up/ })
+    expect(card.querySelector('.state-pill.failed')).toBeInTheDocument()
+    expect(within(card).getByText('Failed')).toBeInTheDocument()
   })
 
   it('hides not configured check status on discovered cards', () => {

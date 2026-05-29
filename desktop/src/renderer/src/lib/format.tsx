@@ -9,6 +9,7 @@ import {
   GitCommit,
   GitPullRequest,
   ListFilter,
+  LoaderCircle,
   MessageSquare,
   RotateCcw,
   ShieldCheck,
@@ -977,6 +978,25 @@ export function cardCheckBadge(item: WorkItem) {
       </span>
     </Tooltip>
   )
+}
+
+export function cardStateBadge(item: WorkItem) {
+  // Column + state dot + accent bar already carry these states; the pill would only echo the column.
+  if (item.state === 'discovered' || item.state === 'awaitingReview' || item.state === 'approved') {
+    return null
+  }
+
+  if (item.state === 'running') {
+    return (
+      <Tooltip content="Running">
+        <span className="state-spinner" role="img" aria-label="Running">
+          <LoaderCircle size={14} className="spin-icon" />
+        </span>
+      </Tooltip>
+    )
+  }
+
+  return <span className={`state-pill ${stateClassName(item.state)}`}>{stateLabels[item.state]}</span>
 }
 
 export function stateFilterIcon(tab: 'all' | ItemState) {

@@ -15,11 +15,11 @@ import type { GitHubSourceStatus, GitHubSyncJob, MockOutcome, RunnerMode, UiNoti
 import {
   activeTaskStatusColumns,
   cardCheckBadge,
+  cardStateBadge,
   queueLabelBadges,
   sourceLifecycleBadge,
   sourceMetaLabel,
   stateClassName,
-  stateLabels,
   taskStatusBadgeClass,
 } from '../lib/format'
 
@@ -514,7 +514,7 @@ function TaskCard({
         <span className="item-source-meta">{sourceMetaLabel(item)} · updated {item.updated}</span>
         <div className="task-card-footer">
           {sourceLifecycleBadge(item)}
-          <span className={`state-pill ${stateClassName(item.state)}`}>{stateLabels[item.state]}</span>
+          {cardStateBadge(item)}
           {cardCheckBadge(item)}
           {queueLabelBadges(item)}
         </div>
