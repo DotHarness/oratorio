@@ -20,6 +20,8 @@ public interface IGitHubApiClient
     Task<GitHubWriteResponse> CreatePullRequestReviewAsync(GitHubRepositoryRef repository, int number, string @event, string body, string? commitId, IReadOnlyList<GitHubPullRequestReviewCommentWrite> comments, CancellationToken ct);
     Task<GitHubWriteResponse> CreateCheckRunAsync(GitHubRepositoryRef repository, string name, string headSha, string conclusion, string summary, CancellationToken ct);
     Task<GitHubPullRequestCreateResponse> CreatePullRequestAsync(GitHubRepositoryRef repository, string title, string head, string @base, string body, bool draft, CancellationToken ct);
+    Task<IReadOnlyList<GitHubReviewThread>> ListPullRequestReviewThreadsAsync(GitHubRepositoryRef repository, int number, CancellationToken ct);
+    Task<GitHubWriteResponse> ResolveReviewThreadAsync(GitHubRepositoryRef repository, string threadId, bool resolved, CancellationToken ct);
 }
 
 public sealed class GitHubApiClient(
@@ -189,6 +191,126 @@ public sealed class GitHubApiClient(
         var created = JsonSerializer.Deserialize<GitHubPullRequestCreateResponse>(responseJson, JsonOptions)
             ?? throw new InvalidOperationException("GitHub pull request create response was empty.");
         return created;
+    }
+
+    public async Task<IReadOnlyList<GitHubReviewThread>> ListPullRequestReviewThreadsAsync(GitHubRepositoryRef repository, int number, CancellationToken ct)
+    {
+        const string query = """
+            query($owner:String!,$name:String!,$number:Int!,$cursor:String){
+              repository(owner:$owner,name:$name){
+                pullRequest(number:$number){
+                  reviewThreads(first:100,after:$cursor){
+                    pageInfo{ hasNextPage endCursor }
+                    nodes{ id isResolved comments(first:5){ nodes{ body } } }
+                  }
+                }
+              }
+            }
+            """;
+
+        var threads = new List<GitHubReviewThread>();
+        string? cursor = null;
+        for (var page = 0; page < 20; page++)
+        {
+            var variables = new Dictionary<string, object?>
+            {
+                ["owner"] = repository.Owner,
+                ["name"] = repository.Name,
+                ["number"] = number,
+                ["cursor"] = cursor
+            };
+            using var document = await SendGraphQlAsync(repository, query, variables, ct);
+            var reviewThreads = document.RootElement
+                .GetProperty("data").GetProperty("repository").GetProperty("pullRequest").GetProperty("reviewThreads");
+            foreach (var node in reviewThreads.GetProperty("nodes").EnumerateArray())
+            {
+                var id = node.GetProperty("id").GetString() ?? "";
+                var isResolved = node.TryGetProperty("isResolved", out var resolvedElement) && resolvedElement.GetBoolean();
+                var bodies = new List<string>();
+                if (node.TryGetProperty("comments", out var comments) && comments.TryGetProperty("nodes", out var commentNodes))
+                {
+                    foreach (var comment in commentNodes.EnumerateArray())
+                    {
+                        if (comment.TryGetProperty("body", out var body) && body.ValueKind == JsonValueKind.String)
+                        {
+                            bodies.Add(body.GetString() ?? "");
+                        }
+                    }
+                }
+
+                threads.Add(new GitHubReviewThread(id, isResolved, bodies));
+            }
+
+            var pageInfo = reviewThreads.GetProperty("pageInfo");
+            if (!pageInfo.GetProperty("hasNextPage").GetBoolean())
+            {
+                break;
+            }
+
+            cursor = pageInfo.GetProperty("endCursor").GetString();
+        }
+
+        return threads;
+    }
+
+    public async Task<GitHubWriteResponse> ResolveReviewThreadAsync(GitHubRepositoryRef repository, string threadId, bool resolved, CancellationToken ct)
+    {
+        var mutation = resolved
+            ? "mutation($threadId:ID!){ resolveReviewThread(input:{threadId:$threadId}){ thread{ id isResolved } } }"
+            : "mutation($threadId:ID!){ unresolveReviewThread(input:{threadId:$threadId}){ thread{ id isResolved } } }";
+        var variables = new Dictionary<string, object?> { ["threadId"] = threadId };
+        using var document = await SendGraphQlAsync(repository, mutation, variables, ct);
+        return new GitHubWriteResponse(threadId, null, document.RootElement.GetRawText());
+    }
+
+    private async Task<JsonDocument> SendGraphQlAsync(GitHubRepositoryRef repository, string query, IReadOnlyDictionary<string, object?> variables, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, BuildGraphQlUri());
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        request.Headers.UserAgent.ParseAdd("Oratorio-GitHubSource");
+        var token = await tokenProvider.GetBearerTokenAsync(repository, ct);
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
+
+        request.Content = JsonContent.Create(new Dictionary<string, object?> { ["query"] = query, ["variables"] = variables }, options: JsonOptions);
+        using var response = await httpClientFactory.CreateClient("GitHub").SendAsync(request, ct);
+        var responseJson = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"GitHub GraphQL request failed with {(int)response.StatusCode} ({response.ReasonPhrase}): {responseJson}",
+                null,
+                response.StatusCode);
+        }
+
+        var document = JsonDocument.Parse(responseJson);
+        if (document.RootElement.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Array && errors.GetArrayLength() > 0)
+        {
+            var message = errors[0].TryGetProperty("message", out var m) ? m.GetString() : "GitHub GraphQL returned errors.";
+            document.Dispose();
+            throw new InvalidOperationException(message ?? "GitHub GraphQL returned errors.");
+        }
+
+        return document;
+    }
+
+    private Uri BuildGraphQlUri()
+    {
+        var endpoint = options.CurrentValue.Endpoint;
+        if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            return new Uri("https://api.github.com/graphql");
+        }
+
+        var trimmed = endpoint.TrimEnd('/');
+        if (trimmed.EndsWith("/api/v3", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Uri(trimmed[..^"/api/v3".Length] + "/api/graphql");
+        }
+
+        return new Uri(trimmed + "/graphql");
     }
 
     private async Task<IReadOnlyList<T>> GetPagesAsync<T>(GitHubRepositoryRef repository, string pathAndQuery, CancellationToken ct, int maxPages = 10)

@@ -163,7 +163,9 @@ public enum TimelineEventKind
     ItemArchived,
     SourceWriteQueued,
     SourceWriteSucceeded,
-    SourceWriteFailed
+    SourceWriteFailed,
+    ReviewFindingResolved,
+    ReviewFindingReopened
 }
 
 public enum ActorKind
@@ -186,7 +188,8 @@ public enum SourceWriteKind
     MergeRequestNote,
     MergeRequestDiscussion,
     CommitStatus,
-    MergeRequestCreation
+    MergeRequestCreation,
+    ResolveReviewThread
 }
 
 public enum SourceWriteStatus
@@ -247,6 +250,18 @@ public enum ReviewDraftCommentStatus
 {
     Accepted,
     Skipped
+}
+
+public enum ReviewFindingResolutionState
+{
+    Open,
+    Resolved
+}
+
+public enum ReviewFindingResolutionKind
+{
+    Fixed,
+    Dismissed
 }
 
 public enum RunPurpose

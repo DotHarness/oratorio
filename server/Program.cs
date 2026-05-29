@@ -71,6 +71,7 @@ builder.Services.AddScoped<GitLabWriteService>();
 builder.Services.AddScoped<IReviewLocalDiffProvider, GitReviewLocalDiffProvider>();
 builder.Services.AddScoped<IReviewDiffProvider, ReviewDiffProvider>();
 builder.Services.AddScoped<ReviewDraftService>();
+builder.Services.AddScoped<ReviewFindingResolutionService>();
 builder.Services.AddScoped<ImplementationDraftService>();
 builder.Services.AddScoped<FollowUpDraftService>();
 builder.Services.AddScoped<DiscussionTurnService>();

@@ -296,6 +296,15 @@ public sealed class OratorioSchemaMigrator(OratorioDbContext db)
               AND (suggestion_replacement IS NULL OR TRIM(suggestion_replacement) = '')
             """,
             ct);
+        await EnsureReviewDraftCommentColumnAsync("resolution_state", "TEXT NOT NULL DEFAULT 'Open'", ct);
+        await EnsureReviewDraftCommentColumnAsync("resolution_kind", "TEXT NULL", ct);
+        await EnsureReviewDraftCommentColumnAsync("resolved_by_kind", "TEXT NULL", ct);
+        await EnsureReviewDraftCommentColumnAsync("resolution_note", "TEXT NULL", ct);
+        await EnsureReviewDraftCommentColumnAsync("resolved_at", "INTEGER NULL", ct);
+        await EnsureReviewDraftCommentColumnAsync("resolved_in_run_id", "TEXT NULL", ct);
+        await EnsureReviewDraftCommentColumnAsync("resolved_via_discussion_turn_id", "TEXT NULL", ct);
+        await EnsureReviewDraftCommentColumnAsync("remote_thread_id", "TEXT NULL", ct);
+        await EnsureReviewDraftCommentColumnAsync("remote_resolve_write_id", "TEXT NULL", ct);
         await db.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS ix_review_draft_comments_draft_id ON review_draft_comments (draft_id)",
             ct);

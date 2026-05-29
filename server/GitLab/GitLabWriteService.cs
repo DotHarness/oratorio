@@ -225,6 +225,7 @@ public sealed class GitLabWriteService(
                 SourceWriteKind.IssueComment => await client.CreateIssueNoteAsync(project, write.Number.Value, ReadString(write.RequestJson, "body"), ct),
                 SourceWriteKind.MergeRequestNote => await client.CreateMergeRequestNoteAsync(project, write.Number.Value, ReadString(write.RequestJson, "body"), ct),
                 SourceWriteKind.MergeRequestDiscussion => await CreateMergeRequestDiscussionSetAsync(project, write, ct),
+                SourceWriteKind.ResolveReviewThread => await client.ResolveMergeRequestDiscussionAsync(project, write.Number.Value, ReadString(write.RequestJson, "threadId"), ReadBool(write.RequestJson, "resolved"), ct),
                 SourceWriteKind.CommitStatus => await client.SetCommitStatusAsync(
                     project,
                     write.HeadSha!,
@@ -267,14 +268,39 @@ public sealed class GitLabWriteService(
             responses.Add(new { first.ExternalId, first.ExternalUrl });
         }
 
+        var findingComments = await ResolveAcceptedDraftCommentsAsync(write, ct);
         foreach (var comment in ReadDiscussionComments(write.RequestJson))
         {
             var response = await client.CreateMergeRequestDiscussionAsync(project, write.Number!.Value, comment.Body, comment.Position, ct);
             first ??= response;
             responses.Add(new { response.ExternalId, response.ExternalUrl });
+            if (!string.IsNullOrWhiteSpace(comment.FindingId))
+            {
+                var match = findingComments.FirstOrDefault(c => c.DraftCommentId == comment.FindingId);
+                if (match is not null)
+                {
+                    match.RemoteThreadId = response.ExternalId;
+                }
+            }
         }
 
         return first ?? new GitLabWriteResponse(Guid.NewGuid().ToString("n"), null, JsonSerializer.Serialize(new { responses }, JsonOptions));
+    }
+
+    private async Task<List<OratorioReviewDraftComment>> ResolveAcceptedDraftCommentsAsync(OratorioSourceWriteLog write, CancellationToken ct)
+    {
+        var draftId = db.ChangeTracker.Entries<OratorioReviewDraft>()
+            .Select(entry => entry.Entity)
+            .FirstOrDefault(draft => draft.SourceWriteId == write.WriteId)?.DraftId
+            ?? await db.ReviewDrafts.Where(draft => draft.SourceWriteId == write.WriteId).Select(draft => draft.DraftId).FirstOrDefaultAsync(ct);
+        if (string.IsNullOrWhiteSpace(draftId))
+        {
+            return [];
+        }
+
+        return await db.ReviewDraftComments
+            .Where(c => c.DraftId == draftId && c.Status == ReviewDraftCommentStatus.Accepted)
+            .ToListAsync(ct);
     }
 
     private async Task ReconcileReviewDraftPublishAsync(OratorioSourceWriteLog write, CancellationToken ct)
@@ -383,6 +409,13 @@ public sealed class GitLabWriteService(
     private static string ReadString(string json, string propertyName) =>
         ReadOptionalString(json, propertyName) ?? throw new JsonException($"Missing required property '{propertyName}'.");
 
+    private static bool ReadBool(string json, string propertyName)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.TryGetProperty(propertyName, out var value) &&
+            value.ValueKind is JsonValueKind.True or JsonValueKind.False && value.GetBoolean();
+    }
+
     private static string? ReadOptionalString(string json, string propertyName)
     {
         using var document = JsonDocument.Parse(json);
@@ -413,7 +446,8 @@ public sealed class GitLabWriteService(
                     ReadRequiredString(position, "oldPath"),
                     ReadRequiredString(position, "newPath"),
                     ReadOptionalInt(position, "oldLine"),
-                    ReadOptionalInt(position, "newLine"))));
+                    ReadOptionalInt(position, "newLine")),
+                ReadOptionalString(comment, "findingId")));
         }
 
         return comments;
@@ -427,5 +461,10 @@ public sealed class GitLabWriteService(
     private static int? ReadOptionalInt(JsonElement element, string propertyName) =>
         element.TryGetProperty(propertyName, out var value) && value.ValueKind != JsonValueKind.Null
             ? value.GetInt32()
+            : null;
+
+    private static string? ReadOptionalString(JsonElement element, string propertyName) =>
+        element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
             : null;
 }

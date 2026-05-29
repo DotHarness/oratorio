@@ -350,6 +350,7 @@ public sealed record ReviewDraftDto(
     IReadOnlyList<string> Warnings,
     int AcceptedCount,
     int WarningCount,
+    int ResolvedCount,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     DateTimeOffset? PublishedAt,
@@ -369,7 +370,12 @@ public sealed record ReviewDraftCommentDto(
     string? SuggestionReplacement,
     string? CommentOnlyReason,
     ReviewDraftCommentStatus Status,
-    string? Warning);
+    string? Warning,
+    ReviewFindingResolutionState ResolutionState,
+    ReviewFindingResolutionKind? ResolutionKind,
+    AuthorKind? ResolvedByKind,
+    string? ResolutionNote,
+    DateTimeOffset? ResolvedAt);
 
 public sealed record SubmitReviewDraftRequest(ReviewDraftSummaryRequest Summary, IReadOnlyList<ReviewDraftCommentRequest>? Comments);
 
@@ -392,6 +398,12 @@ public sealed record SubmitReviewDraftResponse(string DraftId, int AcceptedCount
 public sealed record ReviewDraftUpdateRequest(string? SummaryBody, IReadOnlyList<ReviewDraftCommentUpdateRequest>? Comments);
 
 public sealed record ReviewDraftCommentUpdateRequest(string DraftCommentId, string? Body, string? SuggestionReplacement, string? CommentOnlyReason = null);
+
+public sealed record ResolveReviewFindingRequest(string FindingId, string ResolutionKind, string? Note);
+
+public sealed record ResolveReviewFindingResponse(string FindingId, string ResolutionState, string? ResolutionKind);
+
+public sealed record ResolveReviewFindingOperatorRequest(string ResolutionKind, string? Note);
 
 public sealed record ImplementationDraftDto(
     string DraftId,

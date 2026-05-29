@@ -383,7 +383,8 @@ public sealed class AppServerRunWorker(
 
         var dynamicTools = new List<AppServerDynamicToolSpec>
         {
-            AppServerDynamicToolCatalog.SubmitDiscussionReply(JsonOptions)
+            AppServerDynamicToolCatalog.SubmitDiscussionReply(JsonOptions),
+            AppServerDynamicToolCatalog.ResolveReviewFinding(JsonOptions)
         };
         if (run.Purpose == RunPurpose.Implementation && run.Item.Kind is ItemKind.Issue or ItemKind.LocalTask && (run.Item.Kind == ItemKind.LocalTask || run.Item.Source is "github" or "gitlab"))
         {
@@ -509,7 +510,7 @@ public sealed class AppServerRunWorker(
         AppServerDynamicToolCall call,
         CancellationToken ct)
     {
-        if (call.Namespace != "oratorio" || call.Tool is not ("SubmitReviewDraft" or "SubmitImplementationDraft" or "SubmitFollowUpDraft" or "SubmitDiscussionReply"))
+        if (call.Namespace != "oratorio" || call.Tool is not ("SubmitReviewDraft" or "SubmitImplementationDraft" or "SubmitFollowUpDraft" or "SubmitDiscussionReply" or "ResolveReviewFinding"))
         {
             return new AppServerDynamicToolResult(false, ErrorCode: "UnsupportedTool", ErrorMessage: "Only Oratorio runtime dynamic tools exposed for this run are supported.");
         }
@@ -553,6 +554,17 @@ public sealed class AppServerRunWorker(
                 return new AppServerDynamicToolResult(
                     true,
                     [new AppServerToolContentItem("text", $"{response.AcceptedCount} follow-up draft proposal(s) recorded.")],
+                    response);
+            }
+            else if (call.Tool == "ResolveReviewFinding")
+            {
+                var resolution = scope.ServiceProvider.GetRequiredService<ReviewFindingResolutionService>();
+                var request = call.Arguments.Deserialize<ResolveReviewFindingRequest>(JsonOptions)
+                    ?? throw new InvalidOperationException("ResolveReviewFinding arguments were empty.");
+                var response = await resolution.ResolveForRunAsync(runId, request, ct);
+                return new AppServerDynamicToolResult(
+                    true,
+                    [new AppServerToolContentItem("text", $"Review finding {response.FindingId} resolved ({response.ResolutionKind}).")],
                     response);
             }
             else

@@ -3686,6 +3686,66 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
+    public async Task ReviewFindingResolution_CapturesThreadIdsAndResolvesGitHubReviewThread()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitCleanReviewDraft);
+        await using var app = new TestOratorioApp(
+            services =>
+            {
+                services.RemoveAll<IGitHubApiClient>();
+                services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+                services.RemoveAll<IDotCraftAppServerProcessManager>();
+                services.RemoveAll<IDotCraftAppServerClientFactory>();
+                services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+                services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+            },
+            new Dictionary<string, string?> { ["Oratorio:Automation:ResolveReviewThreadsEnabled"] = "true" });
+        var client = app.CreateClient();
+
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Prepare structured PR review suggestions.", null, null));
+        var reviewed = await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.AwaitingReview && x.ReviewDrafts.Count == 1);
+        var draft = Assert.Single(reviewed.ReviewDrafts);
+
+        await PostAsync<ItemDetailResponse>(client, $"/api/v1/review-drafts/{draft.DraftId}/publish", new { });
+
+        // Step B: GraphQL review-thread mapping captured a remote thread id per accepted finding.
+        string findingId;
+        string threadId;
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
+            var comments = await db.ReviewDraftComments
+                .Where(c => c.DraftId == draft.DraftId && c.Status == ReviewDraftCommentStatus.Accepted)
+                .ToListAsync();
+            Assert.NotEmpty(comments);
+            Assert.All(comments, c => Assert.False(string.IsNullOrWhiteSpace(c.RemoteThreadId)));
+            findingId = comments[0].DraftCommentId;
+            threadId = comments[0].RemoteThreadId!;
+        }
+
+        // Step C: resolving and reopening propagate to the GitHub review thread.
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/review-drafts/{draft.DraftId}/comments/{findingId}/resolve",
+            new ResolveReviewFindingOperatorRequest("fixed", null));
+        Assert.Contains(fakeGitHub.ReviewThreadResolutions, x => x.ThreadId == threadId && x.Resolved);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/review-drafts/{draft.DraftId}/comments/{findingId}/reopen",
+            new { });
+        Assert.Contains(fakeGitHub.ReviewThreadResolutions, x => x.ThreadId == threadId && !x.Resolved);
+    }
+
+    [Fact]
     public async Task AutoReviewPublish_PublishesValidDraftAsCommentReviewOnly()
     {
         var fakeGitHub = new FakeGitHubApiClient();
@@ -4787,6 +4847,30 @@ index 3333333..4444444 100644
         MaybeFailWrite();
         CheckRuns.Add(new GitHubCheckRunWrite(repository, name, headSha, conclusion, summary));
         return Task.FromResult(new GitHubWriteResponse("check-run:300", $"https://github.example.test/{repository.FullName}/runs/300", """{"id":300}"""));
+    }
+
+    public List<(string ThreadId, bool Resolved)> ReviewThreadResolutions { get; } = [];
+
+    public Task<IReadOnlyList<GitHubReviewThread>> ListPullRequestReviewThreadsAsync(GitHubRepositoryRef repository, int number, CancellationToken ct)
+    {
+        var threads = new List<GitHubReviewThread>();
+        var index = 0;
+        foreach (var review in PullRequestReviews.Where(r => r.Number == number))
+        {
+            foreach (var comment in review.Comments)
+            {
+                threads.Add(new GitHubReviewThread($"thread-{number}-{index++}", false, [comment.Body]));
+            }
+        }
+
+        return Task.FromResult<IReadOnlyList<GitHubReviewThread>>(threads);
+    }
+
+    public Task<GitHubWriteResponse> ResolveReviewThreadAsync(GitHubRepositoryRef repository, string threadId, bool resolved, CancellationToken ct)
+    {
+        MaybeFailWrite();
+        ReviewThreadResolutions.Add((threadId, resolved));
+        return Task.FromResult(new GitHubWriteResponse(threadId, null, $$"""{"threadId":"{{threadId}}","resolved":{{(resolved ? "true" : "false")}}}"""));
     }
 
     public Task<GitHubPullRequestCreateResponse> CreatePullRequestAsync(GitHubRepositoryRef repository, string title, string head, string @base, string body, bool draft, CancellationToken ct)

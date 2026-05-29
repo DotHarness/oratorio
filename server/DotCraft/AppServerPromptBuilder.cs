@@ -78,6 +78,20 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
                 x.CompletedAt
             })
             .ToListAsync(ct);
+        var isPullRequestReview = run.Purpose == RunPurpose.ReviewAnalysis && item.Source is "github" or "gitlab" && item.Kind == ItemKind.PullRequest;
+        var priorOpenFindings = isPullRequestReview
+            ? await db.ReviewDraftComments.AsNoTracking()
+                .Where(c =>
+                    c.Draft!.ItemId == item.ItemId &&
+                    c.Draft.Status == ReviewDraftStatus.Published &&
+                    c.Status == ReviewDraftCommentStatus.Accepted &&
+                    c.ResolutionState == ReviewFindingResolutionState.Open)
+                .OrderBy(c => c.Draft!.CreatedAt)
+                .ThenBy(c => c.Path)
+                .ThenBy(c => c.Line)
+                .Select(c => new PromptFinding(c.DraftCommentId, c.Severity, c.Title, c.Path, c.Line))
+                .ToListAsync(ct)
+            : [];
         var sourceSnapshots = await db.SourceSnapshots.AsNoTracking()
             .Where(x => x.ItemId == item.ItemId)
             .OrderByDescending(x => x.SyncedAt)
@@ -203,6 +217,7 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
                     })
             }),
             feedbackForThisRound,
+            priorOpenFindings = priorOpenFindings.Select(f => new { f.FindingId, f.Severity, f.Title, f.Path, f.Line }),
             importedComments = comments.Where(IsSourceComment).Select(x => new
             {
                 x.AuthorKind,
@@ -322,6 +337,17 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
                 prompt.AppendLine("- First inspect the Review diff range file list/stat and focused per-path diffs before concluding the PR/MR is clean.");
             }
             prompt.AppendLine(ReviewDraftDiffInstructions);
+            if (priorOpenFindings.Count > 0)
+            {
+                prompt.AppendLine();
+                prompt.AppendLine("Open findings from earlier published review rounds:");
+                foreach (var finding in priorOpenFindings)
+                {
+                    prompt.AppendLine($"- [{finding.FindingId}] {finding.Severity} {finding.Title} ({finding.Path}:{finding.Line})");
+                }
+
+                prompt.AppendLine($"- For each open finding above that the current head now addresses, call {AppServerDynamicToolCatalog.ResolveReviewFindingId} with its findingId and resolutionKind `fixed`. Leave still-present findings open and do not re-report them as new comments.");
+            }
         }
         if (requiredDynamicTools.Contains("oratorio.SubmitFollowUpDraft", StringComparer.Ordinal))
         {
@@ -543,6 +569,8 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
     }
 
     private sealed record PromptFeedback(string Kind, string? DecisionId, string? CommentId, string Body, DateTimeOffset CreatedAt);
+
+    private sealed record PromptFinding(string FindingId, string Severity, string Title, string Path, int Line);
 
     private sealed record ReviewDiffTarget(string BaseRef, string BaseSha, string HeadRef, string HeadSha);
 }

@@ -317,6 +317,7 @@ public sealed class ReviewDraftService(
                 ?? throw OratorioApiException.Conflict("gitlabDiffAnchorMissing", $"GitLab diff no longer contains {comment.Path}.");
             comments.Add(new
             {
+                findingId = comment.DraftCommentId,
                 body = BuildInlineCommentBody(comment, gitLab: true),
                 position = new
                 {
@@ -802,6 +803,7 @@ public sealed class ReviewDraftService(
             sections.Add(string.Join("\n", SuggestionFenceStart(comment, gitLab), comment.SuggestionReplacement.TrimEnd(), "```"));
         }
 
+        sections.Add(ReviewFindingMarker.Build(comment.DraftCommentId));
         return string.Join("\n\n", sections.Where(x => !string.IsNullOrWhiteSpace(x)));
     }
 

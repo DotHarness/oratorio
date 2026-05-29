@@ -18,6 +18,7 @@ public interface IGitLabApiClient
     Task<GitLabWriteResponse> CreateIssueNoteAsync(GitLabProjectRef project, int iid, string body, CancellationToken ct);
     Task<GitLabWriteResponse> CreateMergeRequestNoteAsync(GitLabProjectRef project, int iid, string body, CancellationToken ct);
     Task<GitLabWriteResponse> CreateMergeRequestDiscussionAsync(GitLabProjectRef project, int iid, string body, GitLabMergeRequestPosition position, CancellationToken ct);
+    Task<GitLabWriteResponse> ResolveMergeRequestDiscussionAsync(GitLabProjectRef project, int iid, string discussionId, bool resolved, CancellationToken ct);
     Task<GitLabWriteResponse> SetCommitStatusAsync(GitLabProjectRef project, string sha, string state, string name, string description, string? targetUrl, CancellationToken ct);
     Task<GitLabMergeRequestCreateResponse> CreateMergeRequestAsync(GitLabProjectRef project, string title, string sourceBranch, string targetBranch, string description, bool draft, CancellationToken ct);
 }
@@ -119,6 +120,14 @@ public sealed class GitLabApiClient(
                 ["body"] = body,
                 ["position"] = BuildPositionPayload(position)
             },
+            project,
+            ct);
+
+    public Task<GitLabWriteResponse> ResolveMergeRequestDiscussionAsync(GitLabProjectRef project, int iid, string discussionId, bool resolved, CancellationToken ct) =>
+        SendJsonAsync(
+            HttpMethod.Put,
+            $"/projects/{project.EncodedPath}/merge_requests/{iid}/discussions/{Uri.EscapeDataString(discussionId)}?resolved={(resolved ? "true" : "false")}",
+            new Dictionary<string, object?>(),
             project,
             ct);
 

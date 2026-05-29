@@ -99,6 +99,8 @@ public sealed record GitHubInstallationTokenResponse(string Token, DateTimeOffse
 
 public sealed record GitHubWriteResponse(string ExternalId, string? ExternalUrl, string ResponseJson);
 
+public sealed record GitHubReviewThread(string Id, bool IsResolved, IReadOnlyList<string> CommentBodies);
+
 public sealed record GitHubPullRequestCreateResponse(
     long Id,
     int Number,

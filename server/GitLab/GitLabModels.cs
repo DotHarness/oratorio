@@ -141,7 +141,8 @@ public sealed record GitLabMergeRequestPosition(
 
 public sealed record GitLabMergeRequestDiscussionCommentWrite(
     string Body,
-    GitLabMergeRequestPosition Position);
+    GitLabMergeRequestPosition Position,
+    string? FindingId = null);
 
 public sealed record GitLabMergeRequestCreateResponse(
     long Id,

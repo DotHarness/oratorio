@@ -237,6 +237,7 @@ public static class Mapping
             warnings,
             comments.Count(x => x.Status == Domain.ReviewDraftCommentStatus.Accepted),
             warnings.Count,
+            comments.Count(x => x.Status == Domain.ReviewDraftCommentStatus.Accepted && x.ResolutionState == Domain.ReviewFindingResolutionState.Resolved),
             draft.CreatedAt,
             draft.UpdatedAt,
             draft.PublishedAt,
@@ -258,7 +259,12 @@ public static class Mapping
             comment.SuggestionReplacement,
             comment.CommentOnlyReason,
             comment.Status,
-            comment.Warning);
+            comment.Warning,
+            comment.ResolutionState,
+            comment.ResolutionKind,
+            comment.ResolvedByKind,
+            comment.ResolutionNote,
+            comment.ResolvedAt);
 
     public static ImplementationDraftDto ToDto(this OratorioImplementationDraft draft) =>
         new(

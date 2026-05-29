@@ -10,6 +10,8 @@ public static class AppServerDynamicToolCatalog
     public const string BoardManageScope = "board.manage";
     public const string SubmitDiscussionReplyName = "SubmitDiscussionReply";
     public const string SubmitDiscussionReplyId = "oratorio.SubmitDiscussionReply";
+    public const string ResolveReviewFindingName = "ResolveReviewFinding";
+    public const string ResolveReviewFindingId = "oratorio.ResolveReviewFinding";
     public const string ListBoardItemsName = "ListBoardItems";
     public const string GetBoardItemName = "GetBoardItem";
     public const string CreateBoardTaskName = "CreateBoardTask";
@@ -29,6 +31,28 @@ public static class AppServerDynamicToolCatalog
                     body = new { type = "string" }
                 },
                 required = new[] { "discussionTurnId", "body" }
+            }, jsonOptions));
+
+    public static AppServerDynamicToolSpec ResolveReviewFinding(JsonSerializerOptions jsonOptions) =>
+        new(
+            Namespace: Namespace,
+            Name: ResolveReviewFindingName,
+            Description: "Resolve a published Oratorio review finding once it is fixed or agreed to be a non-issue. Use resolutionKind 'fixed' when the current code addresses it, or 'dismissed' when it was agreed not to action. Only resolve findings you are confident about; otherwise leave them open. Oratorio records the resolution and, when enabled, resolves the matching GitHub/GitLab review thread.",
+            InputSchema: JsonSerializer.SerializeToElement(new
+            {
+                type = "object",
+                properties = new
+                {
+                    findingId = new { type = "string", description = "The published review finding id (ReviewDraftComment id) to resolve." },
+                    resolutionKind = new
+                    {
+                        type = "string",
+                        @enum = new[] { "fixed", "dismissed" },
+                        description = "fixed when the underlying issue was addressed in code; dismissed when the finding was agreed to be a non-issue or intentionally not actioned."
+                    },
+                    note = new { type = "string", description = "Optional short rationale for the resolution." }
+                },
+                required = new[] { "findingId", "resolutionKind" }
             }, jsonOptions));
 
     public static IReadOnlyList<AppServerDynamicToolSpec> AppBoundManagerTools(

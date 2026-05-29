@@ -152,6 +152,7 @@ describe('ItemDetailView', () => {
           warnings: [],
           acceptedCount: 2,
           warningCount: 0,
+          resolvedCount: 0,
           createdAt: '2026-05-10T00:00:00Z',
           updatedAt: '2026-05-10T00:00:00Z',
           publishedAt: null,
@@ -171,6 +172,11 @@ describe('ItemDetailView', () => {
               commentOnlyReason: null,
               status: 'accepted',
               warning: null,
+              resolutionState: 'open',
+              resolutionKind: null,
+              resolvedByKind: null,
+              resolutionNote: null,
+              resolvedAt: null,
             },
             {
               draftCommentId: 'comment-2',
@@ -186,6 +192,11 @@ describe('ItemDetailView', () => {
               commentOnlyReason: 'needsHumanDecision',
               status: 'accepted',
               warning: null,
+              resolutionState: 'open',
+              resolutionKind: null,
+              resolvedByKind: null,
+              resolutionNote: null,
+              resolvedAt: null,
             },
           ],
         },
@@ -217,6 +228,74 @@ describe('ItemDetailView', () => {
     await waitFor(() => {
       expect(screen.getByRole('tooltip')).toHaveTextContent(reason)
     })
+  })
+
+  it('renders finding resolution controls and chips on a published draft', () => {
+    const resolveReviewFinding = vi.fn(async () => undefined)
+    const reopenReviewFinding = vi.fn(async () => undefined)
+    const baseComment = {
+      severity: 'YELLOW',
+      title: 'Preserve redirect',
+      body: 'Why this matters.',
+      path: 'docs/config.mts',
+      line: 241,
+      side: 'RIGHT',
+      startLine: null,
+      startSide: null,
+      suggestionReplacement: null,
+      commentOnlyReason: 'investigateOnly',
+      status: 'accepted' as const,
+      warning: null,
+    }
+    const reviewItem: WorkItem = {
+      ...item,
+      reviewDrafts: [
+        {
+          draftId: 'draft-1',
+          itemId: 'task-1',
+          roundId: 'round-1',
+          runId: 'run-1',
+          status: 'published',
+          summaryBody: 'Reviewed.',
+          majorCount: 0,
+          minorCount: 1,
+          suggestionCount: 0,
+          warnings: [],
+          acceptedCount: 2,
+          warningCount: 0,
+          resolvedCount: 1,
+          createdAt: '2026-05-10T00:00:00Z',
+          updatedAt: '2026-05-10T00:00:00Z',
+          publishedAt: '2026-05-10T00:00:00Z',
+          sourceWriteId: 'write-1',
+          comments: [
+            { ...baseComment, draftCommentId: 'open-1', resolutionState: 'open', resolutionKind: null, resolvedByKind: null, resolutionNote: null, resolvedAt: null },
+            { ...baseComment, draftCommentId: 'resolved-1', title: 'Already handled', resolutionState: 'resolved', resolutionKind: 'dismissed', resolvedByKind: 'agent', resolutionNote: 'Agreed non-issue.', resolvedAt: '2026-05-10T01:00:00Z' },
+          ],
+        },
+      ],
+    }
+
+    renderDetail({
+      selectedItem: reviewItem,
+      selectedDetailItem: reviewItem,
+      selectedReviewStage: 'review',
+      selectedIsLocalTask: false,
+      selectedIsPullRequest: true,
+      resolveReviewFinding,
+      reopenReviewFinding,
+    })
+
+    expect(screen.getByText(/2 accepted · 0 warning · 1 resolved/)).toBeInTheDocument()
+    expect(screen.getByText('Agreed non-issue.')).toBeInTheDocument()
+    const chip = document.querySelector('.draft-comment.resolved .resolution-chip')
+    expect(chip?.textContent).toContain('Dismissed')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark fixed' }))
+    expect(resolveReviewFinding).toHaveBeenCalledWith('draft-1', 'open-1', 'fixed', null)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reopen' }))
+    expect(reopenReviewFinding).toHaveBeenCalledWith('draft-1', 'resolved-1')
   })
 
   it('focuses the discussion composer when the detail focus requests comments', async () => {
@@ -324,6 +403,8 @@ function renderDetailElement(overrides: Partial<ComponentProps<typeof ItemDetail
       retrySourceWrite={asyncAction}
       publishReviewDraft={asyncAction}
       discardReviewDraft={asyncAction}
+      resolveReviewFinding={asyncAction}
+      reopenReviewFinding={asyncAction}
       deliverImplementationDraft={asyncAction}
       discardFollowUpDraft={asyncAction}
       createLocalTaskFromFollowUpDraft={asyncAction}

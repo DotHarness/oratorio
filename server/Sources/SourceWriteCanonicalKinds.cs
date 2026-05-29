@@ -16,6 +16,7 @@ public static class SourceWriteCanonicalKinds
     public const string BranchPush = "branchPush";
     public const string ReviewTargetCreation = "reviewTargetCreation";
     public const string ProviderApproval = "providerApproval";
+    public const string ResolveReviewThread = "resolveReviewThread";
 
     public static string From(SourceWriteKind kind, string? requestJson = null) =>
         kind switch
@@ -30,6 +31,7 @@ public static class SourceWriteCanonicalKinds
             SourceWriteKind.MergeRequestDiscussion => InlineReviewDiscussion,
             SourceWriteKind.CommitStatus => ExternalStatus,
             SourceWriteKind.MergeRequestCreation => ReviewTargetCreation,
+            SourceWriteKind.ResolveReviewThread => ResolveReviewThread,
             _ => kind.ToString()
         };
 

@@ -606,6 +606,69 @@ public sealed class GitLabReadSyncTests
     }
 
     [Fact]
+    public async Task GitLabReviewFindingResolution_CapturesThreadIdsAndPropagatesToDiscussions()
+    {
+        var fakeGitLab = new FakeGitLabApiClient();
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitCleanReviewDraft);
+        var settings = GitLabSettings(writesEnabled: true);
+        settings["Oratorio:Automation:ResolveReviewThreadsEnabled"] = "true";
+        await using var app = GitLabApp(
+            fakeGitLab,
+            settings,
+            services =>
+            {
+                services.RemoveAll<IDotCraftAppServerProcessManager>();
+                services.RemoveAll<IDotCraftAppServerClientFactory>();
+                services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+                services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+            });
+        var client = app.CreateClient();
+        var job = await EnqueueGitLabSyncAsync(client, SourceSyncMode.Incremental);
+        await WaitForSourceSyncJobAsync(client, job.JobId);
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=gitlab&kind=pullRequest", JsonOptions);
+        var mr = Assert.Single(list!.Items);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{mr.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Prepare GitLab MR review suggestions.", null, null));
+        var reviewed = await WaitForItemByIdAsync(client, mr.ItemId!, x => x.Item.State == ItemState.AwaitingReview && x.ReviewDrafts.Count == 1);
+        var draft = Assert.Single(reviewed.ReviewDrafts);
+
+        var published = await PostAsync<ItemDetailResponse>(client, $"/api/v1/review-drafts/{draft.DraftId}/publish", new { });
+        Assert.Equal(ReviewDraftStatus.Published, Assert.Single(published.ReviewDrafts).Status);
+
+        // Step B: each accepted finding captured its GitLab discussion id at publish.
+        string firstFindingId;
+        string firstThreadId;
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
+            var comments = await db.ReviewDraftComments
+                .Where(c => c.DraftId == draft.DraftId && c.Status == ReviewDraftCommentStatus.Accepted)
+                .ToListAsync();
+            Assert.Equal(2, comments.Count);
+            Assert.All(comments, c => Assert.False(string.IsNullOrWhiteSpace(c.RemoteThreadId)));
+            var first = comments[0];
+            firstFindingId = first.DraftCommentId;
+            firstThreadId = first.RemoteThreadId!;
+        }
+
+        // Step C: resolving propagates to the matching GitLab discussion.
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/review-drafts/{draft.DraftId}/comments/{firstFindingId}/resolve",
+            new ResolveReviewFindingOperatorRequest("fixed", "Addressed."));
+        Assert.Contains(fakeGitLab.DiscussionResolutions, x => x.DiscussionId == firstThreadId && x.Resolved);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/review-drafts/{draft.DraftId}/comments/{firstFindingId}/reopen",
+            new { });
+        Assert.Contains(fakeGitLab.DiscussionResolutions, x => x.DiscussionId == firstThreadId && !x.Resolved);
+    }
+
+    [Fact]
     public async Task GitLabReviewDraftPublish_UsesOffsetAwareSuggestionFenceForMultiLineSuggestions()
     {
         var fakeGitLab = new FakeGitLabApiClient();
@@ -1311,10 +1374,21 @@ public sealed class GitLabReadSyncTests
             return Task.FromResult(new GitLabWriteResponse("mr-note-write", $"https://gitlab.example.test/{ProjectPath}/-/merge_requests/{iid}#note_write", "{}"));
         }
 
+        public List<(string DiscussionId, bool Resolved)> DiscussionResolutions { get; } = [];
+
+        private int _discussionCounter;
+
         public Task<GitLabWriteResponse> CreateMergeRequestDiscussionAsync(GitLabProjectRef project, int iid, string body, GitLabMergeRequestPosition position, CancellationToken ct)
         {
             MergeRequestDiscussionsCreated.Add((iid, body, position));
-            return Task.FromResult(new GitLabWriteResponse("mr-discussion-write", $"https://gitlab.example.test/{ProjectPath}/-/merge_requests/{iid}#note_discussion", "{}"));
+            var discussionId = $"discussion-{++_discussionCounter}";
+            return Task.FromResult(new GitLabWriteResponse(discussionId, $"https://gitlab.example.test/{ProjectPath}/-/merge_requests/{iid}#note_{discussionId}", "{}"));
+        }
+
+        public Task<GitLabWriteResponse> ResolveMergeRequestDiscussionAsync(GitLabProjectRef project, int iid, string discussionId, bool resolved, CancellationToken ct)
+        {
+            DiscussionResolutions.Add((discussionId, resolved));
+            return Task.FromResult(new GitLabWriteResponse(discussionId, null, "{}"));
         }
 
         public Task<GitLabWriteResponse> SetCommitStatusAsync(GitLabProjectRef project, string sha, string state, string name, string description, string? targetUrl, CancellationToken ct)

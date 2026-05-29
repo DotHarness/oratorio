@@ -3,15 +3,7 @@ import { MarkdownBlock } from '../../components/primitives/MarkdownBlock'
 import { SectionBlock } from '../../components/primitives/SectionBlock'
 import { Tooltip } from '../../components/primitives/Tooltip'
 import type { BriefFields, DeliveryPolicy, ReReviewInfo, ReviewStageId, Run, RunnerMode, WorkItem } from '../../lib/types'
-import {
-  runnerKindLabel,
-  runnerModeLabel,
-  runStatusLabel,
-  stateClassName,
-  stateCopy,
-  stateIcon,
-  stateLabels,
-} from '../../lib/format'
+import { runnerKindLabel, runnerModeLabel, runStatusLabel } from '../../lib/format'
 
 const implementTooltip = 'Starts an implementation run. The agent may change the managed worktree and submits an implementation draft for manual delivery.'
 const reviewOnlyTooltip = 'Starts a read-only analysis run. The agent should inspect and summarize without making implementation changes.'
@@ -113,6 +105,7 @@ export function TaskStatusPanel({
   const canShowReReviewAction = Boolean(reReviewInfo && canDispatch && item.state !== 'archived')
   const canShowNextAction = canDispatch && item.state !== 'archived' && !reviewNextAction && !canShowReReviewAction
   const draftCount = item.reviewDrafts.length + item.implementationDrafts.length
+  const artifactCount = draftCount + item.followUpDrafts.length + item.sourceWrites.length + item.comments.length
   const commentActionLabel = item.comments.length > 0 ? 'View comments' : 'Add comment'
   const isGitLab = item.sourceKey === 'gitlab'
   const reviewTargetName = isGitLab ? 'MR' : 'PR'
@@ -120,13 +113,11 @@ export function TaskStatusPanel({
 
   return (
     <div className="task-status-panel">
-      <SectionBlock
-        tone="slate"
-        icon={stateIcon(item.state)}
-        title={stateLabels[item.state]}
-        description={stateCopy(item.state)}
-        action={<span className={`state-pill ${stateClassName(item.state)}`}>{stateLabels[item.state]}</span>}
-      />
+      {summary ? (
+        <SectionBlock tone="blue" icon={<ClipboardList size={16} />} title="Summary" description="A compact brief for board triage.">
+          <MarkdownBlock value={summary} className="task-status-brief" compact />
+        </SectionBlock>
+      ) : null}
 
       {run ? (
         <SectionBlock
@@ -216,19 +207,14 @@ export function TaskStatusPanel({
         </SectionBlock>
       ) : null}
 
-      {summary ? (
-        <SectionBlock tone="blue" icon={<ClipboardList size={16} />} title="Summary" description="A compact brief for board triage.">
-          <MarkdownBlock value={summary} className="task-status-brief" compact />
-        </SectionBlock>
-      ) : null}
-
-      <SectionBlock
-        tone={hasDrafts ? 'amber' : 'slate'}
-        icon={<Activity size={16} />}
-        title="Review artifacts"
-        description="Open the detail panel to review drafts, follow-ups, comments, and decisions."
-      >
-        <div className="task-status-counts">
+      {artifactCount > 0 ? (
+        <SectionBlock
+          tone={hasDrafts ? 'amber' : 'slate'}
+          icon={<Activity size={16} />}
+          title="Review artifacts"
+          description="Open the detail panel to review drafts, follow-ups, comments, and decisions."
+        >
+          <div className="task-status-counts">
           {draftCount > 0 ? (
             <button type="button" onClick={() => onOpenDetailStage('review')}>
               <strong>{draftCount}</strong>
@@ -273,12 +259,21 @@ export function TaskStatusPanel({
               <span>comments</span>
             </span>
           )}
-        </div>
-        <button className="secondary-button task-status-comment-action" onClick={() => onOpenDetailStage('review', { focus: 'discussionComposer' })}>
+          </div>
+          <button className="secondary-button task-status-comment-action" onClick={() => onOpenDetailStage('review', { focus: 'discussionComposer' })}>
+            <MessageSquare size={15} />
+            {commentActionLabel}
+          </button>
+        </SectionBlock>
+      ) : (
+        <button
+          className="secondary-button task-status-comment-action task-status-comment-action--solo"
+          onClick={() => onOpenDetailStage('review', { focus: 'discussionComposer' })}
+        >
           <MessageSquare size={15} />
           {commentActionLabel}
         </button>
-      </SectionBlock>
+      )}
     </div>
   )
 }

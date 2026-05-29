@@ -282,6 +282,15 @@ public sealed class OratorioReviewDraftComment
     public string? CommentOnlyReason { get; set; }
     public ReviewDraftCommentStatus Status { get; set; } = ReviewDraftCommentStatus.Accepted;
     public string? Warning { get; set; }
+    public ReviewFindingResolutionState ResolutionState { get; set; } = ReviewFindingResolutionState.Open;
+    public ReviewFindingResolutionKind? ResolutionKind { get; set; }
+    public AuthorKind? ResolvedByKind { get; set; }
+    public string? ResolutionNote { get; set; }
+    public DateTimeOffset? ResolvedAt { get; set; }
+    public string? ResolvedInRunId { get; set; }
+    public string? ResolvedViaDiscussionTurnId { get; set; }
+    public string? RemoteThreadId { get; set; }
+    public string? RemoteResolveWriteId { get; set; }
 
     public OratorioReviewDraft? Draft { get; set; }
 }

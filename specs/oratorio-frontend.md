@@ -421,6 +421,25 @@ timeline) render with a muted lucide icon at the `empty-state-icon` size
 above the empty-state copy. Plain-text empty states without an icon are a
 regression for the detail page.
 
+### 5.7 Review finding resolution
+
+The review stage renders published review findings (design §5.7). Each finding
+shows its resolution state:
+
+- open findings render at full emphasis;
+- resolved findings render visibly de-emphasized (muted surface, reduced
+  emphasis) with a resolution chip showing the kind (`Fixed` or `Dismissed`),
+  the resolver (`agent` or `operator`), and the optional note;
+- finding tallies on the review surface count open findings only; resolved
+  findings stay visible for audit and are not silently removed.
+
+When backend gates allow, the detail page exposes an operator `Resolve` control
+on an open finding and a `Reopen` control on a resolved finding; resolving
+prompts for the `Fixed`/`Dismissed` kind and an optional note. These controls
+are detail-page only. The Status Drawer must not render resolve/reopen controls;
+it may only surface open-finding counts and route operators to the detail page,
+consistent with the Discussion composer rule in §4.
+
 ---
 
 ## 6. Settings

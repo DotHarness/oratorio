@@ -224,6 +224,7 @@ public sealed class GitHubWriteService(
                 SourceWriteKind.IssueComment => await client.CreateIssueCommentAsync(repository, write.Number.Value, ReadString(write.RequestJson, "body"), ct),
                 SourceWriteKind.PullRequestReview => await CreatePullRequestReviewAsync(repository, write, ct),
                 SourceWriteKind.CheckRun => await client.CreateCheckRunAsync(repository, CheckRunName, write.HeadSha!, ReadString(write.RequestJson, "conclusion"), ReadString(write.RequestJson, "summary"), ct),
+                SourceWriteKind.ResolveReviewThread => await client.ResolveReviewThreadAsync(repository, ReadString(write.RequestJson, "threadId"), ReadBool(write.RequestJson, "resolved"), ct),
                 _ => throw new InvalidOperationException($"Unsupported source write kind: {write.Kind}")
             };
 
@@ -240,6 +241,62 @@ public sealed class GitHubWriteService(
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or JsonException)
         {
             MarkFailed(write, "githubWriteFailed", ex.Message);
+        }
+
+        if (write.Status == SourceWriteStatus.Succeeded)
+        {
+            await TryCaptureReviewThreadMappingAsync(write, repository, ct);
+        }
+    }
+
+    private async Task TryCaptureReviewThreadMappingAsync(OratorioSourceWriteLog write, GitHubRepositoryRef repository, CancellationToken ct)
+    {
+        if (write.Intent != "reviewDraftPublish" || write.Kind != SourceWriteKind.PullRequestReview || write.Number is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var draftId = db.ChangeTracker.Entries<OratorioReviewDraft>()
+                .Select(entry => entry.Entity)
+                .FirstOrDefault(draft => draft.SourceWriteId == write.WriteId)?.DraftId
+                ?? await db.ReviewDrafts.Where(draft => draft.SourceWriteId == write.WriteId).Select(draft => draft.DraftId).FirstOrDefaultAsync(ct);
+            if (string.IsNullOrWhiteSpace(draftId))
+            {
+                return;
+            }
+
+            var comments = await db.ReviewDraftComments
+                .Where(c => c.DraftId == draftId && c.Status == ReviewDraftCommentStatus.Accepted)
+                .ToListAsync(ct);
+            if (comments.Count == 0)
+            {
+                return;
+            }
+
+            var threads = await client.ListPullRequestReviewThreadsAsync(repository, write.Number.Value, ct);
+            foreach (var thread in threads)
+            {
+                foreach (var body in thread.CommentBodies)
+                {
+                    var findingId = ReviewFindingMarker.Extract(body);
+                    if (findingId is null)
+                    {
+                        continue;
+                    }
+
+                    var match = comments.FirstOrDefault(c => c.DraftCommentId == findingId);
+                    if (match is not null)
+                    {
+                        match.RemoteThreadId = thread.Id;
+                    }
+                }
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or JsonException)
+        {
+            // Mapping is best-effort; without it, resolution stays internal-only per spec §5.7.
         }
     }
 
@@ -343,6 +400,13 @@ public sealed class GitHubWriteService(
 
     private static string ReadString(string json, string propertyName) =>
         ReadOptionalString(json, propertyName) ?? throw new JsonException($"Missing required property '{propertyName}'.");
+
+    private static bool ReadBool(string json, string propertyName)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.TryGetProperty(propertyName, out var value) &&
+            value.ValueKind is JsonValueKind.True or JsonValueKind.False && value.GetBoolean();
+    }
 
     private static IReadOnlyList<GitHubPullRequestReviewCommentWrite> ReadReviewComments(string json)
     {

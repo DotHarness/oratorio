@@ -2491,7 +2491,7 @@ textarea::placeholder {
 }
 
 .task-status-brief {
-  max-height: 160px;
+  max-height: 280px;
   overflow: auto;
 }
 
@@ -2581,6 +2581,10 @@ textarea::placeholder {
 .task-status-comment-action {
   width: 100%;
   margin-top: 10px;
+}
+
+.task-status-comment-action--solo {
+  margin-top: 0;
 }
 
 .task-detail-page {
@@ -4905,6 +4909,64 @@ textarea::placeholder {
 .draft-comment.skipped {
   opacity: 0.74;
   box-shadow: inset 2px 0 0 color-mix(in srgb, var(--text-dimmed) 28%, transparent);
+}
+
+.draft-comment.resolved {
+  opacity: 0.62;
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--success) 60%, transparent);
+}
+
+.draft-comment.resolved .draft-comment-title {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-dimmed) 60%, transparent);
+}
+
+.draft-comment-resolution {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.draft-comment-resolution .resolution-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--success);
+}
+
+.draft-comment-resolution .resolution-note {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.draft-comment-resolution-actions {
+  display: flex;
+  gap: 14px;
+}
+
+.draft-comment-resolution-actions .link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.draft-comment-resolution-actions .link-button:hover:not(:disabled) {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+.draft-comment-resolution-actions .link-button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .draft-comment-header {

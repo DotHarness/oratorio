@@ -405,6 +405,15 @@ public sealed class OratorioDbContext(DbContextOptions<OratorioDbContext> option
         entity.Property(x => x.CommentOnlyReason).HasColumnName("comment_only_reason");
         entity.Property(x => x.Status).HasColumnName("status").HasConversion<string>().IsRequired();
         entity.Property(x => x.Warning).HasColumnName("warning");
+        entity.Property(x => x.ResolutionState).HasColumnName("resolution_state").HasConversion<string>().IsRequired();
+        entity.Property(x => x.ResolutionKind).HasColumnName("resolution_kind").HasConversion<string>();
+        entity.Property(x => x.ResolvedByKind).HasColumnName("resolved_by_kind").HasConversion<string>();
+        entity.Property(x => x.ResolutionNote).HasColumnName("resolution_note");
+        entity.Property(x => x.ResolvedAt).HasColumnName("resolved_at").HasConversion(NullableDateTimeOffsetConverter);
+        entity.Property(x => x.ResolvedInRunId).HasColumnName("resolved_in_run_id");
+        entity.Property(x => x.ResolvedViaDiscussionTurnId).HasColumnName("resolved_via_discussion_turn_id");
+        entity.Property(x => x.RemoteThreadId).HasColumnName("remote_thread_id");
+        entity.Property(x => x.RemoteResolveWriteId).HasColumnName("remote_resolve_write_id");
         entity.HasIndex(x => x.DraftId);
         entity.HasOne(x => x.Draft).WithMany(x => x.Comments).HasForeignKey(x => x.DraftId);
     }

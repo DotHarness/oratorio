@@ -43,6 +43,7 @@ import type {
   ReReviewInfo,
   ReviewDraft,
   ReviewDraftComment,
+  ReviewFindingResolutionKind,
   ReviewStageId,
   RoundHistory,
   Run,
@@ -140,6 +141,8 @@ export type ItemDetailViewProps = {
   publishReviewDraft: (draftId: string) => Promise<void>
   reviewDraftPublishDisabledReason?: string | null
   discardReviewDraft: (draftId: string) => Promise<void>
+  resolveReviewFinding: (draftId: string, commentId: string, resolutionKind: ReviewFindingResolutionKind, note: string | null) => Promise<void>
+  reopenReviewFinding: (draftId: string, commentId: string) => Promise<void>
   deliverImplementationDraft: (draftId: string) => Promise<void>
   discardFollowUpDraft: (draftId: string) => Promise<void>
   createLocalTaskFromFollowUpDraft: (draftId: string) => Promise<void>
@@ -270,6 +273,8 @@ export function ItemDetailView({
   publishReviewDraft,
   reviewDraftPublishDisabledReason = null,
   discardReviewDraft,
+  resolveReviewFinding,
+  reopenReviewFinding,
   deliverImplementationDraft,
   discardFollowUpDraft,
   createLocalTaskFromFollowUpDraft,
@@ -790,7 +795,7 @@ export function ItemDetailView({
                           {reviewDraftStatusLabel(draft.status)}
                         </span>
                         <strong>{draft.majorCount} major · {draft.minorCount} minor · {pluralizeCount(draft.suggestionCount, 'code suggestion')} · {pluralizeCount(commentOnlyCount, 'comment-only finding', 'comment-only findings')}</strong>
-                        <span>{draft.acceptedCount} accepted · {draft.warningCount} warning</span>
+                        <span>{draft.acceptedCount} accepted · {draft.warningCount} warning{draft.resolvedCount > 0 ? ` · ${draft.resolvedCount} resolved` : ''}</span>
                       </div>
                       <MarkdownBlock value={draft.summaryBody} className="summary-markdown compact" />
                       {draft.warnings.length > 0 ? (
@@ -804,8 +809,11 @@ export function ItemDetailView({
                         </div>
                       ) : null}
                       <div className="draft-comment-list">
-                        {draft.comments.map((comment) => (
-                          <div className={`draft-comment ${comment.status}`} key={comment.draftCommentId}>
+                        {draft.comments.map((comment) => {
+                          const resolved = comment.resolutionState === 'resolved'
+                          const canResolve = draft.status === 'published' && comment.status === 'accepted'
+                          return (
+                          <div className={`draft-comment ${comment.status}${resolved ? ' resolved' : ''}`} key={comment.draftCommentId}>
                             <div className="draft-comment-header">
                               <strong className="draft-comment-title">{comment.title}</strong>
                               <span className="draft-comment-location">{comment.path}:{comment.startLine ? `${comment.startLine}-` : ''}{comment.line} · {comment.side}</span>
@@ -814,8 +822,37 @@ export function ItemDetailView({
                             <DraftSuggestionPreview comment={comment} />
                             {comment.commentOnlyReason ? <CommentOnlyReasonBadge reason={comment.commentOnlyReason} /> : null}
                             {comment.warning ? <small className="draft-comment-warning">{comment.warning}</small> : null}
+                            {resolved ? (
+                              <div className="draft-comment-resolution">
+                                <span className="resolution-chip">
+                                  <CheckCircle2 size={13} />
+                                  Resolved · {comment.resolutionKind === 'fixed' ? 'Fixed' : 'Dismissed'}
+                                  {comment.resolvedByKind ? ` · ${comment.resolvedByKind}` : ''}
+                                </span>
+                                {comment.resolutionNote ? <span className="resolution-note">{comment.resolutionNote}</span> : null}
+                              </div>
+                            ) : null}
+                            {canResolve ? (
+                              <div className="draft-comment-resolution-actions">
+                                {resolved ? (
+                                  <button className="link-button" onClick={() => void reopenReviewFinding(draft.draftId, comment.draftCommentId)} disabled={isBusy}>
+                                    Reopen
+                                  </button>
+                                ) : (
+                                  <>
+                                    <button className="link-button" onClick={() => void resolveReviewFinding(draft.draftId, comment.draftCommentId, 'fixed', null)} disabled={isBusy}>
+                                      Mark fixed
+                                    </button>
+                                    <button className="link-button" onClick={() => void resolveReviewFinding(draft.draftId, comment.draftCommentId, 'dismissed', null)} disabled={isBusy}>
+                                      Mark dismissed
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            ) : null}
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                       <div className="review-draft-actions">
                         <button className="secondary-button inline" onClick={() => void editReviewDraftSummary(draft)} disabled={isBusy || draft.status !== 'draft'}>

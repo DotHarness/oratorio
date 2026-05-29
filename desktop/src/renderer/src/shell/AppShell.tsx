@@ -49,6 +49,7 @@ import type {
   LocalTaskForm,
   MockOutcome,
   ReviewDraft,
+  ReviewFindingResolutionKind,
   ReviewStageId,
   RunnerMode,
   SourceProviderStatus,
@@ -1725,6 +1726,46 @@ function OratorioApp() {
     }
   }
 
+  async function resolveReviewFinding(draftId: string, commentId: string, resolutionKind: ReviewFindingResolutionKind, note: string | null) {
+    setIsBusy(true)
+    setError(null)
+    try {
+      const detail = await apiPost<ItemDetailResponse>(
+        `/review-drafts/${encodeURIComponent(draftId)}/comments/${encodeURIComponent(commentId)}/resolve`,
+        { resolutionKind, note })
+      const nextItem = detailToWorkItem(detail)
+      setSelectedDetail(nextItem)
+      setItems((current) => replaceMatchingItemWithDetail(current, nextItem))
+      showNotice('Review finding resolved.')
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setError(message)
+      showNotice(message, 'error')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  async function reopenReviewFinding(draftId: string, commentId: string) {
+    setIsBusy(true)
+    setError(null)
+    try {
+      const detail = await apiPost<ItemDetailResponse>(
+        `/review-drafts/${encodeURIComponent(draftId)}/comments/${encodeURIComponent(commentId)}/reopen`,
+        {})
+      const nextItem = detailToWorkItem(detail)
+      setSelectedDetail(nextItem)
+      setItems((current) => replaceMatchingItemWithDetail(current, nextItem))
+      showNotice('Review finding reopened.')
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setError(message)
+      showNotice(message, 'error')
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
   async function deliverImplementationDraft(draftId: string) {
     setIsBusy(true)
     setError(null)
@@ -2210,6 +2251,8 @@ function OratorioApp() {
     publishReviewDraft,
     reviewDraftPublishDisabledReason,
     discardReviewDraft,
+    resolveReviewFinding,
+    reopenReviewFinding,
     deliverImplementationDraft,
     discardFollowUpDraft,
     createLocalTaskFromFollowUpDraft,

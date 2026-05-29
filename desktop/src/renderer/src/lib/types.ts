@@ -36,6 +36,8 @@ export type SourceWriteKind =
 export type SourceWriteStatus = 'pending' | 'succeeded' | 'failed'
 export type ReviewDraftStatus = 'draft' | 'published' | 'discarded' | 'publishFailed'
 export type ReviewDraftCommentStatus = 'accepted' | 'skipped'
+export type ReviewFindingResolutionState = 'open' | 'resolved'
+export type ReviewFindingResolutionKind = 'fixed' | 'dismissed'
 export type RunPurpose = 'reviewAnalysis' | 'implementation'
 export type RunDispatchTrigger = 'manual' | 'appBinding' | 'autoImplementation' | 'autoReview'
 export type DeliveryPolicy = 'manualDelivery' | 'autoPr'
@@ -204,6 +206,11 @@ export type ReviewDraftCommentDto = {
   commentOnlyReason: string | null
   status: ReviewDraftCommentStatus
   warning: string | null
+  resolutionState: ReviewFindingResolutionState
+  resolutionKind: ReviewFindingResolutionKind | null
+  resolvedByKind: string | null
+  resolutionNote: string | null
+  resolvedAt: string | null
 }
 
 export type ReviewDraftDto = {
@@ -219,6 +226,7 @@ export type ReviewDraftDto = {
   warnings: string[]
   acceptedCount: number
   warningCount: number
+  resolvedCount: number
   createdAt: string
   updatedAt: string
   publishedAt: string | null

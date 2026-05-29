@@ -14,6 +14,7 @@ namespace Oratorio.Server.Services;
 public sealed class DiscussionTurnService(
     OratorioDbContext db,
     OratorioService oratorioService,
+    ReviewFindingResolutionService findingResolution,
     IClock clock,
     IDotCraftAppServerClientFactory clientFactory,
     IOptionsMonitor<DotCraftOptions> options,
@@ -109,6 +110,49 @@ public sealed class DiscussionTurnService(
         }
 
         return pendingIds.Count;
+    }
+
+    private async Task<AppServerDynamicToolResult> HandleDiscussionToolCallAsync(string discussionTurnId, AppServerDynamicToolCall call, CancellationToken ct)
+    {
+        if (call.Namespace == AppServerDynamicToolCatalog.Namespace && call.Tool == AppServerDynamicToolCatalog.ResolveReviewFindingName)
+        {
+            return await ResolveFindingForToolAsync(discussionTurnId, call, ct);
+        }
+
+        return await SubmitReplyForToolAsync(discussionTurnId, call, ct);
+    }
+
+    private async Task<AppServerDynamicToolResult> ResolveFindingForToolAsync(string discussionTurnId, AppServerDynamicToolCall call, CancellationToken ct)
+    {
+        ResolveReviewFindingRequest request;
+        try
+        {
+            request = call.Arguments.Deserialize<ResolveReviewFindingRequest>(JsonOptions)
+                ?? throw new InvalidOperationException("ResolveReviewFinding arguments were empty.");
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
+        {
+            return new AppServerDynamicToolResult(false, ErrorCode: "InvalidArguments", ErrorMessage: ex.Message);
+        }
+
+        try
+        {
+            var response = await findingResolution.ResolveForDiscussionAsync(discussionTurnId, request, ct);
+            return new AppServerDynamicToolResult(
+                true,
+                [new AppServerToolContentItem("text", $"Review finding {response.FindingId} resolved ({response.ResolutionKind}).")],
+                response);
+        }
+        catch (OratorioApiException ex)
+        {
+            var structuredResult = new { error = new { code = ex.Code, message = ex.Message, details = ex.Details } };
+            return new AppServerDynamicToolResult(
+                false,
+                [new AppServerToolContentItem("text", ex.Message)],
+                structuredResult,
+                ErrorCode: ex.Code,
+                ErrorMessage: ex.Message);
+        }
     }
 
     public async Task<AppServerDynamicToolResult> SubmitReplyForToolAsync(string? expectedDiscussionTurnId, AppServerDynamicToolCall call, CancellationToken ct)
@@ -234,11 +278,12 @@ public sealed class DiscussionTurnService(
                 return;
             }
 
-            client.SetDynamicToolHandler(async (call, handlerCt) => await SubmitReplyForToolAsync(discussionTurnId, call, handlerCt));
-            await client.ResumeThreadAsync(turn.ThreadId, [AppServerDynamicToolCatalog.SubmitDiscussionReply(JsonOptions)], ct);
+            client.SetDynamicToolHandler(async (call, handlerCt) => await HandleDiscussionToolCallAsync(discussionTurnId, call, handlerCt));
+            await client.ResumeThreadAsync(turn.ThreadId, [AppServerDynamicToolCatalog.SubmitDiscussionReply(JsonOptions), AppServerDynamicToolCatalog.ResolveReviewFinding(JsonOptions)], ct);
             await client.SubscribeThreadAsync(turn.ThreadId, ct);
 
-            var prompt = BuildPrompt(turn, out var contextJson);
+            var openFindings = await LoadOpenFindingsAsync(turn.ItemId, ct);
+            var prompt = BuildPrompt(turn, openFindings, out var contextJson);
             var input = new[]
             {
                 new TurnInputPartDto("text", prompt, null, null, null, null, null, null)
@@ -383,12 +428,12 @@ public sealed class DiscussionTurnService(
         }
     }
 
-    private string BuildPrompt(OratorioDiscussionTurn turn, out string contextJson)
+    private string BuildPrompt(OratorioDiscussionTurn turn, IReadOnlyList<FindingPromptInfo> openFindings, out string contextJson)
     {
         var context = new
         {
             promptMode = "discussion",
-            requiredDynamicTools = new[] { AppServerDynamicToolCatalog.SubmitDiscussionReplyId },
+            requiredDynamicTools = new[] { AppServerDynamicToolCatalog.SubmitDiscussionReplyId, AppServerDynamicToolCatalog.ResolveReviewFindingId },
             discussionTurn = new
             {
                 turn.DiscussionTurnId,
@@ -398,6 +443,7 @@ public sealed class DiscussionTurnService(
                 turn.BaseRunId,
                 turn.ThreadId
             },
+            openFindings = openFindings.Select(f => new { f.FindingId, f.Severity, f.Title, f.Path, f.Line }),
             item = turn.Item is null
                 ? null
                 : new
@@ -442,13 +488,44 @@ public sealed class DiscussionTurnService(
         prompt.AppendLine("Operator question:");
         prompt.AppendLine(turn.QuestionComment?.Body.Trim() ?? "");
         prompt.AppendLine();
+        if (openFindings.Count > 0)
+        {
+            prompt.AppendLine("Open published review findings (resolvable):");
+            foreach (var finding in openFindings)
+            {
+                prompt.AppendLine($"- [{finding.FindingId}] {finding.Severity} {finding.Title} ({finding.Path}:{finding.Line})");
+            }
+
+            prompt.AppendLine();
+        }
+
         prompt.AppendLine("Instructions:");
         prompt.AppendLine($"- Answer only this question for the Oratorio operator.");
         prompt.AppendLine($"- Call {AppServerDynamicToolCatalog.SubmitDiscussionReplyId} with discussionTurnId `{turn.DiscussionTurnId}` and your Markdown reply.");
-        prompt.AppendLine("- Do not modify files, create commits, write to GitHub, or create follow-up work from this question.");
+        if (openFindings.Count > 0)
+        {
+            prompt.AppendLine($"- If the discussion concludes that one of the open findings above is a non-issue or already handled, you may call {AppServerDynamicToolCatalog.ResolveReviewFindingId} with its findingId and resolutionKind `dismissed`. Otherwise leave it open. Never resolve a finding just to avoid answering.");
+        }
+
+        prompt.AppendLine("- Do not modify files, create commits, write to GitHub directly, or create follow-up work from this question.");
         prompt.AppendLine("- Do not treat this discussion question as next-round feedback unless the operator later adds it as feedback.");
         return prompt.ToString();
     }
+
+    private async Task<IReadOnlyList<FindingPromptInfo>> LoadOpenFindingsAsync(string itemId, CancellationToken ct) =>
+        await db.ReviewDraftComments.AsNoTracking()
+            .Where(c =>
+                c.Draft!.ItemId == itemId &&
+                c.Draft.Status == ReviewDraftStatus.Published &&
+                c.Status == ReviewDraftCommentStatus.Accepted &&
+                c.ResolutionState == ReviewFindingResolutionState.Open)
+            .OrderBy(c => c.Draft!.CreatedAt)
+            .ThenBy(c => c.Path)
+            .ThenBy(c => c.Line)
+            .Select(c => new FindingPromptInfo(c.DraftCommentId, c.Severity, c.Title, c.Path, c.Line))
+            .ToListAsync(ct);
+
+    private sealed record FindingPromptInfo(string FindingId, string Severity, string Title, string Path, int Line);
 
     private async Task<OratorioRun?> FindCompatibleBaseRunAsync(string itemId, CancellationToken ct)
     {

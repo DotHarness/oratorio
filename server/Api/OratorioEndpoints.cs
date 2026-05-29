@@ -274,6 +274,31 @@ public static class OratorioEndpoints
             return Results.Ok(result);
         });
 
+        group.MapPost("/review-drafts/{draftId}/comments/{commentId}/resolve", async (
+            string draftId,
+            string commentId,
+            ResolveReviewFindingOperatorRequest request,
+            ReviewFindingResolutionService resolution,
+            OratorioService items,
+            CancellationToken ct) =>
+        {
+            var itemId = await resolution.ResolveByOperatorAsync(draftId, commentId, request.ResolutionKind, request.Note, ct);
+            var result = await items.GetItemDetailByIdAsync(itemId, ct);
+            return Results.Ok(result);
+        });
+
+        group.MapPost("/review-drafts/{draftId}/comments/{commentId}/reopen", async (
+            string draftId,
+            string commentId,
+            ReviewFindingResolutionService resolution,
+            OratorioService items,
+            CancellationToken ct) =>
+        {
+            var itemId = await resolution.ReopenByOperatorAsync(draftId, commentId, ct);
+            var result = await items.GetItemDetailByIdAsync(itemId, ct);
+            return Results.Ok(result);
+        });
+
         group.MapGet("/dotcraft/status", async (DotCraftStatusService service, CancellationToken ct) =>
         {
             var result = await service.GetStatusAsync(ct);

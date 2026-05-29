@@ -1134,6 +1134,7 @@ function reviewDraftResponse() {
     suggestionCount: 0,
     warningCount: 0,
     acceptedCount: 0,
+    resolvedCount: 0,
     createdAt: '2026-05-10T00:00:00Z',
     updatedAt: '2026-05-10T00:00:00Z',
     publishedAt: null,

@@ -24,7 +24,9 @@ describe('TaskStatusPanel', () => {
       />,
     )
 
-    expect(screen.getByRole('heading', { name: 'Discovered' })).toBeInTheDocument()
+    // The state is already conveyed by the drawer header; the panel must not echo it as a redundant block.
+    expect(screen.queryByRole('heading', { name: 'Discovered' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Summary' })).toBeInTheDocument()
     expect(screen.getByText('Compact board brief.')).toBeInTheDocument()
     expect(screen.queryByText('More run options')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Implement/ })).not.toHaveAttribute('title')

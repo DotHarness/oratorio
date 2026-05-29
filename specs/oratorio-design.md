@@ -34,6 +34,8 @@ Reference material:
 - [GitLab: Suggest changes](https://docs.gitlab.com/user/project/merge_requests/reviews/suggestions/)
 - [GitLab: Suggestions API](https://docs.gitlab.com/api/suggestions/)
 - [parkerbxyz/suggest-changes](https://github.com/parkerbxyz/suggest-changes)
+- [GitHub: resolveReviewThread mutation](https://docs.github.com/en/graphql/reference/mutations#resolvereviewthread)
+- [GitLab: Resolve a thread (Discussions API)](https://docs.gitlab.com/api/discussions/#resolve-a-merge-request-thread)
 
 ---
 
@@ -187,6 +189,9 @@ Canonical domain records:
   `reject`, `reopen`, or `reReview`.
 - `ReviewDraft` and `ReviewDraftComment`: structured PR review draft data
   submitted by DotCraft and later published, discarded, or left in draft state.
+  A published, accepted `ReviewDraftComment` additionally carries resolution
+  state (open/resolved, kind, actor, note, provenance, and source-thread
+  mapping) per §5.7.
 - `SourceWrite`: auditable GitHub write attempt with request, response, status,
   error, retry, and external URL metadata.
 - `TimelineEvent`: append-only operator-facing projection for source sync,
@@ -218,7 +223,8 @@ Required endpoint groups:
   reopen actions;
 - run detail;
 - GitHub status, sync, write retry, and source write visibility;
-- review draft detail exposure plus edit, publish, and discard actions;
+- review draft detail exposure plus edit, publish, and discard actions, and
+  operator resolve/reopen of a published review finding per §5.7;
 - DotCraft/AppServer status, workspace inventory, per-workspace health, and
   dispatch diagnostics.
 - top-level status capabilities for managed worktrees, concurrency limits, and
@@ -548,6 +554,11 @@ Comment lifecycle:
 - `accepted`: valid inline comment eligible for publication;
 - `skipped`: stored for audit and warning display, but not sent to GitHub.
 
+An accepted comment that has been published additionally carries a resolution
+state per §5.7. Publication status and resolution state are independent: only
+published, accepted comments are resolvable, and resolution never edits the
+published comment body.
+
 Oratorio uses Runtime Dynamic Tools for direct client orchestration because
 Review Draft submission is connection-bound and thread-scoped. Plugin-bundled
 MCP remains appropriate for external reusable review services that are not
@@ -651,8 +662,9 @@ The required ownership boundary is:
   review after new commits. `Add comment` plus `Ask agent` must not implicitly
   create a re-review round.
 - Discussion Turns never create a `Round` or `Run`, never change Task lifecycle
-  state, never update `currentRunId`, never change check state, and never write
-  to GitHub or other source systems.
+  state, never update `currentRunId`, and never change check state. A Discussion
+  Turn writes to a source system only to resolve a review finding under §5.7;
+  it must perform no other source write.
 - Operator questions and agent replies are rendered in the same Discussion
   history as comments, but their purpose keeps them out of next-round feedback
   by default.
@@ -686,7 +698,119 @@ Discussion Turn prompts must be short and incremental. They should identify the
 Task, include the operator's question, mention the most recent run summary when
 available, and instruct the agent to answer only the question using
 `oratorio.SubmitDiscussionReply`. They must not restate full source snapshots,
-full round history, or imported source comment history.
+full round history, or imported source comment history. When the Task has open
+published review findings, the prompt may additionally list them per §5.7 so the
+agent can resolve a finding the discussion concludes is handled.
+
+### 5.7 Review Finding Resolution
+
+A published review finding (§5.3) is a standing thread that stays open until it
+is addressed. Oratorio gives both agents and operators a way to close a finding
+without re-running a full review, mirroring GitHub review-thread resolution and
+GitLab thread resolution. Resolution serves two flows:
+
+- in an Agent Discussion Turn (§5.6), once discussion concludes a finding is a
+  non-issue or already handled;
+- in a later review round, once the agent confirms an earlier round's finding was
+  fixed at the current head.
+
+Oratorio owns resolution as durable state on the finding and, when the finding
+maps to a known source review thread, propagates it to the source system through
+installation credentials. Source resolution is never the source of truth;
+Oratorio's stored resolution state is.
+
+Resolution model. Each published, accepted `ReviewDraftComment` carries:
+
+- `resolutionState`: `open` or `resolved`, defaulting to `open`;
+- `resolutionKind`, required when resolving: `fixed` means the underlying issue
+  was addressed in code, typically detected in a later round; `dismissed` means
+  the finding was agreed to be a non-issue or intentionally not actioned,
+  typically concluded in discussion;
+- `resolvedByKind`: `agent` or `operator`;
+- `resolutionNote`: optional short rationale;
+- `resolvedAt`;
+- resolution provenance: `resolvedInRunId` for review-round resolutions,
+  `resolvedViaDiscussionTurnId` for discussion resolutions, neither for operator
+  resolutions;
+- source-thread mapping: `remoteThreadId` and `remoteResolveWriteId` per the
+  source propagation rules below.
+
+Resolution rules:
+
+- only an accepted comment in a `published` draft is resolvable; `skipped` and
+  unpublished comments are never resolvable because they were never posted;
+- resolving is idempotent: resolving an already-resolved finding with the same
+  kind is a success no-op; changing the kind updates the stored kind, actor, and
+  note;
+- operators may reopen a finding (`resolved` to `open`), which clears the
+  resolution fields and, when applicable, enqueues a source un-resolve;
+- open-finding tallies exclude resolved findings; resolved findings remain stored
+  and visible for audit.
+
+Agent contract. The canonical agent contract is a Runtime Dynamic Tool named
+`ResolveReviewFinding`, declared on every Oratorio-created AppServer thread
+alongside `SubmitDiscussionReply` so both the originating review run and later
+Discussion Turns on the same thread can call it, and so the thread tool set stays
+prompt-cache friendly. Its input is:
+
+- `findingId`: the published `ReviewDraftComment` to resolve;
+- `resolutionKind`: `fixed` or `dismissed`;
+- `note`: optional rationale.
+
+`ResolveReviewFinding` succeeds only when the call is bound to the current thread
+and the finding belongs to the same Item as the calling run or Discussion Turn.
+Mismatched thread, cross-Item findings, unknown findings, and non-resolvable
+findings must fail with stable errors (`reviewFindingNotFound`,
+`reviewFindingNotResolvable`). On success it records the resolution with
+`resolvedByKind` `agent`, sets the matching provenance, appends a timeline event,
+publishes a board update, and returns the `findingId` and resulting
+`resolutionState`. Resolving a finding is the only source-affecting state change
+an Agent Discussion Turn may make.
+
+Prompt requirements:
+
+- a review-round prompt for a PR/MR with earlier rounds lists the prior published
+  rounds' still-open accepted findings with their `findingId` values, and
+  instructs the agent to resolve with kind `fixed` only those addressed at the
+  current head and to leave still-present findings open;
+- a Discussion Turn prompt with open published findings lists them with their
+  `findingId` values, and instructs the agent it may resolve with kind
+  `dismissed` only when the discussion concludes a finding is a non-issue or
+  already handled, and must otherwise only reply; resolution must never be used
+  to avoid answering the question.
+
+Source propagation. Resolution propagates to the source review thread only when
+source propagation is enabled and Oratorio knows the finding's source thread
+identity. To map findings to threads, each accepted inline comment published
+under §5.3 carries a stable hidden marker referencing its `findingId`. During
+publish reconciliation Oratorio records `remoteThreadId` per finding:
+
+- GitHub: each published `COMMENT` review inline comment maps to a pull request
+  review thread; Oratorio records the GraphQL review-thread node id per finding;
+- GitLab: each inline discussion created during publication maps to one finding;
+  Oratorio records the discussion id per finding.
+
+When a finding becomes resolved and a `remoteThreadId` exists, Oratorio enqueues
+a `SourceWrite` of canonical kind `resolveReviewThread` that resolves the thread
+through the same source-write audit and retry machinery as other writes:
+
+- GitHub resolves with the `resolveReviewThread` GraphQL mutation and un-resolves
+  with `unresolveReviewThread`;
+- GitLab resolves the discussion with `resolved=true` and un-resolves with
+  `resolved=false`.
+
+Source resolution requirements:
+
+- it only toggles the thread resolved flag and never changes review decision,
+  approval, merge, close, or branch-protection state;
+- it operates only on PRs/MRs Oratorio published to; if no `remoteThreadId` is
+  known — for example a draft published before mapping existed, or a comment that
+  was `skipped` — resolution stays internal-only and records an operator-visible
+  note that the source thread was not resolved;
+- a failed `resolveReviewThread` write retries only that write record per §4 and
+  never alters the stored resolution state;
+- source propagation is globally gated by a setting; with it disabled, resolution
+  is internal-only.
 
 ---
 
