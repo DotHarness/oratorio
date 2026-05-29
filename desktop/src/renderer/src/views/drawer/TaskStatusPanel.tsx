@@ -170,18 +170,20 @@ export function TaskStatusPanel({
                   Implement
                 </button>
               </Tooltip>
-              <Tooltip content={autoPrTooltip}>
-                <button className="secondary-button" onClick={() => onDispatchImplementationRound('autoPr')} disabled={!canImplementationDispatch}>
-                  <GitPullRequest size={15} />
-                  Auto {reviewTargetName}
-                </button>
-              </Tooltip>
-              <Tooltip content={reviewOnlyTooltip}>
-                <button className="secondary-button" onClick={onDispatchRound} disabled={!canDispatch}>
-                  <Play size={15} />
-                  Review only
-                </button>
-              </Tooltip>
+              <div className="task-status-run-actions-row">
+                <Tooltip content={autoPrTooltip}>
+                  <button className="secondary-button" onClick={() => onDispatchImplementationRound('autoPr')} disabled={!canImplementationDispatch}>
+                    <GitPullRequest size={15} />
+                    Auto {reviewTargetName}
+                  </button>
+                </Tooltip>
+                <Tooltip content={reviewOnlyTooltip}>
+                  <button className="secondary-button" onClick={onDispatchRound} disabled={!canDispatch}>
+                    <Play size={15} />
+                    Review only
+                  </button>
+                </Tooltip>
+              </div>
             </div>
           ) : (
             <button className="primary-button" onClick={onDispatchRound} disabled={!canDispatch}>

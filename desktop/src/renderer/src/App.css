@@ -114,6 +114,8 @@
   --glass-border: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --glass-border-strong: color-mix(in srgb, var(--text-primary) 15%, transparent);
   --glass-highlight: color-mix(in srgb, #ffffff 6%, transparent);
+  --drawer-edge: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  --drawer-top-highlight: color-mix(in srgb, #ffffff 8%, transparent);
   --glass-shadow-soft:
     0 16px 42px rgba(0, 0, 0, 0.22),
     inset 0 1px 0 var(--glass-highlight);
@@ -740,6 +742,8 @@
   --glass-border: color-mix(in srgb, var(--text-primary) 8%, transparent);
   --glass-border-strong: color-mix(in srgb, var(--text-primary) 12%, transparent);
   --glass-highlight: rgba(255, 255, 255, 0.72);
+  --drawer-edge: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --drawer-top-highlight: rgba(255, 255, 255, 0.9);
   --glass-shadow-soft:
     0 8px 18px -6px rgba(15, 23, 42, 0.16),
     inset 0 1px 0 var(--glass-highlight);
@@ -2355,12 +2359,22 @@ textarea::placeholder {
   min-width: 0;
   height: 100vh;
   grid-template-rows: auto auto minmax(0, 1fr);
-  border-left: 1px solid var(--border-default);
+  border-left: 1px solid var(--drawer-edge);
   border-radius: var(--panel-radius) 0 0 var(--panel-radius);
   background: var(--glass-surface);
   backdrop-filter: var(--glass-blur-soft);
   -webkit-backdrop-filter: var(--glass-blur-soft);
   box-shadow: var(--drawer-shadow);
+}
+
+.task-drawer::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: var(--drawer-top-highlight);
+  pointer-events: none;
+  z-index: 9;
 }
 
 .task-drawer-resize-handle {
@@ -2490,6 +2504,27 @@ textarea::placeholder {
   margin-top: 0;
 }
 
+/* Variant A: prominent primary, then Auto PR + Review only as a compact two-up row */
+.task-status-run-actions .primary-button {
+  min-height: 40px;
+}
+
+.task-status-run-actions-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.task-status-run-actions .secondary-button {
+  background: color-mix(in srgb, var(--bg-tertiary) 62%, transparent);
+  border-color: color-mix(in srgb, var(--border-default) 92%, transparent);
+}
+
+.task-status-run-actions .secondary-button:hover:not(:disabled) {
+  border-color: var(--border-active);
+  background: var(--bg-active);
+}
+
 .task-status-brief {
   max-height: 280px;
   overflow: auto;
@@ -2585,6 +2620,21 @@ textarea::placeholder {
 
 .task-status-comment-action--solo {
   margin-top: 0;
+}
+
+/* Ghost emphasis for the comment action — lowest weight in the drawer */
+.task-status-panel .task-status-comment-action {
+  border-style: dashed;
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.task-status-panel .task-status-comment-action:hover:not(:disabled) {
+  border-style: solid;
+  border-color: var(--border-active);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-tertiary) 34%, transparent);
 }
 
 .task-detail-page {
