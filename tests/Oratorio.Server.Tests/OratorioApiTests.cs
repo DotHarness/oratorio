@@ -1665,8 +1665,8 @@ public sealed class OratorioApiTests
         Assert.Equal("abc123", check.HeadSha);
         Assert.Equal("completed", check.Status);
         Assert.Equal("success", check.Conclusion);
-        Assert.Equal(1, check.UpdateCount);
-        Assert.Equal(3, approved.SourceWrites.Count);
+        Assert.Equal(2, check.UpdateCount);
+        Assert.Equal(4, approved.SourceWrites.Count);
         Assert.All(approved.SourceWrites, write => Assert.Equal(SourceWriteStatus.Succeeded, write.Status));
     }
 
@@ -2258,7 +2258,7 @@ public sealed class OratorioApiTests
             $"/api/v1/items/id/{pr.ItemId}/approve",
             new DecisionRequest("Looks good."));
         Assert.Equal(ItemState.Approved, approved.Item.State);
-        Assert.Equal(3, approved.SourceWrites.Count);
+        Assert.Equal(4, approved.SourceWrites.Count);
 
         clock.Advance(TimeSpan.FromMinutes(5));
         MoveDefaultPullRequestHead(fakeGitHub, "fed789", clock.UtcNow);
@@ -2268,7 +2268,7 @@ public sealed class OratorioApiTests
         Assert.Equal(ItemState.Dispatching, queued.Item.State);
         Assert.Equal(2, queued.Item.CurrentRound);
         Assert.Contains(queued.Rounds, x => x.RoundNumber == 1 && x.Status == RoundStatus.Superseded);
-        Assert.Equal(4, queued.SourceWrites.Count);
+        Assert.Equal(5, queued.SourceWrites.Count);
         Assert.Contains(queued.SourceWrites, x => x.Kind == SourceWriteKind.CheckRun && x.Intent == "reviewGateStart" && x.HeadSha == "fed789");
         Assert.Single(fakeGitHub.PullRequestReviews);
         Assert.Equal(2, fakeGitHub.CheckRuns.Count);
@@ -2741,6 +2741,14 @@ public sealed class OratorioApiTests
         Assert.Contains("Scope checked:", draft.SummaryBody);
         Assert.Contains("Notes:", draft.SummaryBody);
         Assert.Contains("current head was reviewed and no required changes were found", draft.SummaryBody);
+        var check = Assert.Single(fakeGitHub.CheckRuns);
+        Assert.Equal("completed", check.Status);
+        Assert.Equal("neutral", check.Conclusion);
+        Assert.Equal(1, check.UpdateCount);
+        Assert.Contains(reviewed.SourceWrites, write =>
+            write.Kind == SourceWriteKind.CheckRun &&
+            write.Intent == "reviewGateComplete" &&
+            write.Status == SourceWriteStatus.Succeeded);
     }
 
     [Theory]
@@ -2815,6 +2823,7 @@ public sealed class OratorioApiTests
         Assert.Equal("abc123", run.TargetHeadSha);
         Assert.Equal(RunStatus.Succeeded, run.Status);
         Assert.Contains(reviewed.SourceWrites, x => x.Kind == SourceWriteKind.CheckRun && x.Intent == "reviewGateStart" && x.HeadSha == "abc123");
+        Assert.Contains(reviewed.SourceWrites, x => x.Kind == SourceWriteKind.CheckRun && x.Intent == "reviewGateComplete" && x.HeadSha == "abc123");
         Assert.DoesNotContain(reviewed.SourceWrites, x => x.DecisionId is not null);
     }
 
@@ -2870,6 +2879,7 @@ public sealed class OratorioApiTests
         Assert.Contains(reviewed.Rounds, x => x.RoundNumber == 1 && x.Status == RoundStatus.Superseded);
         Assert.Contains(reviewed.Decisions, x => x.Decision == DecisionType.ReReview && x.AuthorName == "oratorio/auto-review");
         Assert.Contains(reviewed.SourceWrites, x => x.Kind == SourceWriteKind.CheckRun && x.Intent == "reviewGateStart" && x.HeadSha == "def456");
+        Assert.Contains(reviewed.SourceWrites, x => x.Kind == SourceWriteKind.CheckRun && x.Intent == "reviewGateComplete" && x.HeadSha == "def456");
         Assert.DoesNotContain(reviewed.SourceWrites, x => x.DecisionId is not null);
     }
 
@@ -3831,8 +3841,8 @@ public sealed class OratorioApiTests
         Assert.Equal("abc123", review.CommitId);
         Assert.Equal(2, review.Comments.Count);
         var check = Assert.Single(fakeGitHub.CheckRuns);
-        Assert.Equal("in_progress", check.Status);
-        Assert.Null(check.Conclusion);
+        Assert.Equal("completed", check.Status);
+        Assert.Equal("neutral", check.Conclusion);
         Assert.Contains(reviewed.SourceWrites, write => write.Kind == SourceWriteKind.PullRequestReview && write.Intent == "reviewDraftPublish" && write.Status == SourceWriteStatus.Succeeded);
     }
 

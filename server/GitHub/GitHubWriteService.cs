@@ -17,6 +17,7 @@ public sealed class GitHubWriteService(
 {
     private const string CheckRunName = "oratorio/review";
     private const string ReviewGateStartIntent = "reviewGateStart";
+    private const string ReviewGateCompleteIntent = "reviewGateComplete";
     private const string ReviewGateRunFailedIntent = "reviewGateRunFailed";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -55,7 +56,10 @@ public sealed class GitHubWriteService(
 
     public async Task RecordReviewGateStartedAsync(OratorioItem item, OratorioRound round, OratorioRun run, CancellationToken ct)
     {
-        if (!IsReviewGateTarget(item, run) || !TryResolveGitHubTarget(item, out var repository, out var number))
+        var headSha = ResolveReviewGateHeadSha(run);
+        if (!IsReviewGateTarget(item, run) ||
+            string.IsNullOrWhiteSpace(headSha) ||
+            !TryResolveGitHubTarget(item, out var repository, out var number))
         {
             return;
         }
@@ -71,7 +75,7 @@ public sealed class GitHubWriteService(
             Status = SourceWriteStatus.Pending,
             Repository = repository.FullName,
             Number = number,
-            HeadSha = item.HeadSha,
+            HeadSha = headSha,
             RequestJson = JsonSerializer.Serialize(new Dictionary<string, object?>
             {
                 ["name"] = CheckRunName,
@@ -91,9 +95,11 @@ public sealed class GitHubWriteService(
 
     public async Task RecordReviewGateRunFailedAsync(OratorioRun run, CancellationToken ct)
     {
+        var headSha = ResolveReviewGateHeadSha(run);
         if (run.Item is null || run.Round is null ||
             run.Item.State != ItemState.Failed ||
             !IsReviewGateTarget(run.Item, run) ||
+            string.IsNullOrWhiteSpace(headSha) ||
             !TryResolveGitHubTarget(run.Item, out var repository, out var number))
         {
             return;
@@ -105,7 +111,7 @@ public sealed class GitHubWriteService(
                 x.Source == "github" &&
                 x.Kind == SourceWriteKind.CheckRun &&
                 x.Intent == ReviewGateRunFailedIntent &&
-                x.HeadSha == run.Item.HeadSha,
+                x.HeadSha == headSha,
                 ct))
         {
             return;
@@ -125,7 +131,7 @@ public sealed class GitHubWriteService(
             ["summary"] = summary,
             ["runId"] = run.RunId
         };
-        var checkRunId = await FindLatestReviewGateCheckRunIdAsync(run.ItemId, run.RoundId, run.Item.HeadSha, ct);
+        var checkRunId = await FindLatestReviewGateCheckRunIdAsync(run.ItemId, run.RoundId, headSha, ct);
         if (!string.IsNullOrWhiteSpace(checkRunId))
         {
             request["checkRunId"] = checkRunId;
@@ -141,7 +147,69 @@ public sealed class GitHubWriteService(
             Status = SourceWriteStatus.Pending,
             Repository = repository.FullName,
             Number = number,
-            HeadSha = run.Item.HeadSha,
+            HeadSha = headSha,
+            RequestJson = JsonSerializer.Serialize(request, JsonOptions),
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        db.SourceWriteLogs.Add(write);
+        AddTimeline(write, TimelineEventKind.SourceWriteQueued, "GitHub write queued", null);
+        await TryExecuteAsync(write, ct);
+    }
+
+    public async Task RecordReviewGateRunCompletedAsync(OratorioRun run, CancellationToken ct)
+    {
+        var headSha = ResolveReviewGateHeadSha(run);
+        if (run.Item is null || run.Round is null ||
+            run.Status != RunStatus.Succeeded ||
+            run.Item.State != ItemState.AwaitingReview ||
+            !IsReviewGateTarget(run.Item, run) ||
+            string.IsNullOrWhiteSpace(headSha) ||
+            !TryResolveGitHubTarget(run.Item, out var repository, out var number))
+        {
+            return;
+        }
+
+        if (await db.SourceWriteLogs.AsNoTracking().AnyAsync(x =>
+                x.ItemId == run.ItemId &&
+                x.RoundId == run.RoundId &&
+                x.Source == "github" &&
+                x.Kind == SourceWriteKind.CheckRun &&
+                x.Intent == ReviewGateCompleteIntent &&
+                x.HeadSha == headSha,
+                ct))
+        {
+            return;
+        }
+
+        var now = clock.UtcNow;
+        var request = new Dictionary<string, object?>
+        {
+            ["name"] = CheckRunName,
+            ["status"] = "completed",
+            ["conclusion"] = "neutral",
+            ["title"] = "Oratorio review completed",
+            ["summary"] = "Oratorio completed the review analysis. Merge control has returned to GitHub branch protection and repository collaborators.",
+            ["runId"] = run.RunId
+        };
+        var checkRunId = await FindLatestReviewGateCheckRunIdAsync(run.ItemId, run.RoundId, headSha, ct);
+        if (!string.IsNullOrWhiteSpace(checkRunId))
+        {
+            request["checkRunId"] = checkRunId;
+        }
+
+        var write = new OratorioSourceWriteLog
+        {
+            ItemId = run.ItemId,
+            RoundId = run.RoundId,
+            Source = "github",
+            Kind = SourceWriteKind.CheckRun,
+            Intent = ReviewGateCompleteIntent,
+            Status = SourceWriteStatus.Pending,
+            Repository = repository.FullName,
+            Number = number,
+            HeadSha = headSha,
             RequestJson = JsonSerializer.Serialize(request, JsonOptions),
             CreatedAt = now,
             UpdatedAt = now
@@ -532,8 +600,10 @@ public sealed class GitHubWriteService(
         item.Source == "github" &&
         item.Kind == ItemKind.PullRequest &&
         !item.IsDraft &&
-        run.Purpose == RunPurpose.ReviewAnalysis &&
-        !string.IsNullOrWhiteSpace(item.HeadSha);
+        run.Purpose == RunPurpose.ReviewAnalysis;
+
+    private static string? ResolveReviewGateHeadSha(OratorioRun run) =>
+        string.IsNullOrWhiteSpace(run.TargetHeadSha) ? run.Item?.HeadSha : run.TargetHeadSha;
 
     private static string DecisionIntent(DecisionType decision) =>
         decision switch

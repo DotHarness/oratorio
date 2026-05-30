@@ -153,9 +153,12 @@ to `discovered`.
   `awaitingReview`.
 - For GitHub pull request review rounds, Oratorio writes the `oratorio/review`
   check run as `in_progress` when the round is queued and updates that same
-  check run on approval, requested changes, rejection, or terminal run failure.
-  This external check is the merge gate only when the repository requires it
-  through GitHub branch protection or rulesets.
+  check run to completed `neutral` when the review run succeeds, returning
+  merge ownership to GitHub collaborators. Explicit later Oratorio approval,
+  requested changes, rejection, or terminal run failure may update the same
+  check run to success, action-required, or failure. This external check is the
+  merge gate only when the repository requires it through GitHub branch
+  protection or rulesets.
 - `archive` is available for non-active local and source-backed items and
   preserves all history; `reopen` restores an archived item to `discovered`.
 - Rejected and archived items are closed/history work. They keep the

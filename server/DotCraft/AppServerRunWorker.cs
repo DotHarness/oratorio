@@ -960,6 +960,7 @@ public sealed class AppServerRunWorker(
 
         AddTimeline(run, TimelineEventKind.RunCompleted, ActorKind.Agent, "DotCraft", run.Purpose == RunPurpose.Implementation ? "Implementation handoff captured" : "Agent summary captured", summary, now);
         AddTimeline(run, TimelineEventKind.CheckUpdated, ActorKind.System, "oratorio/review", "Check waiting on review", "The DotCraft run completed and needs operator review.", now);
+        await RecordCompletedReviewGateAsync(scope, run, ct);
         await db.SaveChangesAsync(ct);
 
         if (run.Purpose == RunPurpose.ReviewAnalysis)
@@ -1087,6 +1088,17 @@ public sealed class AppServerRunWorker(
 
         var writes = scope.ServiceProvider.GetRequiredService<GitHubWriteService>();
         await writes.RecordReviewGateRunFailedAsync(run, ct);
+    }
+
+    private static async Task RecordCompletedReviewGateAsync(IServiceScope scope, OratorioRun run, CancellationToken ct)
+    {
+        if (run.Item?.State != ItemState.AwaitingReview)
+        {
+            return;
+        }
+
+        var writes = scope.ServiceProvider.GetRequiredService<GitHubWriteService>();
+        await writes.RecordReviewGateRunCompletedAsync(run, ct);
     }
 
     private static bool RequiresReviewDraft(OratorioRun run) =>

@@ -75,6 +75,7 @@ public sealed class MockRunWorker(IServiceScopeFactory scopeFactory, IClock cloc
             AdvanceRun(run, now);
         }
 
+        await RecordCompletedReviewGatesAsync(scope, activeRuns, ct);
         await RecordFailedReviewGatesAsync(scope, activeRuns, ct);
         await db.SaveChangesAsync(ct);
         PublishRunItems(activeRuns, now);
@@ -101,6 +102,15 @@ public sealed class MockRunWorker(IServiceScopeFactory scopeFactory, IClock cloc
         foreach (var run in runs.Where(x => x.Item?.State == ItemState.Failed))
         {
             await writes.RecordReviewGateRunFailedAsync(run, ct);
+        }
+    }
+
+    private static async Task RecordCompletedReviewGatesAsync(IServiceScope scope, IEnumerable<OratorioRun> runs, CancellationToken ct)
+    {
+        var writes = scope.ServiceProvider.GetRequiredService<GitHubWriteService>();
+        foreach (var run in runs.Where(x => x.Item?.State == ItemState.AwaitingReview))
+        {
+            await writes.RecordReviewGateRunCompletedAsync(run, ct);
         }
     }
 
