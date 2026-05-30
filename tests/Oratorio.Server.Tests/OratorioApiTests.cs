@@ -1606,6 +1606,37 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
+    public async Task GitHubPullRequestDispatch_CreatesInProgressReviewGateCheck()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        await using var app = new TestOratorioApp(services =>
+        {
+            services.RemoveAll<IGitHubApiClient>();
+            services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+        });
+        var client = app.CreateClient();
+
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+
+        var dispatched = await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/dispatch",
+            new DispatchRequest("mock", "Run GitHub PR review.", MockOutcome.Success, 5));
+
+        var check = Assert.Single(fakeGitHub.CheckRuns);
+        Assert.Equal("oratorio/review", check.Name);
+        Assert.Equal("abc123", check.HeadSha);
+        Assert.Equal("in_progress", check.Status);
+        Assert.Null(check.Conclusion);
+        Assert.Contains(dispatched.SourceWrites, write =>
+            write.Kind == SourceWriteKind.CheckRun &&
+            write.Intent == "reviewGateStart" &&
+            write.Status == SourceWriteStatus.Succeeded);
+    }
+
+    [Fact]
     public async Task GitHubPullRequestApprove_WritesReviewAndCheckRun()
     {
         var fakeGitHub = new FakeGitHubApiClient();
@@ -1632,8 +1663,10 @@ public sealed class OratorioApiTests
         var check = Assert.Single(fakeGitHub.CheckRuns);
         Assert.Equal("oratorio/review", check.Name);
         Assert.Equal("abc123", check.HeadSha);
+        Assert.Equal("completed", check.Status);
         Assert.Equal("success", check.Conclusion);
-        Assert.Equal(2, approved.SourceWrites.Count);
+        Assert.Equal(1, check.UpdateCount);
+        Assert.Equal(3, approved.SourceWrites.Count);
         Assert.All(approved.SourceWrites, write => Assert.Equal(SourceWriteStatus.Succeeded, write.Status));
     }
 
@@ -1659,6 +1692,7 @@ public sealed class OratorioApiTests
         Assert.Equal("REQUEST_CHANGES", review.Event);
         Assert.Contains("Please add regression coverage.", review.Body);
         var check = Assert.Single(fakeGitHub.CheckRuns);
+        Assert.Equal("completed", check.Status);
         Assert.Equal("action_required", check.Conclusion);
         Assert.Contains("Please add regression coverage.", check.Summary);
     }
@@ -1685,6 +1719,7 @@ public sealed class OratorioApiTests
         Assert.Equal("REQUEST_CHANGES", review.Event);
         Assert.Contains("Rejected", review.Body, StringComparison.OrdinalIgnoreCase);
         var check = Assert.Single(fakeGitHub.CheckRuns);
+        Assert.Equal("completed", check.Status);
         Assert.Equal("failure", check.Conclusion);
         Assert.Contains("Rejected", check.Summary, StringComparison.OrdinalIgnoreCase);
     }
@@ -1721,7 +1756,7 @@ public sealed class OratorioApiTests
     [Fact]
     public async Task GitHubWriteFailure_IsAuditedAndRetryable()
     {
-        var fakeGitHub = new FakeGitHubApiClient { FailNextWriteCount = 1 };
+        var fakeGitHub = new FakeGitHubApiClient();
         await using var app = new TestOratorioApp(services =>
         {
             services.RemoveAll<IGitHubApiClient>();
@@ -1730,6 +1765,7 @@ public sealed class OratorioApiTests
         var client = app.CreateClient();
 
         var pr = await CreateGitHubPullRequestInReviewAsync(client);
+        fakeGitHub.FailNextWriteCount = 1;
         var approved = await PostAsync<ItemDetailResponse>(
             client,
             $"/api/v1/items/id/{pr.Item.ItemId}/approve",
@@ -2173,7 +2209,8 @@ public sealed class OratorioApiTests
         Assert.Contains(queued.Rounds, x => x.RoundNumber == 1 && x.Status == RoundStatus.Superseded);
         Assert.Contains(queued.Rounds, x => x.RoundNumber == 2 && x.Status == RoundStatus.Running);
         Assert.Contains(queued.Decisions, x => x.Decision == DecisionType.ReReview && x.Body?.Contains("abc123 to def456", StringComparison.Ordinal) == true);
-        Assert.Empty(queued.SourceWrites);
+        Assert.DoesNotContain(queued.SourceWrites, x => x.DecisionId is not null);
+        Assert.Contains(queued.SourceWrites, x => x.Kind == SourceWriteKind.CheckRun && x.Intent == "reviewGateStart" && x.HeadSha == "def456");
         Assert.Empty(queued.DiscussionTurns);
 
         var reviewed = await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.AwaitingReview && x.Item.CurrentRound == 2);
@@ -2221,7 +2258,7 @@ public sealed class OratorioApiTests
             $"/api/v1/items/id/{pr.ItemId}/approve",
             new DecisionRequest("Looks good."));
         Assert.Equal(ItemState.Approved, approved.Item.State);
-        Assert.Equal(2, approved.SourceWrites.Count);
+        Assert.Equal(3, approved.SourceWrites.Count);
 
         clock.Advance(TimeSpan.FromMinutes(5));
         MoveDefaultPullRequestHead(fakeGitHub, "fed789", clock.UtcNow);
@@ -2231,9 +2268,10 @@ public sealed class OratorioApiTests
         Assert.Equal(ItemState.Dispatching, queued.Item.State);
         Assert.Equal(2, queued.Item.CurrentRound);
         Assert.Contains(queued.Rounds, x => x.RoundNumber == 1 && x.Status == RoundStatus.Superseded);
-        Assert.Equal(2, queued.SourceWrites.Count);
+        Assert.Equal(4, queued.SourceWrites.Count);
+        Assert.Contains(queued.SourceWrites, x => x.Kind == SourceWriteKind.CheckRun && x.Intent == "reviewGateStart" && x.HeadSha == "fed789");
         Assert.Single(fakeGitHub.PullRequestReviews);
-        Assert.Single(fakeGitHub.CheckRuns);
+        Assert.Equal(2, fakeGitHub.CheckRuns.Count);
     }
 
     [Fact]
@@ -2650,6 +2688,14 @@ public sealed class OratorioApiTests
         Assert.Equal(RunStatus.Failed, run.Status);
         Assert.Equal("reviewDraftRequired", run.ErrorCode);
         Assert.Empty(failed.ReviewDrafts);
+        var check = Assert.Single(fakeGitHub.CheckRuns);
+        Assert.Equal("completed", check.Status);
+        Assert.Equal("failure", check.Conclusion);
+        Assert.Equal(1, check.UpdateCount);
+        Assert.Contains(failed.SourceWrites, write =>
+            write.Kind == SourceWriteKind.CheckRun &&
+            write.Intent == "reviewGateRunFailed" &&
+            write.Status == SourceWriteStatus.Succeeded);
     }
 
     [Fact]
@@ -2768,7 +2814,8 @@ public sealed class OratorioApiTests
         Assert.Equal(RunDispatchTrigger.AutoReview, run.DispatchTrigger);
         Assert.Equal("abc123", run.TargetHeadSha);
         Assert.Equal(RunStatus.Succeeded, run.Status);
-        Assert.Empty(reviewed.SourceWrites);
+        Assert.Contains(reviewed.SourceWrites, x => x.Kind == SourceWriteKind.CheckRun && x.Intent == "reviewGateStart" && x.HeadSha == "abc123");
+        Assert.DoesNotContain(reviewed.SourceWrites, x => x.DecisionId is not null);
     }
 
     [Theory]
@@ -2822,7 +2869,8 @@ public sealed class OratorioApiTests
         Assert.Equal("def456", run.TargetHeadSha);
         Assert.Contains(reviewed.Rounds, x => x.RoundNumber == 1 && x.Status == RoundStatus.Superseded);
         Assert.Contains(reviewed.Decisions, x => x.Decision == DecisionType.ReReview && x.AuthorName == "oratorio/auto-review");
-        Assert.Empty(reviewed.SourceWrites);
+        Assert.Contains(reviewed.SourceWrites, x => x.Kind == SourceWriteKind.CheckRun && x.Intent == "reviewGateStart" && x.HeadSha == "def456");
+        Assert.DoesNotContain(reviewed.SourceWrites, x => x.DecisionId is not null);
     }
 
     [Fact]
@@ -3782,7 +3830,9 @@ public sealed class OratorioApiTests
         Assert.Equal("COMMENT", review.Event);
         Assert.Equal("abc123", review.CommitId);
         Assert.Equal(2, review.Comments.Count);
-        Assert.Empty(fakeGitHub.CheckRuns);
+        var check = Assert.Single(fakeGitHub.CheckRuns);
+        Assert.Equal("in_progress", check.Status);
+        Assert.Null(check.Conclusion);
         Assert.Contains(reviewed.SourceWrites, write => write.Kind == SourceWriteKind.PullRequestReview && write.Intent == "reviewDraftPublish" && write.Status == SourceWriteStatus.Succeeded);
     }
 
@@ -3894,7 +3944,7 @@ public sealed class OratorioApiTests
             client,
             $"/api/v1/items/id/{pr.ItemId}/dispatch",
             new DispatchRequest("appServer", "Prepare structured PR review suggestions.", null, null));
-        var reviewed = await WaitForItemByIdAsync(client, pr.ItemId!, x => x.SourceWrites.Any(write => write.ErrorCode == "githubWritesDisabled"));
+        var reviewed = await WaitForItemByIdAsync(client, pr.ItemId!, x => x.SourceWrites.Any(write => write.Intent == "reviewDraftPublish" && write.ErrorCode == "githubWritesDisabled"));
 
         Assert.Equal(ReviewDraftStatus.PublishFailed, Assert.Single(reviewed.ReviewDrafts).Status);
         Assert.Empty(fakeGitHub.PullRequestReviews);
@@ -3906,7 +3956,7 @@ public sealed class OratorioApiTests
     [Fact]
     public async Task ReviewDraftPublishRetry_PreservesInlineSuggestionsAndMarksDraftPublished()
     {
-        var fakeGitHub = new FakeGitHubApiClient { FailNextWriteCount = 1 };
+        var fakeGitHub = new FakeGitHubApiClient();
         var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitCleanReviewDraft);
         await using var app = new TestOratorioApp(services =>
         {
@@ -3938,6 +3988,7 @@ public sealed class OratorioApiTests
                 "Retryable review summary.",
                 [new ReviewDraftCommentUpdateRequest(acceptedComment.DraftCommentId, "Retry inline body.", "return retryToken;")]));
 
+        fakeGitHub.FailNextWriteCount = 1;
         var failedPublish = await PostAsync<ItemDetailResponse>(client, $"/api/v1/review-drafts/{draft.DraftId}/publish", new { });
 
         var failedDraft = Assert.Single(failedPublish.ReviewDrafts);
@@ -4842,11 +4893,40 @@ index 3333333..4444444 100644
         return Task.FromResult(new GitHubWriteResponse("review:200", $"https://github.example.test/{repository.FullName}/pull/{number}#pullrequestreview-200", """{"id":200}"""));
     }
 
-    public Task<GitHubWriteResponse> CreateCheckRunAsync(GitHubRepositoryRef repository, string name, string headSha, string conclusion, string summary, CancellationToken ct)
+    public Task<GitHubWriteResponse> CreateCheckRunAsync(
+        GitHubRepositoryRef repository,
+        string name,
+        string headSha,
+        string status,
+        string? conclusion,
+        string title,
+        string summary,
+        CancellationToken ct)
     {
         MaybeFailWrite();
-        CheckRuns.Add(new GitHubCheckRunWrite(repository, name, headSha, conclusion, summary));
-        return Task.FromResult(new GitHubWriteResponse("check-run:300", $"https://github.example.test/{repository.FullName}/runs/300", """{"id":300}"""));
+        var id = $"check-run:{300 + CheckRuns.Count}";
+        CheckRuns.Add(new GitHubCheckRunWrite(repository, name, headSha, status, conclusion, title, summary, id));
+        return Task.FromResult(new GitHubWriteResponse(id, $"https://github.example.test/{repository.FullName}/runs/{300 + CheckRuns.Count - 1}", $$"""{"id":"{{id}}"}"""));
+    }
+
+    public Task<GitHubWriteResponse> UpdateCheckRunAsync(
+        GitHubRepositoryRef repository,
+        string checkRunId,
+        string status,
+        string? conclusion,
+        string title,
+        string summary,
+        CancellationToken ct)
+    {
+        MaybeFailWrite();
+        var check = CheckRuns.FirstOrDefault(x => x.ExternalId == checkRunId)
+            ?? throw new InvalidOperationException($"Unknown check run {checkRunId}.");
+        check.Status = status;
+        check.Conclusion = conclusion;
+        check.Title = title;
+        check.Summary = summary;
+        check.UpdateCount++;
+        return Task.FromResult(new GitHubWriteResponse(checkRunId, $"https://github.example.test/{repository.FullName}/runs/{checkRunId}", $$"""{"id":"{{checkRunId}}"}"""));
     }
 
     public List<(string ThreadId, bool Resolved)> ReviewThreadResolutions { get; } = [];
@@ -4902,7 +4982,26 @@ internal sealed record GitHubIssueCommentWrite(GitHubRepositoryRef Repository, i
 
 internal sealed record GitHubPullRequestReviewWrite(GitHubRepositoryRef Repository, int Number, string Event, string Body, string? CommitId, IReadOnlyList<GitHubPullRequestReviewCommentWrite> Comments);
 
-internal sealed record GitHubCheckRunWrite(GitHubRepositoryRef Repository, string Name, string HeadSha, string Conclusion, string Summary);
+internal sealed class GitHubCheckRunWrite(
+    GitHubRepositoryRef repository,
+    string name,
+    string headSha,
+    string status,
+    string? conclusion,
+    string title,
+    string summary,
+    string externalId)
+{
+    public GitHubRepositoryRef Repository { get; } = repository;
+    public string Name { get; } = name;
+    public string HeadSha { get; } = headSha;
+    public string Status { get; set; } = status;
+    public string? Conclusion { get; set; } = conclusion;
+    public string Title { get; set; } = title;
+    public string Summary { get; set; } = summary;
+    public string ExternalId { get; } = externalId;
+    public int UpdateCount { get; set; }
+}
 
 internal sealed record GitHubPullRequestCreateWrite(GitHubRepositoryRef Repository, string Title, string Head, string Base, string Body, bool Draft);
 

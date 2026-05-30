@@ -18,7 +18,23 @@ public interface IGitHubApiClient
     Task<GitHubWriteResponse> CreateIssueCommentAsync(GitHubRepositoryRef repository, int number, string body, CancellationToken ct);
     Task<GitHubWriteResponse> CreatePullRequestReviewAsync(GitHubRepositoryRef repository, int number, string @event, string body, string? commitId, CancellationToken ct);
     Task<GitHubWriteResponse> CreatePullRequestReviewAsync(GitHubRepositoryRef repository, int number, string @event, string body, string? commitId, IReadOnlyList<GitHubPullRequestReviewCommentWrite> comments, CancellationToken ct);
-    Task<GitHubWriteResponse> CreateCheckRunAsync(GitHubRepositoryRef repository, string name, string headSha, string conclusion, string summary, CancellationToken ct);
+    Task<GitHubWriteResponse> CreateCheckRunAsync(
+        GitHubRepositoryRef repository,
+        string name,
+        string headSha,
+        string status,
+        string? conclusion,
+        string title,
+        string summary,
+        CancellationToken ct);
+    Task<GitHubWriteResponse> UpdateCheckRunAsync(
+        GitHubRepositoryRef repository,
+        string checkRunId,
+        string status,
+        string? conclusion,
+        string title,
+        string summary,
+        CancellationToken ct);
     Task<GitHubPullRequestCreateResponse> CreatePullRequestAsync(GitHubRepositoryRef repository, string title, string head, string @base, string body, bool draft, CancellationToken ct);
     Task<IReadOnlyList<GitHubReviewThread>> ListPullRequestReviewThreadsAsync(GitHubRepositoryRef repository, int number, CancellationToken ct);
     Task<GitHubWriteResponse> ResolveReviewThreadAsync(GitHubRepositoryRef repository, string threadId, bool resolved, CancellationToken ct);
@@ -145,23 +161,34 @@ public sealed class GitHubApiClient(
         return SendJsonAsync(HttpMethod.Post, $"/repos/{repository.Owner}/{repository.Name}/pulls/{number}/reviews", payload, repository, ct);
     }
 
-    public Task<GitHubWriteResponse> CreateCheckRunAsync(GitHubRepositoryRef repository, string name, string headSha, string conclusion, string summary, CancellationToken ct) =>
+    public Task<GitHubWriteResponse> CreateCheckRunAsync(
+        GitHubRepositoryRef repository,
+        string name,
+        string headSha,
+        string status,
+        string? conclusion,
+        string title,
+        string summary,
+        CancellationToken ct) =>
         SendJsonAsync(
             HttpMethod.Post,
             $"/repos/{repository.Owner}/{repository.Name}/check-runs",
-            new Dictionary<string, object?>
-            {
-                ["name"] = name,
-                ["head_sha"] = headSha,
-                ["status"] = "completed",
-                ["conclusion"] = conclusion,
-                ["completed_at"] = DateTimeOffset.UtcNow,
-                ["output"] = new Dictionary<string, object?>
-                {
-                    ["title"] = "Oratorio review",
-                    ["summary"] = summary
-                }
-            },
+            BuildCheckRunPayload(name, headSha, status, conclusion, title, summary),
+            repository,
+            ct);
+
+    public Task<GitHubWriteResponse> UpdateCheckRunAsync(
+        GitHubRepositoryRef repository,
+        string checkRunId,
+        string status,
+        string? conclusion,
+        string title,
+        string summary,
+        CancellationToken ct) =>
+        SendJsonAsync(
+            HttpMethod.Patch,
+            $"/repos/{repository.Owner}/{repository.Name}/check-runs/{Uri.EscapeDataString(checkRunId)}",
+            BuildCheckRunPayload(null, null, status, conclusion, title, summary),
             repository,
             ct);
 
@@ -357,6 +384,46 @@ public sealed class GitHubApiClient(
         }
 
         return ParseWriteResponse(responseJson);
+    }
+
+    private static Dictionary<string, object?> BuildCheckRunPayload(
+        string? name,
+        string? headSha,
+        string status,
+        string? conclusion,
+        string title,
+        string summary)
+    {
+        var payload = new Dictionary<string, object?>
+        {
+            ["status"] = status,
+            ["output"] = new Dictionary<string, object?>
+            {
+                ["title"] = title,
+                ["summary"] = summary
+            }
+        };
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            payload["name"] = name;
+        }
+
+        if (!string.IsNullOrWhiteSpace(headSha))
+        {
+            payload["head_sha"] = headSha;
+        }
+
+        if (string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase))
+        {
+            payload["conclusion"] = conclusion ?? "neutral";
+            payload["completed_at"] = DateTimeOffset.UtcNow;
+        }
+        else
+        {
+            payload["started_at"] = DateTimeOffset.UtcNow;
+        }
+
+        return payload;
     }
 
     private static GitHubWriteResponse ParseWriteResponse(string responseJson)

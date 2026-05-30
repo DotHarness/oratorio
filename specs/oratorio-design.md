@@ -151,6 +151,11 @@ to `discovered`.
   decision.
 - `approve` is allowed only after a completed run has moved the item to
   `awaitingReview`.
+- For GitHub pull request review rounds, Oratorio writes the `oratorio/review`
+  check run as `in_progress` when the round is queued and updates that same
+  check run on approval, requested changes, rejection, or terminal run failure.
+  This external check is the merge gate only when the repository requires it
+  through GitHub branch protection or rulesets.
 - `archive` is available for non-active local and source-backed items and
   preserves all history; `reopen` restores an archived item to `discovered`.
 - Rejected and archived items are closed/history work. They keep the
@@ -312,7 +317,7 @@ Decision write mapping:
 | Pull request | `approve` | PR review plus `oratorio/review` success check |
 | Pull request | `requestChanges` | PR review plus action-required check |
 | Pull request | `reject` | PR review plus failure check |
-| Pull request | `reReview` | no GitHub write |
+| Pull request | `reReview` | no GitHub decision write; the new review round still writes/updates the `oratorio/review` gate check |
 | Issue | `approve`, `requestChanges`, or `reject` | Issue comment only |
 | Local task | any decision | no GitHub write |
 
@@ -541,7 +546,7 @@ Auto Review scheduler requirements:
   round for the latest head;
 - auto re-review must match manual `reReview`: supersede the current round,
   create the next round, queue a read-only AppServer review run, and perform no
-  GitHub decision write;
+  GitHub decision write beyond the review-gate check state;
 - skip draft, closed, merged, archived, rejected, active-run, non-PR, non-GitHub
   and missing-workspace-route items, and record operator-visible skip or error
   state;

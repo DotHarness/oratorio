@@ -16,6 +16,8 @@ public sealed class GitHubWriteService(
     IClock clock)
 {
     private const string CheckRunName = "oratorio/review";
+    private const string ReviewGateStartIntent = "reviewGateStart";
+    private const string ReviewGateRunFailedIntent = "reviewGateRunFailed";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -42,13 +44,112 @@ public sealed class GitHubWriteService(
             return;
         }
 
-        var writes = CreateWriteLogs(decision, repository, number);
+        var writes = await CreateWriteLogsAsync(decision, repository, number, ct);
         foreach (var write in writes)
         {
             await TryExecuteAsync(write, ct);
         }
 
         await db.SaveChangesAsync(ct);
+    }
+
+    public async Task RecordReviewGateStartedAsync(OratorioItem item, OratorioRound round, OratorioRun run, CancellationToken ct)
+    {
+        if (!IsReviewGateTarget(item, run) || !TryResolveGitHubTarget(item, out var repository, out var number))
+        {
+            return;
+        }
+
+        var now = clock.UtcNow;
+        var write = new OratorioSourceWriteLog
+        {
+            ItemId = item.ItemId,
+            RoundId = round.RoundId,
+            Source = "github",
+            Kind = SourceWriteKind.CheckRun,
+            Intent = ReviewGateStartIntent,
+            Status = SourceWriteStatus.Pending,
+            Repository = repository.FullName,
+            Number = number,
+            HeadSha = item.HeadSha,
+            RequestJson = JsonSerializer.Serialize(new Dictionary<string, object?>
+            {
+                ["name"] = CheckRunName,
+                ["status"] = "in_progress",
+                ["title"] = "Oratorio review in progress",
+                ["summary"] = "Oratorio has started a review round for this pull request. Merge remains blocked until the Oratorio review is approved.",
+                ["runId"] = run.RunId
+            }, JsonOptions),
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        db.SourceWriteLogs.Add(write);
+        AddTimeline(write, TimelineEventKind.SourceWriteQueued, "GitHub write queued", null);
+        await TryExecuteAsync(write, ct);
+    }
+
+    public async Task RecordReviewGateRunFailedAsync(OratorioRun run, CancellationToken ct)
+    {
+        if (run.Item is null || run.Round is null ||
+            run.Item.State != ItemState.Failed ||
+            !IsReviewGateTarget(run.Item, run) ||
+            !TryResolveGitHubTarget(run.Item, out var repository, out var number))
+        {
+            return;
+        }
+
+        if (await db.SourceWriteLogs.AsNoTracking().AnyAsync(x =>
+                x.ItemId == run.ItemId &&
+                x.RoundId == run.RoundId &&
+                x.Source == "github" &&
+                x.Kind == SourceWriteKind.CheckRun &&
+                x.Intent == ReviewGateRunFailedIntent &&
+                x.HeadSha == run.Item.HeadSha,
+                ct))
+        {
+            return;
+        }
+
+        var now = clock.UtcNow;
+        var conclusion = run.Status == RunStatus.TimedOut ? "timed_out" : "failure";
+        var summary = string.IsNullOrWhiteSpace(run.ErrorMessage)
+            ? "Oratorio review failed before an operator decision was available."
+            : $"Oratorio review failed before an operator decision was available.\n\n{run.ErrorMessage}";
+        var request = new Dictionary<string, object?>
+        {
+            ["name"] = CheckRunName,
+            ["status"] = "completed",
+            ["conclusion"] = conclusion,
+            ["title"] = "Oratorio review failed",
+            ["summary"] = summary,
+            ["runId"] = run.RunId
+        };
+        var checkRunId = await FindLatestReviewGateCheckRunIdAsync(run.ItemId, run.RoundId, run.Item.HeadSha, ct);
+        if (!string.IsNullOrWhiteSpace(checkRunId))
+        {
+            request["checkRunId"] = checkRunId;
+        }
+
+        var write = new OratorioSourceWriteLog
+        {
+            ItemId = run.ItemId,
+            RoundId = run.RoundId,
+            Source = "github",
+            Kind = SourceWriteKind.CheckRun,
+            Intent = ReviewGateRunFailedIntent,
+            Status = SourceWriteStatus.Pending,
+            Repository = repository.FullName,
+            Number = number,
+            HeadSha = run.Item.HeadSha,
+            RequestJson = JsonSerializer.Serialize(request, JsonOptions),
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        db.SourceWriteLogs.Add(write);
+        AddTimeline(write, TimelineEventKind.SourceWriteQueued, "GitHub write queued", null);
+        await TryExecuteAsync(write, ct);
     }
 
     public async Task<string> RetryAsync(string writeId, CancellationToken ct)
@@ -76,7 +177,11 @@ public sealed class GitHubWriteService(
     public async Task ExecuteAsync(OratorioSourceWriteLog write, CancellationToken ct) =>
         await TryExecuteAsync(write, ct);
 
-    private IReadOnlyList<OratorioSourceWriteLog> CreateWriteLogs(OratorioDecision decision, GitHubRepositoryRef repository, int number)
+    private async Task<IReadOnlyList<OratorioSourceWriteLog>> CreateWriteLogsAsync(
+        OratorioDecision decision,
+        GitHubRepositoryRef repository,
+        int number,
+        CancellationToken ct)
     {
         var item = decision.Item!;
         var round = decision.Round!;
@@ -112,6 +217,20 @@ public sealed class GitHubWriteService(
                 DecisionType.Reject => "failure",
                 _ => "neutral"
             };
+            var checkRunRequest = new Dictionary<string, object?>
+            {
+                ["name"] = CheckRunName,
+                ["status"] = "completed",
+                ["conclusion"] = conclusion,
+                ["summary"] = body,
+                ["title"] = conclusion == "success" ? "Oratorio review approved" : "Oratorio review requires attention"
+            };
+            var checkRunId = await FindLatestReviewGateCheckRunIdAsync(item.ItemId, round.RoundId, item.HeadSha, ct);
+            if (!string.IsNullOrWhiteSpace(checkRunId))
+            {
+                checkRunRequest["checkRunId"] = checkRunId;
+            }
+
             logs.Add(CreateWriteLog(
                 item,
                 round,
@@ -121,12 +240,7 @@ public sealed class GitHubWriteService(
                 repository,
                 number,
                 item.HeadSha,
-                new Dictionary<string, object?>
-                {
-                    ["name"] = CheckRunName,
-                    ["conclusion"] = conclusion,
-                    ["summary"] = body
-                },
+                checkRunRequest,
                 now));
         }
         else if (item.Kind == ItemKind.Issue)
@@ -223,7 +337,7 @@ public sealed class GitHubWriteService(
             {
                 SourceWriteKind.IssueComment => await client.CreateIssueCommentAsync(repository, write.Number.Value, ReadString(write.RequestJson, "body"), ct),
                 SourceWriteKind.PullRequestReview => await CreatePullRequestReviewAsync(repository, write, ct),
-                SourceWriteKind.CheckRun => await client.CreateCheckRunAsync(repository, CheckRunName, write.HeadSha!, ReadString(write.RequestJson, "conclusion"), ReadString(write.RequestJson, "summary"), ct),
+                SourceWriteKind.CheckRun => await ExecuteCheckRunAsync(repository, write, ct),
                 SourceWriteKind.ResolveReviewThread => await client.ResolveReviewThreadAsync(repository, ReadString(write.RequestJson, "threadId"), ReadBool(write.RequestJson, "resolved"), ct),
                 _ => throw new InvalidOperationException($"Unsupported source write kind: {write.Kind}")
             };
@@ -311,6 +425,21 @@ public sealed class GitHubWriteService(
             : await client.CreatePullRequestReviewAsync(repository, write.Number!.Value, @event, body, commitId, comments, ct);
     }
 
+    private async Task<GitHubWriteResponse> ExecuteCheckRunAsync(GitHubRepositoryRef repository, OratorioSourceWriteLog write, CancellationToken ct)
+    {
+        var status = ReadOptionalString(write.RequestJson, "status") ?? "completed";
+        var conclusion = ReadOptionalString(write.RequestJson, "conclusion");
+        var title = ReadOptionalString(write.RequestJson, "title") ?? "Oratorio review";
+        var summary = ReadString(write.RequestJson, "summary");
+        var checkRunId = ReadOptionalString(write.RequestJson, "checkRunId");
+        if (!string.IsNullOrWhiteSpace(checkRunId))
+        {
+            return await client.UpdateCheckRunAsync(repository, checkRunId, status, conclusion, title, summary, ct);
+        }
+
+        return await client.CreateCheckRunAsync(repository, CheckRunName, write.HeadSha!, status, conclusion, title, summary, ct);
+    }
+
     private async Task ReconcileReviewDraftPublishAsync(OratorioSourceWriteLog write, CancellationToken ct)
     {
         if (write.Intent != "reviewDraftPublish")
@@ -376,6 +505,35 @@ public sealed class GitHubWriteService(
         var hash = item.ExternalId.LastIndexOf('#');
         return hash >= 0 && int.TryParse(item.ExternalId[(hash + 1)..], out number);
     }
+
+    private async Task<string?> FindLatestReviewGateCheckRunIdAsync(string itemId, string roundId, string? headSha, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(headSha))
+        {
+            return null;
+        }
+
+        return await db.SourceWriteLogs.AsNoTracking()
+            .Where(x =>
+                x.ItemId == itemId &&
+                x.RoundId == roundId &&
+                x.Source == "github" &&
+                x.Kind == SourceWriteKind.CheckRun &&
+                x.Intent == ReviewGateStartIntent &&
+                x.Status == SourceWriteStatus.Succeeded &&
+                x.HeadSha == headSha &&
+                x.ExternalId != null)
+            .OrderByDescending(x => x.CompletedAt ?? x.CreatedAt)
+            .Select(x => x.ExternalId)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    private static bool IsReviewGateTarget(OratorioItem item, OratorioRun run) =>
+        item.Source == "github" &&
+        item.Kind == ItemKind.PullRequest &&
+        !item.IsDraft &&
+        run.Purpose == RunPurpose.ReviewAnalysis &&
+        !string.IsNullOrWhiteSpace(item.HeadSha);
 
     private static string DecisionIntent(DecisionType decision) =>
         decision switch

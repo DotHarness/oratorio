@@ -757,6 +757,7 @@ public sealed class OratorioService(
         round.Status = RoundStatus.Running;
         AddTimeline(item, round, run, TimelineEventKind.RunQueued, ActorKind.System, "Dispatcher", runnerKind == "mock" ? "Run queued" : "DotCraft run queued", request.Note, now);
         AddTimeline(item, round, run, TimelineEventKind.CheckUpdated, ActorKind.System, "oratorio/review", "Check pending", "A review round is running.", now);
+        await gitHubWriteService.RecordReviewGateStartedAsync(item, round, run, ct);
     }
 
     private OratorioRound CreateNextRound(OratorioItem item, DateTimeOffset now)

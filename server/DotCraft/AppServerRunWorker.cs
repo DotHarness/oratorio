@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Oratorio.Server.Api;
 using Oratorio.Server.Data;
 using Oratorio.Server.Domain;
+using Oratorio.Server.GitHub;
 using Oratorio.Server.Realtime;
 using Oratorio.Server.Services;
 
@@ -88,6 +89,7 @@ public sealed class AppServerRunWorker(
             FailRun(run, now, RunStatus.Failed, "appServerRunnerInterrupted", "The DotCraft AppServer runner was interrupted before it completed.", allowRetry: true);
         }
 
+        await RecordFailedReviewGatesAsync(scope, activeRuns, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -115,6 +117,7 @@ public sealed class AppServerRunWorker(
 
         if (stalledRuns.Count > 0)
         {
+            await RecordFailedReviewGatesAsync(scope, stalledRuns, ct);
             await db.SaveChangesAsync(ct);
         }
     }
@@ -905,6 +908,7 @@ public sealed class AppServerRunWorker(
             catch (OratorioApiException ex)
             {
                 FailRun(run, clock.UtcNow, RunStatus.Failed, ex.Code, ex.Message, allowRetry: false);
+                await RecordFailedReviewGateAsync(scope, run, ct);
                 await db.SaveChangesAsync(ct);
                 return;
             }
@@ -922,6 +926,7 @@ public sealed class AppServerRunWorker(
                     "reviewDraftRequired",
                     "Source review runs must submit oratorio.SubmitReviewDraft before completing.",
                     allowRetry: false);
+                await RecordFailedReviewGateAsync(scope, run, ct);
                 await db.SaveChangesAsync(ct);
                 return;
             }
@@ -975,6 +980,7 @@ public sealed class AppServerRunWorker(
         }
 
         FailRun(run, clock.UtcNow, status, errorCode, errorMessage, allowRetry);
+        await RecordFailedReviewGateAsync(scope, run, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -1061,6 +1067,26 @@ public sealed class AppServerRunWorker(
             DeliveryPolicy = failedRun.DeliveryPolicy,
             ImplementationTurnCount = failedRun.ImplementationTurnCount
         };
+    }
+
+    private static async Task RecordFailedReviewGatesAsync(IServiceScope scope, IEnumerable<OratorioRun> runs, CancellationToken ct)
+    {
+        var writes = scope.ServiceProvider.GetRequiredService<GitHubWriteService>();
+        foreach (var run in runs)
+        {
+            await writes.RecordReviewGateRunFailedAsync(run, ct);
+        }
+    }
+
+    private static async Task RecordFailedReviewGateAsync(IServiceScope scope, OratorioRun run, CancellationToken ct)
+    {
+        if (run.Item?.State != ItemState.Failed)
+        {
+            return;
+        }
+
+        var writes = scope.ServiceProvider.GetRequiredService<GitHubWriteService>();
+        await writes.RecordReviewGateRunFailedAsync(run, ct);
     }
 
     private static bool RequiresReviewDraft(OratorioRun run) =>

@@ -739,7 +739,7 @@ public sealed class GitLabReadSyncTests
         Assert.Contains(published.SourceWrites, write => write.Kind == SourceWriteKind.MergeRequestNote && write.Intent == "reviewDraftPublish" && write.Status == SourceWriteStatus.Succeeded);
         var summaryNote = Assert.Single(fakeGitLab.MergeRequestNotesCreated);
         Assert.Equal(7, summaryNote.Iid);
-        Assert.Contains("Reviewed the current head", summaryNote.Body);
+        Assert.Contains("current head was reviewed", summaryNote.Body);
         Assert.Empty(fakeGitLab.MergeRequestDiscussionsCreated);
     }
 

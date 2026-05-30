@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Oratorio.Server.Data;
 using Oratorio.Server.Domain;
+using Oratorio.Server.GitHub;
 using Oratorio.Server.Realtime;
 
 namespace Oratorio.Server.Services;
@@ -53,6 +54,7 @@ public sealed class MockRunWorker(IServiceScopeFactory scopeFactory, IClock cloc
                 "Mock run interrupted");
         }
 
+        await RecordFailedReviewGatesAsync(scope, activeRuns, ct);
         await db.SaveChangesAsync(ct);
         PublishRunItems(activeRuns, now);
     }
@@ -73,6 +75,7 @@ public sealed class MockRunWorker(IServiceScopeFactory scopeFactory, IClock cloc
             AdvanceRun(run, now);
         }
 
+        await RecordFailedReviewGatesAsync(scope, activeRuns, ct);
         await db.SaveChangesAsync(ct);
         PublishRunItems(activeRuns, now);
     }
@@ -89,6 +92,15 @@ public sealed class MockRunWorker(IServiceScopeFactory scopeFactory, IClock cloc
         foreach (var item in runs.Select(x => x.Item).OfType<OratorioItem>().DistinctBy(x => x.ItemId))
         {
             boardEvents.PublishTaskUpdated(item, timestamp);
+        }
+    }
+
+    private static async Task RecordFailedReviewGatesAsync(IServiceScope scope, IEnumerable<OratorioRun> runs, CancellationToken ct)
+    {
+        var writes = scope.ServiceProvider.GetRequiredService<GitHubWriteService>();
+        foreach (var run in runs.Where(x => x.Item?.State == ItemState.Failed))
+        {
+            await writes.RecordReviewGateRunFailedAsync(run, ct);
         }
     }
 
