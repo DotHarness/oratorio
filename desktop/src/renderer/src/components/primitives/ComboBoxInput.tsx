@@ -29,10 +29,12 @@ export function ComboBoxInput({ ariaLabel, value, onChange, options, placeholder
   const generatedId = useId()
   const listId = `${id ?? generatedId}-combobox-list`
 
-  const query = value.trim().toLowerCase()
+  const selectedOption = options.find((option) => option.value === value)
+  const inputValue = selectedOption?.label ?? value
+  const query = inputValue.trim().toLowerCase()
   // When the current value already matches an option exactly (a selection),
   // show the full list so the user can switch; only filter while typing.
-  const isExactMatch = options.some((option) => option.value === value)
+  const isExactMatch = Boolean(selectedOption)
   const filtered = query && !isExactMatch
     ? options.filter((option) => option.value.toLowerCase().includes(query) || option.label.toLowerCase().includes(query))
     : options
@@ -114,7 +116,7 @@ export function ComboBoxInput({ ariaLabel, value, onChange, options, placeholder
         aria-autocomplete="list"
         autoComplete="off"
         autoFocus={autoFocus}
-        value={value}
+        value={inputValue}
         placeholder={placeholder}
         onChange={(event) => {
           onChange(event.target.value)

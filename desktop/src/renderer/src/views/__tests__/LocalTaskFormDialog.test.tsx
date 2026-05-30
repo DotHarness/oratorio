@@ -40,7 +40,10 @@ describe('LocalTaskFormDialog', () => {
     renderDialog()
 
     const sourceProject = screen.getByLabelText('Source project') as HTMLInputElement
-    expect(sourceProject).toHaveValue('example-owner/oratorio')
+    expect(sourceProject).toHaveValue('GitHub: example-owner/oratorio')
+    fireEvent.focus(sourceProject)
+    fireEvent.mouseDown(screen.getByRole('option', { name: 'GitLab: group/project' }))
+    expect(sourceProject).toHaveValue('GitLab: group/project')
     fireEvent.change(sourceProject, { target: { value: 'group/project' } })
     expect(sourceProject).toHaveValue('group/project')
     expect(screen.getByRole('option', { name: 'GitLab: group/project' })).toBeInTheDocument()
@@ -104,7 +107,7 @@ function renderDialog(options?: {
   submitLocalTaskForm?: () => Promise<void>
 }) {
   function Harness() {
-    const [taskForm, setTaskForm] = useState<LocalTaskForm>(() => emptyLocalTaskForm('example-owner/oratorio'))
+    const [taskForm, setTaskForm] = useState<LocalTaskForm>(() => emptyLocalTaskForm('github:github.com/example-owner/oratorio'))
     return (
       <LocalTaskFormDialog
         taskFormMode={options?.mode ?? 'create'}
@@ -112,7 +115,7 @@ function renderDialog(options?: {
         taskForm={taskForm}
         setTaskForm={setTaskForm}
         taskSourceProjectOptions={[
-          { value: 'example-owner/oratorio', label: 'GitHub: example-owner/oratorio' },
+          { value: 'github:github.com/example-owner/oratorio', label: 'GitHub: example-owner/oratorio' },
           { value: 'gitlab:gitlab.example.test/group/project', label: 'GitLab: group/project' },
         ]}
         taskLabelOptions={['bug', 'frontend']}

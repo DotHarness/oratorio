@@ -113,7 +113,7 @@ export function LocalTaskFormDialog({
                   value={taskForm.repository}
                   options={taskSourceProjectOptions}
                   onChange={(value) => setTaskForm((current) => ({ ...current, repository: value }))}
-                  placeholder={taskSourceProjectOptions[0]?.value ?? t('localTask.sourceProjectPlaceholder')}
+                  placeholder={taskSourceProjectOptions[0]?.label ?? t('localTask.sourceProjectPlaceholder')}
                 />
               </label>
               <label className="form-field">

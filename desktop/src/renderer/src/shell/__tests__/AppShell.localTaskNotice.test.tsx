@@ -613,7 +613,7 @@ describe('AppShell local task created notice', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'New local task' }))
 
     const sourceProjectInput = await screen.findByLabelText('Source project')
-    await waitFor(() => expect(sourceProjectInput).toHaveValue(gitlabProject))
+    await waitFor(() => expect(sourceProjectInput).toHaveValue('GitLab: group/project'))
     fireEvent.focus(sourceProjectInput)
     const sourceProjectValues = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'))
       .map((option) => option.getAttribute('data-value'))
