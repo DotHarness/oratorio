@@ -1,0 +1,39 @@
+{
+  "stages": {
+    "intake": "Intake",
+    "analysis": "Analysis",
+    "review": "Review",
+    "decision": "Decision",
+    "closed": "Closed"
+  },
+  "ariaStages": "Review lifecycle stages",
+  "localBadge": "Local",
+  "meta": {
+    "completed": "Completed",
+    "inProgress": "In progress",
+    "pending": "Pending"
+  },
+  "badge": {
+    "noRun": "No run",
+    "open": "Open",
+    "drafts_one": "{{count}} draft",
+    "drafts_other": "{{count}} drafts",
+    "followUps_one": "{{count}} follow-up",
+    "followUps_other": "{{count}} follow-ups",
+    "feedback_one": "{{count}} feedback",
+    "feedback_other": "{{count}} feedback",
+    "writes_one": "{{count}} write",
+    "writes_other": "{{count}} writes"
+  },
+  "requestChanges": {
+    "title": "Request changes",
+    "ariaForm": "Request changes for {{name}}",
+    "feedback": "Feedback",
+    "feedbackPlaceholder": "Describe what the agent should change before the next run.",
+    "severity": "Severity",
+    "severityNeedsChanges": "Needs changes",
+    "severityBlocking": "Blocking",
+    "sending": "Sending...",
+    "sendFeedback": "Send feedback"
+  }
+}

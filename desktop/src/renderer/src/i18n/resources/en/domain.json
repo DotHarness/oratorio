@@ -1,0 +1,176 @@
+{
+  "state": {
+    "discovered": "Discovered",
+    "dispatching": "Dispatching",
+    "running": "Running",
+    "awaitingReview": "Awaiting review",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "failed": "Failed",
+    "archived": "Archived"
+  },
+  "stateCopy": {
+    "archived": "This local task is hidden from the default queue until it is reopened.",
+    "running": "A round is in progress and the review check is pending.",
+    "awaitingReview": "Agent output is ready for operator judgment.",
+    "approved": "This item has satisfied the current Oratorio review policy.",
+    "rejected": "The item is stopped until an operator reopens it.",
+    "failed": "The last run failed and needs an operator decision.",
+    "eligible": "This item is eligible for a new Oratorio round."
+  },
+  "taskStatus": {
+    "todo": { "label": "To do", "description": "Ready to triage or dispatch." },
+    "in_progress": { "label": "In progress", "description": "Queued, running, or awaiting retry." },
+    "in_review": { "label": "In review", "description": "Agent work is ready for judgment." },
+    "done": { "label": "Done", "description": "Accepted outcomes." },
+    "cancelled": { "label": "Cancelled", "description": "Rejected or archived tasks." }
+  },
+  "microStatus": {
+    "runActive": "Run active",
+    "awaitingReview": "Awaiting review",
+    "needsAttention": "Needs attention",
+    "idle": "Idle"
+  },
+  "source": {
+    "local": "Local",
+    "github": "GitHub",
+    "gitlab": "GitLab"
+  },
+  "sourceMeta": {
+    "labels_one": "{{count}} label",
+    "labels_other": "{{count}} labels",
+    "localTask": "local task",
+    "mergedPrefix": "Merged · ",
+    "closedPrefix": "Closed · ",
+    "draftPrefix": "Draft · ",
+    "synced": "synced {{value}}",
+    "notSynced": "not synced"
+  },
+  "sourceLifecycle": {
+    "merged": "Merged",
+    "closed": "Closed",
+    "open": "Open",
+    "unknown": "Unknown",
+    "titleOn": "{{label}} on {{date}}"
+  },
+  "sourceSnapshot": {
+    "none": "None",
+    "synced": "synced"
+  },
+  "sourceWriteKind": {
+    "pullRequestReview": "PR review",
+    "checkRun": "Check run",
+    "localCommit": "Local commit",
+    "branchPush": "Branch push",
+    "pullRequestCreation": "PR creation",
+    "mergeRequestNote": "MR note",
+    "mergeRequestDiscussion": "MR discussion",
+    "commitStatus": "Commit status",
+    "mergeRequestCreation": "MR creation",
+    "issueComment": "Issue comment"
+  },
+  "sourceWriteStatus": {
+    "succeeded": "Succeeded",
+    "failed": "Failed",
+    "pending": "Pending"
+  },
+  "sourceWriteIntent": {
+    "requestChanges": "request changes"
+  },
+  "reviewDraftStatus": {
+    "published": "Published",
+    "discarded": "Discarded",
+    "publishFailed": "Publish failed",
+    "draft": "Draft"
+  },
+  "implementationDraftStatus": {
+    "delivered": "Delivered",
+    "deliveryFailed": "Delivery failed",
+    "draft": "Draft"
+  },
+  "followUpDraftStatus": {
+    "created": "Created",
+    "discarded": "Discarded",
+    "draft": "Draft"
+  },
+  "deliveryPolicy": {
+    "autoPr": "Auto PR",
+    "manualDelivery": "Manual delivery"
+  },
+  "decision": {
+    "approve": "Approved",
+    "reject": "Rejected",
+    "changesRequested": "Changes requested"
+  },
+  "decisionHistory": {
+    "approve": "Approved",
+    "reject": "Rejected",
+    "reopen": "Reopened",
+    "reReview": "Re-review requested",
+    "changesRequested": "Changes requested"
+  },
+  "roundStatus": {
+    "open": "Open",
+    "running": "Running",
+    "awaitingReview": "Awaiting review",
+    "changesRequested": "Changes requested",
+    "superseded": "Superseded",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "failed": "Failed"
+  },
+  "runStatus": {
+    "queued": "Queued",
+    "dispatching": "Dispatching",
+    "running": "Running",
+    "succeeded": "Succeeded",
+    "failed": "Failed",
+    "cancelled": "Cancelled",
+    "timedOut": "Timed out"
+  },
+  "worktreeStatus": {
+    "notRequired": "Not required",
+    "preparing": "Preparing",
+    "ready": "Ready",
+    "cleanupPending": "Cleanup pending",
+    "cleaned": "Cleaned",
+    "failed": "Failed"
+  },
+  "runnerMode": {
+    "appServer": "DotCraft",
+    "mock": "Mock"
+  },
+  "check": {
+    "passing": "Passing",
+    "attention": "Attention",
+    "running": "Running",
+    "notConfigured": "Not configured"
+  },
+  "dotcraftHealth": {
+    "connected": "DotCraft AppServer is reachable.",
+    "configured": "DotCraft AppServer is configured but not reachable.",
+    "notConfigured": "DotCraft AppServer is not configured."
+  },
+  "githubSourceStatus": {
+    "configured": "Configured",
+    "available": "Available",
+    "unavailable": "Unavailable"
+  },
+  "time": {
+    "justNow": "just now",
+    "minutesAgo": "{{count}} min ago",
+    "hoursAgo": "{{count}} hr ago"
+  },
+  "queueLabel": {
+    "tooltip": "Label: {{label}}"
+  },
+  "summary": {
+    "previewFallback": "Agent output is ready. Open technical details for the full report.",
+    "technicalFallback": "No additional details.",
+    "none": "No agent summary is available yet."
+  },
+  "reReview": {
+    "description": "Review target moved from {{from}} to {{to}} since the last Oratorio review."
+  },
+  "errorFallback": "Unexpected Oratorio API error."
+}

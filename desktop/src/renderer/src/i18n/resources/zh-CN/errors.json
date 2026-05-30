@@ -1,0 +1,13 @@
+{
+  "itemNotFound": "请求的条目不存在。",
+  "runNotFound": "请求的运行不存在。",
+  "reviewDraftUnsupportedItem": "评审草稿仅支持 GitHub 拉取请求和 GitLab 合并请求的运行。",
+  "invalidImplementationDraftBinding": "实现草稿缺少其运行绑定。",
+  "followUpDraftNotFound": "请求的后续草稿不存在。",
+  "followUpDraftUnsupportedRun": "后续草稿只能针对 Oratorio AppServer 运行提交。",
+  "discussionTurnNotFound": "请求的智能体讨论轮次不存在。",
+  "invalidTransition": "只有失败的来源写入才能重试。",
+  "gitlabDisabled": "GitLab 提供方已禁用。",
+  "gitlabWritesDisabled": "GitLab 写入已禁用。",
+  "emptyDiff": "实现草稿无法交付，因为受管工作树没有差异。"
+}

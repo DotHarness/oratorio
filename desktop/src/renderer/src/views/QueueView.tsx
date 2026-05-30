@@ -1,4 +1,5 @@
 import { CircleDot, GitPullRequest, Plus, RefreshCw, Search } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { ItemState, WorkItem } from '../lib/types'
 import {
   checkIcon,
@@ -8,7 +9,7 @@ import {
   sourceMetaLabel,
   stateClassName,
   stateFilterIcon,
-  stateLabels,
+  stateLabel,
   stateTabs,
 } from '../lib/format'
 import { ActionIcon } from '../components/primitives/ActionIcon'
@@ -44,26 +45,27 @@ export function QueueView({
   selectedItem,
   openItemFromQueue,
 }: QueueViewProps) {
+  const { t } = useTranslation('board')
   return (
     <>
-              <section className="queue-pane" aria-label="Review queue">
+              <section className="queue-pane" aria-label={t('queue.reviewQueue')}>
                 <div className="search-box">
                   <Search size={16} />
                   <input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search items"
-                    aria-label="Search items"
+                    placeholder={t('queue.searchItems')}
+                    aria-label={t('queue.searchItems')}
                   />
                 </div>
 
-                <div className="tab-strip" aria-label="State filters">
+                <div className="tab-strip" aria-label={t('queue.stateFilters')}>
                   {stateTabs.map((tab) => (
-                    <Tooltip key={tab} content={tab === 'all' ? 'All items' : stateLabels[tab]}>
+                    <Tooltip key={tab} content={tab === 'all' ? t('queue.allItems') : stateLabel(tab)}>
                       <button
                         className={stateFilter === tab ? 'selected' : ''}
                         onClick={() => setStateFilter(tab)}
-                        aria-label={tab === 'all' ? 'All items' : stateLabels[tab]}
+                        aria-label={tab === 'all' ? t('queue.allItems') : stateLabel(tab)}
                       >
                         {stateFilterIcon(tab)}
                       </button>
@@ -74,10 +76,10 @@ export function QueueView({
                 <div className="queue-toolbar">
                   <RepositoryFilterDropdown value={repositoryFilter} repositories={repositories} onChange={setRepositoryFilter} />
                   <span className="queue-actions">
-                    <ActionIcon label="New local task" onClick={openCreateLocalTask}>
+                    <ActionIcon label={t('actions.newLocalTask')} onClick={openCreateLocalTask}>
                       <Plus size={16} />
                     </ActionIcon>
-                    <ActionIcon label="Refresh" onClick={() => void refreshAll()}>
+                    <ActionIcon label={t('actions.refresh')} onClick={() => void refreshAll()}>
                       <RefreshCw size={16} />
                     </ActionIcon>
                   </span>
@@ -99,7 +101,7 @@ export function QueueView({
                           <span className={`state-dot ${stateClassName(item.state)}`} />
                         </span>
                         <span className="item-meta">{item.repository} {item.number}</span>
-                        <span className="item-source-meta">{sourceMetaLabel(item)} · updated {item.updated}</span>
+                        <span className="item-source-meta">{sourceMetaLabel(item)} · {t('card.updated', { value: item.updated })}</span>
                         <span className="item-badges">
                           {sourceLifecycleBadge(item)}
                           <Tooltip content={`oratorio/review: ${checkLabel(item.check)}`}>

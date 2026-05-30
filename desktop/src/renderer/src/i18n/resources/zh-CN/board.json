@@ -1,0 +1,104 @@
+{
+  "appName": "Oratorio",
+  "search": {
+    "placeholder": "搜索任务",
+    "help": "高级搜索支持 s:github、source:github、l:frontend 以及 label:\"good first issue\"。"
+  },
+  "viewMode": {
+    "active": "活跃",
+    "all": "全部",
+    "cancelled": "已取消",
+    "archived": "已归档"
+  },
+  "closedDescription": {
+    "all": "全部任务，最新更新优先。",
+    "cancelled": "被拒绝的任务。",
+    "archived": "已归档的任务。"
+  },
+  "empty": "这里没有任务。",
+  "loading": "正在加载任务……",
+  "loadingMore": "正在加载更多任务……",
+  "actions": {
+    "newLocalTask": "新建本地任务",
+    "refresh": "刷新",
+    "settings": "设置"
+  },
+  "sync": {
+    "startingSource": "正在启动来源同步",
+    "syncingSources": "正在同步来源",
+    "syncSources": "同步来源",
+    "startingGitHub": "正在启动 GitHub 拉取",
+    "pullingGitHub": "正在拉取 GitHub",
+    "pullGitHub": "拉取 GitHub",
+    "syncTitle": "同步已配置的 GitHub 与 GitLab 来源"
+  },
+  "filters": {
+    "assignee": "负责人",
+    "allAssignees": "全部负责人",
+    "allRepositories": "全部仓库",
+    "repositoryFilter": "仓库筛选"
+  },
+  "undo": "撤销",
+  "drag": {
+    "doneNotReopen": "已完成的任务不能通过拖拽重新打开。",
+    "cannotMove": "无法从{{from}}移动到{{to}}。",
+    "notAvailable": "此移动不可用。",
+    "addFeedbackBefore": "移动 {{name}} 前请先添加反馈。",
+    "movedTo": "{{name}} 已移动到{{status}}。",
+    "moveUndone": "已撤销 {{name}} 的移动。",
+    "changesRequested": "已为 {{name}} 请求修改。",
+    "dispatch": "正在派发 {{name}}。",
+    "approve": "已通过 {{name}}。",
+    "reject": "已拒绝 {{name}}。",
+    "archive": "已归档 {{name}}。",
+    "reopen": "已重新打开 {{name}}。",
+    "requestChanges": "正在为 {{name}} 请求修改。",
+    "moved": "已移动 {{name}}。"
+  },
+  "localTask": {
+    "eyebrow": "本地任务",
+    "newTask": "新建任务",
+    "editTask": "编辑任务",
+    "title": "标题",
+    "description": "描述",
+    "sourceProject": "来源项目",
+    "sourceProjectPlaceholder": "GitHub/GitLab 项目或规范键",
+    "labels": "标签",
+    "labelsPlaceholder": "bug, docs, frontend",
+    "labelPresets": "标签预设",
+    "routingFields": "任务路由字段",
+    "assignee": "负责人",
+    "assigneePlaceholder": "选择最近的负责人或留空",
+    "assigneePresets": "负责人预设",
+    "baseBranch": "基础分支",
+    "baseBranchHint": "可选 · 用作运行基准 ref",
+    "baseBranchPlaceholder": "main",
+    "baseBranchPresets": "基础分支预设",
+    "create": "创建任务",
+    "saveChanges": "保存更改"
+  },
+  "queue": {
+    "reviewQueue": "评审队列",
+    "searchItems": "搜索条目",
+    "stateFilters": "状态筛选",
+    "allItems": "全部条目"
+  },
+  "aria": {
+    "taskBoard": "任务看板",
+    "boardFilters": "看板筛选",
+    "boardView": "看板视图",
+    "statusColumns": "任务状态列",
+    "closedTasks": "{{label}}任务"
+  },
+  "chip": {
+    "local": "本地",
+    "localTask": "本地任务",
+    "pullRequest": "拉取请求",
+    "issue": "议题",
+    "pr": "PR",
+    "task": "任务"
+  },
+  "card": {
+    "updated": "更新于 {{value}}"
+  }
+}

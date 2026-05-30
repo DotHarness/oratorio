@@ -1,3 +1,5 @@
+import i18n from './i18n'
+
 const explicitApiBaseUrl = normalizeBaseUrl(import.meta.env.VITE_ORATORIO_API_URL)
 let currentServerBaseUrl = resolveInitialServerBaseUrl(explicitApiBaseUrl)
 
@@ -48,7 +50,9 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${getApiBaseUrl()}${path}`, init)
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as ErrorResponse | null
-    throw new Error(payload?.error?.message ?? `Request failed with HTTP ${response.status}`)
+    const fallback = payload?.error?.message ?? i18n.t('common:requestFailed', { status: response.status })
+    const code = payload?.error?.code
+    throw new Error(code ? i18n.t(`errors:${code}`, { defaultValue: fallback }) : fallback)
   }
 
   if (response.status === 204) {
@@ -70,7 +74,7 @@ function getApiBaseUrl(): string {
   }
 
   if (typeof window !== 'undefined' && window.oratorioDesktop) {
-    throw new Error('Oratorio server URL is not available yet.')
+    throw new Error(i18n.t('common:serverUnavailable'))
   }
 
   return '/api/v1'

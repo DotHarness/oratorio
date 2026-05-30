@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DropResult } from '@hello-pangea/dnd'
 import { apiPost } from '../api'
+import i18n from '../i18n'
 import type { ItemDetailResponse, MockOutcome, RunnerMode, TaskStatus, WorkItem } from '../lib/types'
-import { detailToWorkItem, errorMessage, itemUrl, sourceItemUrl } from '../lib/format'
+import { detailToWorkItem, errorMessage, itemUrl, sourceItemUrl, taskStatusLabel } from '../lib/format'
 import { dragOutcomeLabel, resolveDrag } from '../lib/dragMatrix'
 import { columnIndexForStatus, composeSortOrder, sortItemsForBoard } from '../lib/sortOrder'
 import type { RequestChangesValue } from '../components/board/RequestChangesModal'
@@ -112,7 +113,7 @@ export function useBoardCommander({
 
       const outcome = resolveDrag(fromStatus, toStatus)
       if (outcome.kind === 'invalid') {
-        const message = outcome.message ?? 'This move is not available.'
+        const message = outcome.message ?? i18n.t('board:drag.notAvailable')
         setLiveMessage(message)
         notify(message, 'error')
         return
@@ -121,14 +122,14 @@ export function useBoardCommander({
       if (outcome.kind === 'request-changes') {
         setPendingComposer({ item, fromStatus, toStatus, toIndex: result.destination.index })
         setComposerError(null)
-        setLiveMessage(`Add feedback before moving ${item.shortId ?? item.title}.`)
+        setLiveMessage(i18n.t('board:drag.addFeedbackBefore', { name: item.shortId ?? item.title }))
         return
       }
 
       const previousItems = boardItemsRef.current
       const nextItems = moveBoardItem(previousItems, item.id, fromStatus, toStatus, result.destination.index)
       setBoardItems(nextItems)
-      setLiveMessage(`${item.shortId ?? item.title} moved to ${toStatus}.`)
+      setLiveMessage(i18n.t('board:drag.movedTo', { name: item.shortId ?? item.title, status: taskStatusLabel(toStatus) }))
 
       if (outcome.kind === 'reorder') {
         void persistOrders(nextItems).catch((reason) => {
@@ -173,7 +174,7 @@ export function useBoardCommander({
           onUndo: () => {
             setBoardItems(previousItems)
             removeToast(toastId)
-            setLiveMessage(`${item.shortId ?? item.title} move undone.`)
+            setLiveMessage(i18n.t('board:drag.moveUndone', { name: item.shortId ?? item.title }))
           },
           onCommit: () => {
             void commit()
@@ -212,7 +213,7 @@ export function useBoardCommander({
         const body = value.severity === 'red' ? `[blocking] ${value.body}` : value.body
         await postItemAction(pendingComposer.item, '/request-changes', { body })
         setPendingComposer(null)
-        notify(`Changes requested for ${pendingComposer.item.shortId ?? pendingComposer.item.number}.`)
+        notify(i18n.t('board:drag.changesRequested', { name: pendingComposer.item.shortId ?? pendingComposer.item.number }))
         await refreshAll()
       } catch (reason) {
         setComposerError(errorMessage(reason))

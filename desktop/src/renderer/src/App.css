@@ -5609,6 +5609,43 @@ textarea::placeholder {
   resize: none;
 }
 
+.combobox-control {
+  position: relative;
+  width: 100%;
+}
+
+.combobox-control input {
+  padding-right: 34px;
+}
+
+.combobox-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 6px;
+  padding: 4px;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.combobox-toggle:hover {
+  color: var(--text-primary);
+}
+
+.combobox-menu {
+  left: 0;
+  right: 0;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+}
+
 .action-error {
   margin-top: 10px;
   color: color-mix(in srgb, var(--warning) 82%, var(--text-primary));

@@ -1,4 +1,5 @@
 import { Archive, ArchiveRestore, CircleDot, Clipboard, ExternalLink, GitPullRequest, MoreHorizontal, PanelRightOpen, Pencil, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { ActionIcon } from '../primitives/ActionIcon'
 import { Tooltip } from '../primitives/Tooltip'
 import { microStatusDot, stateCopy, taskStatusBadgeClass, taskStatusLabel } from '../../lib/format'
@@ -35,14 +36,15 @@ export function DrawerHeader({
   onArchive,
   onCopyId,
 }: DrawerHeaderProps) {
+  const { t } = useTranslation('drawer')
   if (!item) {
     return (
       <header className="task-drawer-header" role="banner">
         <div className="task-drawer-title-group">
-          <span className="eyebrow">Task drawer</span>
-          <h2>Loading task...</h2>
+          <span className="eyebrow">{t('kicker')}</span>
+          <h2>{t('loading')}</h2>
         </div>
-        <ActionIcon label="Close task drawer" onClick={onClose}>
+        <ActionIcon label={t('closeDrawer')} onClick={onClose}>
           <X size={16} />
         </ActionIcon>
       </header>
@@ -61,7 +63,7 @@ export function DrawerHeader({
           <span>{item.shortId ?? item.number}</span>
           <span className={`source-chip ${item.type}`}>
             {item.type === 'pr' ? <GitPullRequest size={13} /> : <CircleDot size={13} />}
-            <span>{item.type === 'task' ? 'local' : item.number}</span>
+            <span>{item.type === 'task' ? t('localShort') : item.number}</span>
           </span>
           <span className={`state-pill ${taskStatusBadgeClass(item.taskStatus)}`}>{taskStatusLabel(item.taskStatus)}</span>
         </span>
@@ -75,8 +77,8 @@ export function DrawerHeader({
       <div className="task-drawer-actions">
         <div className="action-menu-wrap">
           <ActionIcon
-            label="More task actions"
-            title="More task actions"
+            label={t('moreActions')}
+            title={t('moreActions')}
             active={actionMenuOpen}
             onClick={onToggleActionMenu}
             disabled={!onToggleActionMenu}
@@ -87,34 +89,34 @@ export function DrawerHeader({
             <div className="action-menu task-drawer-action-menu" role="menu">
               <button role="menuitem" onClick={onOpenDetailPage} disabled={!onOpenDetailPage}>
                 <PanelRightOpen size={15} />
-                Open detail page
+                {t('menu.openDetail')}
               </button>
               {item.externalUrl ? (
                 <a role="menuitem" href={item.externalUrl} target="_blank" rel="noreferrer">
                   <ExternalLink size={15} />
-                  Open source
+                  {t('menu.openSource')}
                 </a>
               ) : null}
               {isLocalTask ? (
                 <button role="menuitem" onClick={onEditLocalTask} disabled={!canEditLocalTask || isBusy}>
                   <Pencil size={15} />
-                  Edit local task
+                  {t('menu.editLocal')}
                 </button>
               ) : null}
               {item.state === 'archived' ? (
                 <button role="menuitem" onClick={onReopen} disabled={!canReopen || isBusy}>
                   <ArchiveRestore size={15} />
-                  Reopen task
+                  {t('menu.reopen')}
                 </button>
               ) : (
                 <button role="menuitem" onClick={onArchive} disabled={!canArchive || isBusy}>
                   <Archive size={15} />
-                  Archive task
+                  {t('menu.archive')}
                 </button>
               )}
               <button role="menuitem" onClick={onCopyId}>
                 <Clipboard size={15} />
-                Copy task id
+                {t('menu.copyId')}
               </button>
             </div>
           ) : null}

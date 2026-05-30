@@ -1,0 +1,39 @@
+{
+  "stages": {
+    "intake": "接收",
+    "analysis": "分析",
+    "review": "评审",
+    "decision": "决策",
+    "closed": "关闭"
+  },
+  "ariaStages": "评审生命周期阶段",
+  "localBadge": "本地",
+  "meta": {
+    "completed": "已完成",
+    "inProgress": "进行中",
+    "pending": "待定"
+  },
+  "badge": {
+    "noRun": "无运行",
+    "open": "开放",
+    "drafts_one": "{{count}} 个草稿",
+    "drafts_other": "{{count}} 个草稿",
+    "followUps_one": "{{count}} 个后续",
+    "followUps_other": "{{count}} 个后续",
+    "feedback_one": "{{count}} 条反馈",
+    "feedback_other": "{{count}} 条反馈",
+    "writes_one": "{{count}} 次写入",
+    "writes_other": "{{count}} 次写入"
+  },
+  "requestChanges": {
+    "title": "请求修改",
+    "ariaForm": "为 {{name}} 请求修改",
+    "feedback": "反馈",
+    "feedbackPlaceholder": "描述智能体在下次运行前应做的修改。",
+    "severity": "严重程度",
+    "severityNeedsChanges": "需要修改",
+    "severityBlocking": "阻断",
+    "sending": "正在发送……",
+    "sendFeedback": "发送反馈"
+  }
+}

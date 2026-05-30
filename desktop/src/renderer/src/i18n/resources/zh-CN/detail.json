@@ -1,0 +1,74 @@
+{
+  "page": {
+    "detailForName": "{{name}} 的任务详情",
+    "detail": "任务详情",
+    "backToBoard": "返回看板",
+    "breadcrumb": "任务面包屑",
+    "stageLabel": "阶段：{{stage}}",
+    "loadingTask": "正在加载任务"
+  },
+  "chip": {
+    "local": "本地",
+    "pr": "PR",
+    "issue": "议题",
+    "task": "任务"
+  },
+  "loading": {
+    "title": "正在加载任务",
+    "description": "正在获取所选任务。"
+  },
+  "implementTooltip": "启动一次实现运行。智能体可能会修改受管工作树，并提交一份用于手动交付的实现草稿。",
+  "reviewOnlyTooltip": "启动一次只读分析运行。智能体应进行检查与总结，而不做实现性更改。",
+  "autoPrTooltip": "启动一次带自动{{target}}交付的实现运行。草稿提交后，Oratorio 会尝试提交、推送并创建一个{{longTarget}}。",
+  "summary": {
+    "title": "摘要",
+    "description": "用于看板分诊的简要说明。"
+  },
+  "run": {
+    "attempt": "{{kind}} 第 {{attempt}} 次尝试",
+    "waiting": "正在等待运行器更新。",
+    "progress": "运行进度"
+  },
+  "reReview": {
+    "title": "评审最新提交",
+    "button": "重新评审 {{target}}"
+  },
+  "start": {
+    "implementation": "开始实现",
+    "retry": "重试运行",
+    "review": "开始 {{target}} 评审",
+    "dispatch": "派发回合",
+    "runner": "运行器：{{mode}}",
+    "implement": "实现",
+    "autoTarget": "自动 {{target}}",
+    "reviewOnly": "仅评审",
+    "dispatchReview": "派发 {{target}} 评审"
+  },
+  "target": {
+    "pr": "PR",
+    "mr": "MR"
+  },
+  "longTarget": {
+    "pr": "拉取请求",
+    "mr": "合并请求"
+  },
+  "nextAction": {
+    "reviewAgentDraft": { "label": "评审智能体草稿", "description": "智能体评审输出需要操作员判定。" },
+    "reviewDeliveryDraft": { "label": "评审交付草稿", "description": "实现交付需要操作员评审。" },
+    "reviewFollowUps": { "label": "评审后续项", "description": "后续提议需要操作员处理。" },
+    "viewComments": { "label": "查看评论", "description": "打开评审讨论与反馈编辑器。" },
+    "recordDecision": { "label": "记录决策", "description": "评审已就绪，等待操作员决策。" }
+  },
+  "artifacts": {
+    "title": "评审工件",
+    "description": "打开详情面板以查看草稿、后续项、评论与决策。",
+    "reviewDrafts": "评审草稿",
+    "followUps": "后续项",
+    "writes": "写入",
+    "comments": "评论"
+  },
+  "commentAction": {
+    "view": "查看评论",
+    "add": "添加评论"
+  }
+}

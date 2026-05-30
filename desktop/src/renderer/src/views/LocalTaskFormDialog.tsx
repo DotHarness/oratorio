@@ -1,8 +1,10 @@
 import type { Dispatch, MouseEvent as ReactMouseEvent, SetStateAction } from 'react'
 import { GitBranch, Tag, UserRound, XCircle } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import type { LocalTaskForm } from '../lib/types'
 import { labelsFromInput } from '../lib/format'
 import { ActionIcon } from '../components/primitives/ActionIcon'
+import { ComboBoxInput } from '../components/primitives/ComboBoxInput'
 
 export type LocalTaskSourceProjectOption = {
   value: string
@@ -40,6 +42,9 @@ export function LocalTaskFormDialog({
   onCreateIntent,
   submitLocalTaskForm,
 }: LocalTaskFormDialogProps) {
+  const { t } = useTranslation('board')
+  const assigneeOptions = taskAssigneeOptions.map((assignee) => ({ value: assignee, label: assignee }))
+  const branchOptions = taskBranchOptions.map((branch) => ({ value: branch, label: branch }))
   const chooseAssignee = (assignee: string) => {
     setTaskForm((current) => ({
       ...current,
@@ -77,16 +82,16 @@ export function LocalTaskFormDialog({
           >
             <header className="modal-head">
               <div>
-                <span className="eyebrow">Local task</span>
-                <h2 id="local-task-title">{taskFormMode === 'create' ? 'New task' : 'Edit task'}</h2>
+                <span className="eyebrow">{t('localTask.eyebrow')}</span>
+                <h2 id="local-task-title">{taskFormMode === 'create' ? t('localTask.newTask') : t('localTask.editTask')}</h2>
               </div>
-              <ActionIcon label="Close" onClick={closeLocalTaskForm}>
+              <ActionIcon label={t('common:close')} onClick={closeLocalTaskForm}>
                 <XCircle size={17} />
               </ActionIcon>
             </header>
             <div className="task-form">
               <label className="form-field full">
-                <span>Title</span>
+                <span>{t('localTask.title')}</span>
                 <input
                   value={taskForm.title}
                   onChange={(event) => setTaskForm((current) => ({ ...current, title: event.target.value }))}
@@ -94,7 +99,7 @@ export function LocalTaskFormDialog({
                 />
               </label>
               <label className="form-field full">
-                <span>Description</span>
+                <span>{t('localTask.description')}</span>
                 <textarea
                   value={taskForm.description}
                   onChange={(event) => setTaskForm((current) => ({ ...current, description: event.target.value }))}
@@ -102,28 +107,24 @@ export function LocalTaskFormDialog({
                 />
               </label>
               <label className="form-field">
-                <span>Source project</span>
-                <input
+                <span>{t('localTask.sourceProject')}</span>
+                <ComboBoxInput
+                  ariaLabel={t('localTask.sourceProject')}
                   value={taskForm.repository}
-                  list="local-task-source-projects"
-                  onChange={(event) => setTaskForm((current) => ({ ...current, repository: event.target.value }))}
-                  placeholder={taskSourceProjectOptions[0]?.value ?? 'GitHub/GitLab project or canonical key'}
+                  options={taskSourceProjectOptions}
+                  onChange={(value) => setTaskForm((current) => ({ ...current, repository: value }))}
+                  placeholder={taskSourceProjectOptions[0]?.value ?? t('localTask.sourceProjectPlaceholder')}
                 />
-                <datalist id="local-task-source-projects">
-                  {taskSourceProjectOptions.map((project) => (
-                    <option key={project.value} value={project.value} label={project.label} />
-                  ))}
-                </datalist>
               </label>
               <label className="form-field">
-                <span>Labels</span>
+                <span>{t('localTask.labels')}</span>
                 <input
                   value={taskForm.labels}
                   onChange={(event) => setTaskForm((current) => ({ ...current, labels: event.target.value }))}
-                  placeholder="bug, docs, frontend"
+                  placeholder={t('localTask.labelsPlaceholder')}
                 />
               </label>
-              <div className="label-picker full" aria-label="Label presets">
+              <div className="label-picker full" aria-label={t('localTask.labelPresets')}>
                 {taskLabelOptions.map((label) => {
                   const selected = labelsFromInput(taskForm.labels).includes(label)
                   return (
@@ -139,22 +140,19 @@ export function LocalTaskFormDialog({
                   )
                 })}
               </div>
-              <div className="task-routing-fields full" aria-label="Task routing fields">
+              <div className="task-routing-fields full" aria-label={t('localTask.routingFields')}>
                 <label className="form-field">
-                  <span>Assignee</span>
-                  <input
+                  <span>{t('localTask.assignee')}</span>
+                  <ComboBoxInput
+                    id="local-task-assignee"
+                    ariaLabel={t('localTask.assignee')}
                     value={taskForm.assignee}
-                    list="local-task-assignees"
-                    onChange={(event) => setTaskForm((current) => ({ ...current, assignee: event.target.value }))}
-                    placeholder="Pick a recent assignee or leave blank"
+                    options={assigneeOptions}
+                    onChange={(value) => setTaskForm((current) => ({ ...current, assignee: value }))}
+                    placeholder={t('localTask.assigneePlaceholder')}
                   />
-                  <datalist id="local-task-assignees">
-                    {taskAssigneeOptions.map((assignee) => (
-                      <option key={assignee} value={assignee} />
-                    ))}
-                  </datalist>
                   {taskAssigneeOptions.length > 0 ? (
-                    <div className="field-chip-picker" aria-label="Assignee presets">
+                    <div className="field-chip-picker" aria-label={t('localTask.assigneePresets')}>
                       {taskAssigneeOptions.map((assignee) => (
                         <button
                           key={assignee}
@@ -171,22 +169,19 @@ export function LocalTaskFormDialog({
                 </label>
                 <label className="form-field">
                   <span className="form-field-head">
-                    <span>Base branch</span>
-                    <small>Optional · used as run base ref</small>
+                    <span>{t('localTask.baseBranch')}</span>
+                    <small>{t('localTask.baseBranchHint')}</small>
                   </span>
-                  <input
+                  <ComboBoxInput
+                    id="local-task-branch"
+                    ariaLabel={t('localTask.baseBranch')}
                     value={taskForm.branch}
-                    list="local-task-branches"
-                    onChange={(event) => setTaskForm((current) => ({ ...current, branch: event.target.value }))}
-                    placeholder="main"
+                    options={branchOptions}
+                    onChange={(value) => setTaskForm((current) => ({ ...current, branch: value }))}
+                    placeholder={t('localTask.baseBranchPlaceholder')}
                   />
-                  <datalist id="local-task-branches">
-                    {taskBranchOptions.map((branch) => (
-                      <option key={branch} value={branch} />
-                    ))}
-                  </datalist>
                   {taskBranchOptions.length > 0 ? (
-                    <div className="field-chip-picker" aria-label="Base branch presets">
+                    <div className="field-chip-picker" aria-label={t('localTask.baseBranchPresets')}>
                       {taskBranchOptions.map((branch) => (
                         <button
                           key={branch}
@@ -206,10 +201,10 @@ export function LocalTaskFormDialog({
             {taskFormError ? <p className="action-error">{taskFormError}</p> : null}
             <footer className="modal-actions">
               <button className="secondary-button inline" onClick={closeLocalTaskForm} disabled={isBusy}>
-                Cancel
+                {t('common:cancel')}
               </button>
               <button className="primary-button inline" onClick={submitFromButton} disabled={isBusy}>
-                {taskFormMode === 'create' ? 'Create task' : 'Save changes'}
+                {taskFormMode === 'create' ? t('localTask.create') : t('localTask.saveChanges')}
               </button>
             </footer>
           </section>

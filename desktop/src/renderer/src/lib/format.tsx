@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { Tooltip } from '../components/primitives/Tooltip'
 import { normalizeMarkdownForDisplay } from '../markdownDisplay'
+import i18n from '../i18n'
 import type {
   BriefFields,
   CheckState,
@@ -65,26 +66,25 @@ import type {
   WorktreeStatus,
 } from './types'
 
-export const stateLabels: Record<ItemState, string> = {
-  discovered: 'Discovered',
-  dispatching: 'Dispatching',
-  running: 'Running',
-  awaitingReview: 'Awaiting review',
-  approved: 'Approved',
-  rejected: 'Rejected',
-  failed: 'Failed',
-  archived: 'Archived',
+export function stateLabel(state: ItemState): string {
+  return i18n.t(`domain:state.${state}`)
 }
 
 export const stateTabs: Array<'all' | ItemState> = ['all', 'awaitingReview', 'running', 'discovered', 'approved', 'archived']
-export const taskStatusColumns: Array<{ id: TaskStatus; label: string; description: string }> = [
-  { id: 'todo', label: 'To do', description: 'Ready to triage or dispatch.' },
-  { id: 'in_progress', label: 'In progress', description: 'Queued, running, or awaiting retry.' },
-  { id: 'in_review', label: 'In review', description: 'Agent work is ready for judgment.' },
-  { id: 'done', label: 'Done', description: 'Accepted outcomes.' },
-  { id: 'cancelled', label: 'Cancelled', description: 'Rejected or archived tasks.' },
-]
-export const activeTaskStatusColumns = taskStatusColumns.filter((column) => column.id !== 'cancelled')
+
+export const taskStatusOrder: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'done', 'cancelled']
+
+export function taskStatusColumns(): Array<{ id: TaskStatus; label: string; description: string }> {
+  return taskStatusOrder.map((id) => ({
+    id,
+    label: i18n.t(`domain:taskStatus.${id}.label`),
+    description: i18n.t(`domain:taskStatus.${id}.description`),
+  }))
+}
+
+export function activeTaskStatusColumns(): Array<{ id: TaskStatus; label: string; description: string }> {
+  return taskStatusColumns().filter((column) => column.id !== 'cancelled')
+}
 export const defaultLocalTaskLabels = [
   'oratorio:auto',
   'local-task-smoke',
@@ -272,7 +272,7 @@ export function itemSummaryToWorkItem(item: ItemSummaryDto): WorkItem {
     round: item.currentRound,
     severity: item.checkState === 'attention' || item.checkState === 'failing' ? 'high' : 'medium',
     check: item.checkState,
-    summary: item.latestSummary ?? 'No agent summary is available yet.',
+    summary: item.latestSummary ?? i18n.t('domain:summary.none'),
     externalUrl: item.externalUrl ?? null,
     labels: normalizeLabels(item.labels),
     isDraft: item.isDraft ?? false,
@@ -442,7 +442,7 @@ export function pullRequestReReviewInfo(item: WorkItem | null | undefined): ReRe
   return {
     previousHeadSha,
     currentHeadSha: item.headSha,
-    description: `Review target moved from ${shortSha(previousHeadSha)} to ${shortSha(item.headSha)} since the last Oratorio review.`,
+    description: i18n.t('domain:reReview.description', { from: shortSha(previousHeadSha), to: shortSha(item.headSha) }),
   }
 }
 
@@ -539,12 +539,12 @@ export function optionalValue(value: string) {
 
 export function sourceMetaLabel(item: WorkItem) {
   if (item.sourceKey === 'local') {
-    return item.labels.length ? `${item.labels.length} labels` : 'local task'
+    return item.labels.length ? i18n.t('domain:sourceMeta.labels', { count: item.labels.length }) : i18n.t('domain:sourceMeta.localTask')
   }
 
-  const lifecycle = item.sourceState === 'merged' ? 'Merged · ' : item.sourceState === 'closed' ? 'Closed · ' : ''
-  return `${lifecycle}${item.isDraft ? 'Draft · ' : ''}${item.headSha ? `${shortSha(item.headSha)} · ` : ''}${
-    item.lastSourceSync ? `synced ${item.lastSourceSync}` : 'not synced'
+  const lifecycle = item.sourceState === 'merged' ? i18n.t('domain:sourceMeta.mergedPrefix') : item.sourceState === 'closed' ? i18n.t('domain:sourceMeta.closedPrefix') : ''
+  return `${lifecycle}${item.isDraft ? i18n.t('domain:sourceMeta.draftPrefix') : ''}${item.headSha ? `${shortSha(item.headSha)} · ` : ''}${
+    item.lastSourceSync ? i18n.t('domain:sourceMeta.synced', { value: item.lastSourceSync }) : i18n.t('domain:sourceMeta.notSynced')
   }`
 }
 
@@ -575,7 +575,7 @@ export function queueLabelBadges(item: WorkItem) {
   return (
     <>
       {visibleLabels.map((label) => (
-        <Tooltip content={`Label: ${label}`} key={label}>
+        <Tooltip content={i18n.t('domain:queueLabel.tooltip', { label })} key={label}>
           <span className="queue-label-chip">
             <Tag size={12} />
             <span className="chip-text">{label}</span>
@@ -594,19 +594,20 @@ export function queueLabelBadges(item: WorkItem) {
 }
 
 export function sourceLifecycleLabel(state: SourceState) {
-  if (state === 'merged') return 'Merged'
-  if (state === 'closed') return 'Closed'
-  if (state === 'open') return 'Open'
-  return 'Unknown'
+  if (state === 'merged') return i18n.t('domain:sourceLifecycle.merged')
+  if (state === 'closed') return i18n.t('domain:sourceLifecycle.closed')
+  if (state === 'open') return i18n.t('domain:sourceLifecycle.open')
+  return i18n.t('domain:sourceLifecycle.unknown')
 }
 
 export function sourceLifecycleTitle(item: WorkItem) {
   const timestamp = item.sourceState === 'merged' ? item.sourceMergedAt : item.sourceClosedAt
-  return `${sourceLifecycleLabel(item.sourceState)}${timestamp ? ` on ${new Date(timestamp).toLocaleString()}` : ''}`
+  const label = sourceLifecycleLabel(item.sourceState)
+  return timestamp ? i18n.t('domain:sourceLifecycle.titleOn', { label, date: new Date(timestamp).toLocaleString(i18n.language) }) : label
 }
 
 export function taskStatusLabel(status: TaskStatus) {
-  return taskStatusColumns.find((column) => column.id === status)?.label ?? status
+  return i18n.t(`domain:taskStatus.${status}.label`)
 }
 
 export function taskStatusBadgeClass(status: TaskStatus) {
@@ -619,18 +620,18 @@ export function taskStatusBadgeClass(status: TaskStatus) {
 
 export function microStatusDot(item: WorkItem) {
   if (item.state === 'dispatching' || item.state === 'running') {
-    return { kind: 'running', label: 'Run active', className: 'running' }
+    return { kind: 'running', label: i18n.t('domain:microStatus.runActive'), className: 'running' }
   }
 
   if (item.state === 'awaitingReview' || item.check === 'attention') {
-    return { kind: 'awaiting-approval', label: 'Awaiting review', className: 'awaiting-review' }
+    return { kind: 'awaiting-approval', label: i18n.t('domain:microStatus.awaitingReview'), className: 'awaiting-review' }
   }
 
   if (item.state === 'failed' || item.check === 'failing') {
-    return { kind: 'error', label: 'Needs attention', className: 'failed' }
+    return { kind: 'error', label: i18n.t('domain:microStatus.needsAttention'), className: 'failed' }
   }
 
-  return { kind: 'idle', label: 'Idle', className: 'idle' }
+  return { kind: 'idle', label: i18n.t('domain:microStatus.idle'), className: 'idle' }
 }
 
 export function sourceIcon(item: Pick<WorkItem, 'type'>) {
@@ -659,7 +660,7 @@ export function summaryPreviewLines(value: string) {
       !/^value$/i.test(line),
   )
   const preview = useful.slice(0, 3)
-  return preview.length > 0 ? preview : ['Agent output is ready. Open technical details for the full report.']
+  return preview.length > 0 ? preview : [i18n.t('domain:summary.previewFallback')]
 }
 
 export function stripMarkdownInline(value: string) {
@@ -679,7 +680,7 @@ export function technicalPreview(value: string) {
     .split('\n')
     .map(stripMarkdownInline)
     .find((line) => line.length > 0)
-  if (!firstLine) return 'No additional details.'
+  if (!firstLine) return i18n.t('domain:summary.technicalFallback')
   return firstLine.length > 120 ? `${firstLine.slice(0, 117)}...` : firstLine
 }
 
@@ -758,9 +759,9 @@ export function shortId(value: string) {
 }
 
 export function sourceLabel(source: string) {
-  if (source === 'local') return 'Local'
-  if (source === 'github') return 'GitHub'
-  if (source === 'gitlab') return 'GitLab'
+  if (source === 'local') return i18n.t('domain:source.local')
+  if (source === 'github') return i18n.t('domain:source.github')
+  if (source === 'gitlab') return i18n.t('domain:source.gitlab')
   return source
 }
 
@@ -771,12 +772,12 @@ export function relativeTime(value: string) {
   }
 
   const diffSeconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000))
-  if (diffSeconds < 60) return 'just now'
+  if (diffSeconds < 60) return i18n.t('domain:time.justNow')
   const diffMinutes = Math.round(diffSeconds / 60)
-  if (diffMinutes < 60) return `${diffMinutes} min ago`
+  if (diffMinutes < 60) return i18n.t('domain:time.minutesAgo', { count: diffMinutes })
   const diffHours = Math.round(diffMinutes / 60)
-  if (diffHours < 24) return `${diffHours} hr ago`
-  return new Date(value).toLocaleDateString()
+  if (diffHours < 24) return i18n.t('domain:time.hoursAgo', { count: diffHours })
+  return new Date(value).toLocaleDateString(i18n.language)
 }
 
 export function timeLabel(value: string) {
@@ -785,15 +786,15 @@ export function timeLabel(value: string) {
     return value
   }
 
-  return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return timestamp.toLocaleTimeString(i18n.language, { hour: '2-digit', minute: '2-digit' })
 }
 
 export function sourceSnapshotLabel(snapshot: SourceSnapshotDto | null) {
   if (!snapshot) {
-    return 'None'
+    return i18n.t('domain:sourceSnapshot.none')
   }
 
-  const syncedAt = snapshot.syncedAt ? relativeTime(snapshot.syncedAt) : 'synced'
+  const syncedAt = snapshot.syncedAt ? relativeTime(snapshot.syncedAt) : i18n.t('domain:sourceSnapshot.synced')
   return snapshot.headSha ? `${shortSha(snapshot.headSha)} · ${syncedAt}` : syncedAt
 }
 
@@ -808,35 +809,35 @@ export function timelineKind(kind: string): TimelineKind {
 }
 
 export function sourceWriteKindLabel(kind: SourceWriteKind) {
-  if (kind === 'pullRequestReview') return 'PR review'
-  if (kind === 'checkRun') return 'Check run'
-  if (kind === 'localCommit') return 'Local commit'
-  if (kind === 'branchPush') return 'Branch push'
-  if (kind === 'pullRequestCreation') return 'PR creation'
-  if (kind === 'mergeRequestNote') return 'MR note'
-  if (kind === 'mergeRequestDiscussion') return 'MR discussion'
-  if (kind === 'commitStatus') return 'Commit status'
-  if (kind === 'mergeRequestCreation') return 'MR creation'
-  return 'Issue comment'
+  if (kind === 'pullRequestReview') return i18n.t('domain:sourceWriteKind.pullRequestReview')
+  if (kind === 'checkRun') return i18n.t('domain:sourceWriteKind.checkRun')
+  if (kind === 'localCommit') return i18n.t('domain:sourceWriteKind.localCommit')
+  if (kind === 'branchPush') return i18n.t('domain:sourceWriteKind.branchPush')
+  if (kind === 'pullRequestCreation') return i18n.t('domain:sourceWriteKind.pullRequestCreation')
+  if (kind === 'mergeRequestNote') return i18n.t('domain:sourceWriteKind.mergeRequestNote')
+  if (kind === 'mergeRequestDiscussion') return i18n.t('domain:sourceWriteKind.mergeRequestDiscussion')
+  if (kind === 'commitStatus') return i18n.t('domain:sourceWriteKind.commitStatus')
+  if (kind === 'mergeRequestCreation') return i18n.t('domain:sourceWriteKind.mergeRequestCreation')
+  return i18n.t('domain:sourceWriteKind.issueComment')
 }
 
 export function sourceWriteStatusLabel(status: SourceWriteStatus) {
-  if (status === 'succeeded') return 'Succeeded'
-  if (status === 'failed') return 'Failed'
-  return 'Pending'
+  if (status === 'succeeded') return i18n.t('domain:sourceWriteStatus.succeeded')
+  if (status === 'failed') return i18n.t('domain:sourceWriteStatus.failed')
+  return i18n.t('domain:sourceWriteStatus.pending')
 }
 
 export function reviewDraftStatusLabel(status: ReviewDraftStatus) {
-  if (status === 'published') return 'Published'
-  if (status === 'discarded') return 'Discarded'
-  if (status === 'publishFailed') return 'Publish failed'
-  return 'Draft'
+  if (status === 'published') return i18n.t('domain:reviewDraftStatus.published')
+  if (status === 'discarded') return i18n.t('domain:reviewDraftStatus.discarded')
+  if (status === 'publishFailed') return i18n.t('domain:reviewDraftStatus.publishFailed')
+  return i18n.t('domain:reviewDraftStatus.draft')
 }
 
 export function implementationDraftStatusLabel(status: ImplementationDraftStatus) {
-  if (status === 'delivered') return 'Delivered'
-  if (status === 'deliveryFailed') return 'Delivery failed'
-  return 'Draft'
+  if (status === 'delivered') return i18n.t('domain:implementationDraftStatus.delivered')
+  if (status === 'deliveryFailed') return i18n.t('domain:implementationDraftStatus.deliveryFailed')
+  return i18n.t('domain:implementationDraftStatus.draft')
 }
 
 export function canDeliverImplementationDraft(draft: ImplementationDraft) {
@@ -844,32 +845,32 @@ export function canDeliverImplementationDraft(draft: ImplementationDraft) {
 }
 
 export function followUpDraftStatusLabel(status: FollowUpDraftStatus) {
-  if (status === 'created') return 'Created'
-  if (status === 'discarded') return 'Discarded'
-  return 'Draft'
+  if (status === 'created') return i18n.t('domain:followUpDraftStatus.created')
+  if (status === 'discarded') return i18n.t('domain:followUpDraftStatus.discarded')
+  return i18n.t('domain:followUpDraftStatus.draft')
 }
 
 export function deliveryPolicyLabel(policy: DeliveryPolicy) {
-  return policy === 'autoPr' ? 'Auto PR' : 'Manual delivery'
+  return policy === 'autoPr' ? i18n.t('domain:deliveryPolicy.autoPr') : i18n.t('domain:deliveryPolicy.manualDelivery')
 }
 
 export function sourceWriteIntentLabel(intent: string) {
-  if (intent === 'requestChanges') return 'request changes'
+  if (intent === 'requestChanges') return i18n.t('domain:sourceWriteIntent.requestChanges')
   return intent
 }
 
 export function decisionLabel(decision: 'approve' | 'request-changes' | 'reject') {
-  if (decision === 'approve') return 'Approved'
-  if (decision === 'reject') return 'Rejected'
-  return 'Changes requested'
+  if (decision === 'approve') return i18n.t('domain:decision.approve')
+  if (decision === 'reject') return i18n.t('domain:decision.reject')
+  return i18n.t('domain:decision.changesRequested')
 }
 
 export function decisionHistoryLabel(decision: Decision['decision']) {
-  if (decision === 'approve') return 'Approved'
-  if (decision === 'reject') return 'Rejected'
-  if (decision === 'reopen') return 'Reopened'
-  if (decision === 'reReview') return 'Re-review requested'
-  return 'Changes requested'
+  if (decision === 'approve') return i18n.t('domain:decisionHistory.approve')
+  if (decision === 'reject') return i18n.t('domain:decisionHistory.reject')
+  if (decision === 'reopen') return i18n.t('domain:decisionHistory.reopen')
+  if (decision === 'reReview') return i18n.t('domain:decisionHistory.reReview')
+  return i18n.t('domain:decisionHistory.changesRequested')
 }
 
 export function decisionIcon(decision: Decision['decision']) {
@@ -882,26 +883,26 @@ export function decisionIcon(decision: Decision['decision']) {
 
 export function roundStatusLabel(status: string) {
   const labels: Record<string, string> = {
-    open: 'Open',
-    running: 'Running',
-    awaitingReview: 'Awaiting review',
-    changesRequested: 'Changes requested',
-    superseded: 'Superseded',
-    approved: 'Approved',
-    rejected: 'Rejected',
-    failed: 'Failed',
+    open: i18n.t('domain:roundStatus.open'),
+    running: i18n.t('domain:roundStatus.running'),
+    awaitingReview: i18n.t('domain:roundStatus.awaitingReview'),
+    changesRequested: i18n.t('domain:roundStatus.changesRequested'),
+    superseded: i18n.t('domain:roundStatus.superseded'),
+    approved: i18n.t('domain:roundStatus.approved'),
+    rejected: i18n.t('domain:roundStatus.rejected'),
+    failed: i18n.t('domain:roundStatus.failed'),
   }
   return labels[status] ?? status
 }
 
 export function runnerModeLabel(mode: RunnerMode) {
-  return mode === 'appServer' ? 'DotCraft' : 'Mock'
+  return mode === 'appServer' ? i18n.t('domain:runnerMode.appServer') : i18n.t('domain:runnerMode.mock')
 }
 
 export function dotcraftHealthMessage(health: DotCraftHealth) {
-  if (health === 'connected') return 'DotCraft AppServer is reachable.'
-  if (health === 'configured') return 'DotCraft AppServer is configured but not reachable.'
-  return 'DotCraft AppServer is not configured.'
+  if (health === 'connected') return i18n.t('domain:dotcraftHealth.connected')
+  if (health === 'configured') return i18n.t('domain:dotcraftHealth.configured')
+  return i18n.t('domain:dotcraftHealth.notConfigured')
 }
 
 export function dotcraftStatusClass(status: DotCraftStatus) {
@@ -923,35 +924,32 @@ export function githubStatusClass(status: GitHubSourceStatus) {
 }
 
 export function githubSourceStatusLabel(status: GitHubSourceStatus) {
-  if (status.configured) return 'Configured'
-  if (status.available) return 'Available'
-  return 'Unavailable'
+  if (status.configured) return i18n.t('domain:githubSourceStatus.configured')
+  if (status.available) return i18n.t('domain:githubSourceStatus.available')
+  return i18n.t('domain:githubSourceStatus.unavailable')
 }
 
 export function runnerKindLabel(kind: string) {
-  return kind === 'appServer' ? 'DotCraft' : kind
+  return kind === 'appServer' ? i18n.t('domain:runnerMode.appServer') : kind
 }
 
 export function runStatusLabel(status: RunStatus) {
-  if (status === 'timedOut') return 'Timed out'
-  return status[0].toUpperCase() + status.slice(1)
+  return i18n.t(`domain:runStatus.${status}`)
 }
 
 export function worktreeStatusLabel(status: WorktreeStatus) {
-  if (status === 'notRequired') return 'Not required'
-  if (status === 'cleanupPending') return 'Cleanup pending'
-  return status[0].toUpperCase() + status.slice(1)
+  return i18n.t(`domain:worktreeStatus.${status}`)
 }
 
 export function errorMessage(reason: unknown) {
-  return reason instanceof Error ? reason.message : 'Unexpected Oratorio API error.'
+  return reason instanceof Error ? reason.message : i18n.t('domain:errorFallback')
 }
 
 export function checkLabel(check: CheckState) {
-  if (check === 'passing') return 'Passing'
-  if (check === 'failing' || check === 'attention') return 'Attention'
-  if (check === 'pending') return 'Running'
-  return 'Not configured'
+  if (check === 'passing') return i18n.t('domain:check.passing')
+  if (check === 'failing' || check === 'attention') return i18n.t('domain:check.attention')
+  if (check === 'pending') return i18n.t('domain:check.running')
+  return i18n.t('domain:check.notConfigured')
 }
 
 export function checkIcon(check: CheckState) {
@@ -988,15 +986,15 @@ export function cardStateBadge(item: WorkItem) {
 
   if (item.state === 'running') {
     return (
-      <Tooltip content="Running">
-        <span className="state-spinner" role="img" aria-label="Running">
+      <Tooltip content={i18n.t('domain:state.running')}>
+        <span className="state-spinner" role="img" aria-label={i18n.t('domain:state.running')}>
           <LoaderCircle size={14} className="spin-icon" />
         </span>
       </Tooltip>
     )
   }
 
-  return <span className={`state-pill ${stateClassName(item.state)}`}>{stateLabels[item.state]}</span>
+  return <span className={`state-pill ${stateClassName(item.state)}`}>{stateLabel(item.state)}</span>
 }
 
 export function stateFilterIcon(tab: 'all' | ItemState) {
@@ -1010,13 +1008,13 @@ export function stateFilterIcon(tab: 'all' | ItemState) {
 }
 
 export function stateCopy(state: ItemState) {
-  if (state === 'archived') return 'This local task is hidden from the default queue until it is reopened.'
-  if (state === 'running' || state === 'dispatching') return 'A round is in progress and the review check is pending.'
-  if (state === 'awaitingReview') return 'Agent output is ready for operator judgment.'
-  if (state === 'approved') return 'This item has satisfied the current Oratorio review policy.'
-  if (state === 'rejected') return 'The item is stopped until an operator reopens it.'
-  if (state === 'failed') return 'The last run failed and needs an operator decision.'
-  return 'This item is eligible for a new Oratorio round.'
+  if (state === 'archived') return i18n.t('domain:stateCopy.archived')
+  if (state === 'running' || state === 'dispatching') return i18n.t('domain:stateCopy.running')
+  if (state === 'awaitingReview') return i18n.t('domain:stateCopy.awaitingReview')
+  if (state === 'approved') return i18n.t('domain:stateCopy.approved')
+  if (state === 'rejected') return i18n.t('domain:stateCopy.rejected')
+  if (state === 'failed') return i18n.t('domain:stateCopy.failed')
+  return i18n.t('domain:stateCopy.eligible')
 }
 
 export function stateIcon(state: ItemState) {

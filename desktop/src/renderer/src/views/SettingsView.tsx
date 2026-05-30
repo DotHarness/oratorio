@@ -12,6 +12,7 @@ import {
   FolderOpen,
   GitPullRequest,
   KeyRound,
+  Languages,
   Plus,
   RefreshCw,
   Search,
@@ -28,7 +29,10 @@ import { apiGet, apiPut } from '../api'
 import { ActionIcon } from '../components/primitives/ActionIcon'
 import { DropdownSelect, type DropdownSelectOption } from '../components/primitives/DropdownSelect'
 import { Tooltip } from '../components/primitives/Tooltip'
-import { normalizeSettingsSection, settingsSections, type SettingsSection } from '../settingsSections'
+import { useTranslation } from 'react-i18next'
+import { normalizeSettingsSection, type SettingsSection } from '../settingsSections'
+import i18n from '../i18n'
+import { changeLocale, supportedLocales, type AppLocale } from '../i18n'
 import type {
   SourceProviderStatus,
   SourceSyncJob,
@@ -48,16 +52,20 @@ type SourceProviderId = 'github' | 'gitlab'
 
 const DEFAULT_RUN_TIMEOUT_SECONDS = 30 * 60
 
-const approvalPolicyOptions: DropdownSelectOption[] = [
-  { value: 'default', label: 'Default' },
-  { value: 'interrupt', label: 'Interrupt' },
-  { value: 'autoApprove', label: 'Auto approve' },
-]
+function approvalPolicyOptions(): DropdownSelectOption[] {
+  return [
+    { value: 'default', label: i18n.t('settings:agents.approvalPolicyOptions.default') },
+    { value: 'interrupt', label: i18n.t('settings:agents.approvalPolicyOptions.interrupt') },
+    { value: 'autoApprove', label: i18n.t('settings:agents.approvalPolicyOptions.autoApprove') },
+  ]
+}
 
-const deliveryPolicyOptions: DropdownSelectOption[] = [
-  { value: 'manualDelivery', label: 'Manual delivery' },
-  { value: 'autoPr', label: 'Auto PR' },
-]
+function deliveryPolicyOptions(): DropdownSelectOption[] {
+  return [
+    { value: 'manualDelivery', label: i18n.t('settings:worktree.automation.deliveryLabelManual') },
+    { value: 'autoPr', label: i18n.t('settings:worktree.automation.deliveryLabelAutoPr') },
+  ]
+}
 
 const sourceProviderOptions: DropdownSelectOption[] = [
   { value: 'github', label: 'GitHub' },
@@ -67,22 +75,30 @@ const sourceProviderOptions: DropdownSelectOption[] = [
 const sourceSyncScheduleDefaultIntervalSeconds = 300
 const sourceSyncScheduleMinSeconds = 60
 const sourceSyncScheduleMaxSeconds = 86400
-const sourceSyncSchedulePresets: DropdownSelectOption[] = [
-  { value: '60', label: '1 min' },
-  { value: '300', label: '5 min' },
-  { value: '900', label: '15 min' },
-  { value: '1800', label: '30 min' },
-  { value: '3600', label: '1 hr' },
-  { value: '86400', label: '24 hr' },
-  { value: 'custom', label: 'Custom' },
-]
+function sourceSyncSchedulePresets(): DropdownSelectOption[] {
+  return [
+    { value: '60', label: '1 min' },
+    { value: '300', label: '5 min' },
+    { value: '900', label: '15 min' },
+    { value: '1800', label: '30 min' },
+    { value: '3600', label: '1 hr' },
+    { value: '86400', label: '24 hr' },
+    { value: 'custom', label: i18n.t('settings:sources.schedule.custom') },
+  ]
+}
 
 const windowCloseBehaviorOptions = [
   { value: 'minimizeToTray', label: 'Minimize to tray' },
   { value: 'quitApp', label: 'Quit app' },
 ]
 
-const concurrencyControlLabels = ['Global concurrency', 'Per repository concurrency', 'Per source concurrency']
+function concurrencyControlLabels(): string[] {
+  return [
+    i18n.t('settings:worktree.concurrencyLabels.global'),
+    i18n.t('settings:worktree.concurrencyLabels.perRepository'),
+    i18n.t('settings:worktree.concurrencyLabels.perSource'),
+  ]
+}
 const autosaveDebounceMs = 250
 
 type ConfigSaveState = 'idle' | 'saving' | 'saved' | 'failed'
@@ -398,6 +414,8 @@ export function SettingsView({
 }: SettingsViewProps) {
   const { section } = useParams()
   const navigate = useNavigate()
+  const { t, i18n: i18nInstance } = useTranslation('settings')
+  const currentLocale: AppLocale = (supportedLocales.some((locale) => locale.value === i18nInstance.language) ? i18nInstance.language : 'en') as AppLocale
   const activeSection = normalizeSettingsSection(section)
   const [diagnostics, setDiagnostics] = useState<SettingsDiagnosticsResponse | null>(null)
   const [serverConfig, setServerConfig] = useState<ServerConfigurationResponse | null>(null)
@@ -446,7 +464,7 @@ export function SettingsView({
       setConfigDraft(null)
       serverConfigRef.current = null
       configDraftRef.current = null
-      setConfigError(reason instanceof Error ? reason.message : 'Server configuration is unavailable.')
+      setConfigError(reason instanceof Error ? reason.message : t('notices.serverConfigUnavailable'))
     }
   }, [])
 
@@ -456,7 +474,7 @@ export function SettingsView({
       setWorkspaceInventory(await apiGet<DotCraftWorkspacesResponse>('/dotcraft/workspaces'))
     } catch (reason) {
       setWorkspaceInventory(null)
-      setWorkspaceError(reason instanceof Error ? reason.message : 'Workspace inventory is unavailable.')
+      setWorkspaceError(reason instanceof Error ? reason.message : t('notices.workspaceInventoryUnavailable'))
     }
   }, [])
 
@@ -587,7 +605,7 @@ export function SettingsView({
       }
     } catch (reason) {
       setConfigSaveState('failed')
-      setConfigError(reason instanceof Error ? reason.message : 'Server configuration save failed.')
+      setConfigError(reason instanceof Error ? reason.message : t('notices.serverConfigSaveFailed'))
       return
     } finally {
       saveInFlightRef.current = false
@@ -663,7 +681,7 @@ export function SettingsView({
       scheduleSavedStateReset()
     } catch (reason) {
       setConfigSaveState('failed')
-      setConfigError(reason instanceof Error ? reason.message : 'GitHub installation detection failed.')
+      setConfigError(reason instanceof Error ? reason.message : t('notices.githubInstallationDetectionFailed'))
     } finally {
       saveInFlightRef.current = false
     }
@@ -681,7 +699,7 @@ export function SettingsView({
         onSelect(selected)
       }
     } catch (reason) {
-      setConfigError(reason instanceof Error ? reason.message : 'Could not select workspace folder.')
+      setConfigError(reason instanceof Error ? reason.message : t('notices.selectWorkspaceFailed'))
     }
   }
 
@@ -700,21 +718,21 @@ export function SettingsView({
   const diagnosticsDotcraft = diagnostics?.dotCraft
   const diagnosticsGitHub = diagnostics?.gitHub ?? diagnostics?.github
   const diagnosticsGitLab = diagnostics?.gitLab
-  const dotcraftEndpoint = diagnosticsDotcraft?.endpoint || formatEndpoint(dotcraftStatus.endpoint) || 'No endpoint configured.'
+  const dotcraftEndpoint = diagnosticsDotcraft?.endpoint || formatEndpoint(dotcraftStatus.endpoint) || t('agents.bridge.noEndpoint')
   const dotcraftEndpointSource = diagnosticsDotcraft?.endpointSource ?? dotcraftStatus.endpointSource ?? 'configuration'
   const dotcraftApprovalPolicy = diagnosticsDotcraft?.approvalPolicy ?? dotcraftStatus.approvalPolicy
   const dotcraftRunTimeoutSeconds = diagnosticsDotcraft?.runTimeoutSeconds ?? dotcraftStatus.runTimeoutSeconds
   const dotcraftHubDiscoveryEnabled = diagnosticsDotcraft?.hubDiscoveryEnabled ?? configDraft?.dotCraft.hubDiscoveryEnabled ?? false
-  const githubAuthenticationLabel = diagnosticsGitHub?.authentication ? authLabel(diagnosticsGitHub.authentication) : githubStatus.configured ? 'Configured' : 'None'
+  const githubAuthenticationLabel = diagnosticsGitHub?.authentication ? authLabel(diagnosticsGitHub.authentication) : githubStatus.configured ? t('credentials.authLabel.configured') : t('credentials.authLabel.none')
   const gitLabConfig = normalizeGitLabConfig(configDraft?.gitLab)
   const persistedGitLabConfig = normalizeGitLabConfig(serverConfig?.configuration.gitLab)
   const gitLabEndpointHostChanged = sourceInstance('gitlab', persistedGitLabConfig.endpoint) !== sourceInstance('gitlab', gitLabConfig.endpoint)
   const gitLabEndpointDescription = gitLabEndpointHostChanged && persistedGitLabConfig.projectProfiles.length > 0
-    ? 'Changing host clears GitLab project profiles on save; new profiles are required after restart.'
-    : 'GitLab instance URL.'
+    ? t('credentials.gitlab.endpointHostChange')
+    : t('credentials.gitlab.endpointDefault')
   const gitLabTokenConfiguredCount = gitLabConfig.projectProfiles.filter((profile) => normalizeGitLabSecrets(profile.secrets).token.configured).length
-  const gitLabAuthenticationLabel = diagnosticsGitLab?.authentication ? authLabel(diagnosticsGitLab.authentication) : gitLabTokenConfiguredCount ? gitLabTokenConfiguredCount === gitLabConfig.projects.length ? 'Token' : 'Partial' : 'None'
-  const gitLabWebhookLabel = diagnosticsGitLab?.webhookVerificationMode ? gitLabWebhookModeLabel(diagnosticsGitLab.webhookVerificationMode) : 'None'
+  const gitLabAuthenticationLabel = diagnosticsGitLab?.authentication ? authLabel(diagnosticsGitLab.authentication) : gitLabTokenConfiguredCount ? gitLabTokenConfiguredCount === gitLabConfig.projects.length ? t('credentials.authLabel.token') : t('credentials.authLabel.partial') : t('credentials.authLabel.none')
+  const gitLabWebhookLabel = diagnosticsGitLab?.webhookVerificationMode ? gitLabWebhookModeLabel(diagnosticsGitLab.webhookVerificationMode) : t('credentials.webhookMode.none')
   const providerCards = useMemo(
     () => buildSourceProviderCards(sourceProviders, githubStatus, gitLabConfig, diagnosticsGitLab),
     [sourceProviders, githubStatus, gitLabConfig, diagnosticsGitLab],
@@ -742,17 +760,17 @@ export function SettingsView({
   )
   const hasGitLabProject = providerCards.some((provider) => provider.provider === 'gitlab' && provider.configured) ||
     projectCards.some((card) => card.provider === 'gitlab')
-  const deliveryLabel = hasGitLabProject ? 'Auto PR/MR' : 'Auto PR'
+  const deliveryLabel = hasGitLabProject ? t('worktree.automation.deliveryLabelAutoPrMr') : t('worktree.automation.deliveryLabelAutoPr')
   const deliveryDescription = hasGitLabProject
-    ? 'Default delivery policy for auto-dispatched implementation items. Auto delivery creates a GitHub PR or GitLab MR from the origin project.'
-    : 'Default delivery policy for auto-dispatched implementation items.'
-  const sourceProjectPlaceholder = newProjectProvider === 'gitlab' ? 'group/project or group/subgroup/project' : 'owner/name'
-  const sourceProjectEmptyLabel = providerCards.length ? 'No source projects configured.' : 'No source providers configured.'
+    ? t('worktree.automation.deliveryWithGitlab')
+    : t('worktree.automation.deliveryDefault')
+  const sourceProjectPlaceholder = newProjectProvider === 'gitlab' ? t('projects.gitlabPlaceholder') : t('projects.githubPlaceholder')
+  const sourceProjectEmptyLabel = providerCards.length ? t('projects.emptyNoProjects') : t('projects.emptyNoProviders')
   const providerCountCopy = providerCards.length
-    ? `${providerCards.filter((provider) => provider.configured).length}/${providerCards.length} providers configured`
-    : 'No source providers configured.'
+    ? t('sources.providerCount', { configured: providerCards.filter((provider) => provider.configured).length, total: providerCards.length })
+    : t('sources.noProviders')
   const routeStatusTone = projectCards.length ? 'ok' : providerCards.length ? 'warn' : 'muted'
-  const routeStatusLabel = projectCards.length ? `${projectCards.length} projects` : providerCards.length ? 'No projects' : 'No providers'
+  const routeStatusLabel = projectCards.length ? t('projects.routeStatusProjects', { count: projectCards.length }) : providerCards.length ? t('projects.routeStatusNoProjects') : t('projects.routeStatusNoProviders')
   const syncSource = syncSourceProvider ?? (async (provider: string, mode: SourceSyncMode = 'incremental') => {
     if (provider === 'github') {
       await (mode === 'full' ? syncGitHubFullRepair() : syncGitHubSource())
@@ -773,7 +791,7 @@ export function SettingsView({
     try {
       await updateSourceSyncSchedule(provider, request)
     } catch (reason) {
-      setConfigError(reason instanceof Error ? reason.message : 'Scheduled sync settings could not be saved.')
+      setConfigError(reason instanceof Error ? reason.message : t('notices.scheduleSaveFailed'))
     } finally {
       setScheduleSavingProvider(null)
     }
@@ -782,29 +800,29 @@ export function SettingsView({
   const goToProjects = () => navigate('/settings/projects')
   const addProjectDisabled = !serverConfig?.writable || !newProjectPath.trim()
   const implementationAutoDispatchDescription = hasGitLabProject
-    ? 'Starts eligible GitHub/GitLab issues and local tasks when allow/block labels permit it.'
-    : 'Starts eligible GitHub issues and local tasks when allow/block labels permit it.'
+    ? t('worktree.automation.autoDispatchWithGitlab')
+    : t('worktree.automation.autoDispatchDefault')
   const reviewPolicyDescription = hasGitLabProject
-    ? 'Project-level PR/MR review triggers and draft publication policy.'
-    : 'Repository-level PR review triggers and draft publication policy.'
+    ? t('review.group.descriptionWithGitlab')
+    : t('review.group.descriptionDefault')
   const publishAllowlistDescription = hasGitLabProject
-    ? 'Publishes valid Review Drafts through the provider-specific route for selected projects.'
-    : 'Publishes valid Review Drafts as GitHub COMMENT reviews only.'
+    ? t('review.publishWithGitlab')
+    : t('review.publishDefault')
   const autoReviewAllowlistDescription = hasGitLabProject
-    ? 'Automatically queues read-only PR/MR reviews for enabled projects.'
-    : 'Automatically queues read-only PR reviews for enabled repositories.'
-  const allowlistEmptyLabel = hasGitLabProject ? 'No projects included.' : 'No repositories included.'
+    ? t('review.autoReviewWithGitlab')
+    : t('review.autoReviewDefault')
+  const allowlistEmptyLabel = hasGitLabProject ? t('review.emptyWithGitlab') : t('review.emptyDefault')
   const allowlistManageDisabled = !serverConfig?.writable || configuredProjects.length === 0
-  const reviewTargetTerm = hasGitLabProject ? 'PR/MR' : 'PR'
-  const publishRouteTerm = hasGitLabProject ? 'provider review routes' : 'GitHub COMMENT reviews'
-  const reviewSourceSupports = hasGitLabProject ? 'GitHub PRs and GitLab MRs support head-SHA re-review.' : 'GitHub PRs support head-SHA re-review.'
+  const reviewTargetTerm = hasGitLabProject ? t('review.term.prmr') : t('review.term.pr')
+  const publishRouteTerm = hasGitLabProject ? t('review.term.providerRoutes') : t('review.term.githubComment')
+  const reviewSourceSupports = hasGitLabProject ? t('review.reviewSupportsWithGitlab') : t('review.reviewSupportsDefault')
   const sourceWriteFailureSummary = diagnosticsGitLab?.recentSourceWriteFailures?.[0] ?? diagnosticsGitLab?.recentSyncFailures?.[0] ?? null
-  const diagnosticsGitLabWriteLabel = (diagnosticsGitLab?.writeConfigured ?? gitLabTokenConfiguredCount > 0) ? gitLabTokenConfiguredCount && gitLabTokenConfiguredCount < gitLabConfig.projects.length ? 'Partial' : 'Configured' : 'Missing token'
+  const diagnosticsGitLabWriteLabel = (diagnosticsGitLab?.writeConfigured ?? gitLabTokenConfiguredCount > 0) ? gitLabTokenConfiguredCount && gitLabTokenConfiguredCount < gitLabConfig.projects.length ? t('credentials.gitlabWriteLabel.partial') : t('credentials.gitlabWriteLabel.configured') : t('credentials.gitlabWriteLabel.missingToken')
 
   const shouldShowStartServer = !dotcraftStatus.connected || Boolean(workspaceInventory?.workspaces?.some((workspace) => !workspace.connected))
   const bridgeActions = shouldShowStartServer ? (
     <button className="secondary-button inline compact-row-action settings-action-button" type="button" disabled={isStartingAppServer} onClick={() => void startAndRefreshDotCraftAppServer()}>
-      {isStartingAppServer ? 'Starting...' : 'Start server'}
+      {isStartingAppServer ? t('agents.bridge.starting') : t('agents.bridge.startServer')}
     </button>
   ) : null
 
@@ -894,16 +912,16 @@ export function SettingsView({
   }
 
   return (
-      <section className="settings-page" aria-label="Settings" ref={settingsPageRef}>
+      <section className="settings-page" aria-label={t('pageTitle')} ref={settingsPageRef}>
         <div className="settings-content">
           <header className="settings-page-header">
             <div>
-              <h1>{settingsSections.find((item) => item.id === activeSection)?.label ?? 'Settings'}</h1>
+              <h1>{t(`sections.${activeSection}.label`)}</h1>
               <p>{activeSectionCopy(activeSection)}</p>
             </div>
             <span className="settings-page-header-actions">
               <SettingsAutosaveStatus saveState={configSaveState} onRetry={retryServerConfigurationAutosave} />
-              <ActionIcon className="icon-button settings-refresh-action" label={isRefreshing ? 'Refreshing settings' : 'Refresh settings'} title={isRefreshing ? 'Refreshing settings' : 'Refresh settings'} onClick={() => void refreshSettings()} disabled={isRefreshing}>
+              <ActionIcon className="icon-button settings-refresh-action" label={isRefreshing ? t('refreshing') : t('refresh')} title={isRefreshing ? t('refreshing') : t('refresh')} onClick={() => void refreshSettings()} disabled={isRefreshing}>
                 <RefreshCw size={15} />
               </ActionIcon>
             </span>
@@ -911,29 +929,41 @@ export function SettingsView({
           {configError ? <SettingsNotice tone="error">{configError}</SettingsNotice> : null}
           {activeSection === 'general' ? (
             <div className="settings-stack">
-              <SettingsGroup title="Appearance" description="Browser-local preferences for this console.">
+              <SettingsGroup title={t('appearance.title')} description={t('appearance.description')}>
                 <SettingsRow
                   icon={SunMoon}
-                  label="Theme"
-                  description="Stored in this browser and applied immediately."
+                  label={t('theme.label')}
+                  description={t('theme.description')}
                   control={
                     <SegmentedControl
                       value={theme}
                       options={[
-                        { value: 'dark', label: 'Dark' },
-                        { value: 'light', label: 'Light' },
+                        { value: 'dark', label: t('theme.dark') },
+                        { value: 'light', label: t('theme.light') },
                       ]}
                       onChange={(value) => setTheme(value as ThemeMode)}
                     />
                   }
                 />
+                <SettingsRow
+                  icon={Languages}
+                  label={t('language.label')}
+                  description={t('language.description')}
+                  control={
+                    <SegmentedControl
+                      value={currentLocale}
+                      options={supportedLocales.map((locale) => ({ value: locale.value, label: locale.label }))}
+                      onChange={(value) => changeLocale(value as AppLocale)}
+                    />
+                  }
+                />
               </SettingsGroup>
               {canConfigureWindowBehavior ? (
-                <SettingsGroup title="Desktop" description="Window and tray preferences for this device.">
+                <SettingsGroup title={t('desktop.title')} description={t('desktop.description')}>
                   <SettingsRow
                     icon={Settings}
-                    label="Window behavior"
-                    description="Choose what the close button does."
+                    label={t('windowBehavior.label')}
+                    description={t('windowBehavior.description')}
                     control={
                       <SegmentedControl
                         value={windowCloseBehavior}
@@ -949,7 +979,7 @@ export function SettingsView({
 
           {activeSection === 'sources' ? (
             <div className="settings-stack">
-              <SettingsGroup title="Source providers" description={providerCountCopy}>
+              <SettingsGroup title={t('sources.groupTitle')} description={providerCountCopy}>
                 <div className="source-provider-card-list">
                   {providerCards.length ? providerCards.map((provider) => (
                     <SourceProviderCard
@@ -970,7 +1000,7 @@ export function SettingsView({
                   )) : (
                     <div className="empty-settings-card">
                       <GitPullRequest size={16} />
-                      <span>No source providers configured.</span>
+                      <span>{t('sources.noProviders')}</span>
                     </div>
                   )}
                 </div>
@@ -981,8 +1011,8 @@ export function SettingsView({
 
           {activeSection === 'projects' ? (
             <div className="settings-stack">
-              <SettingsGroup title="Project routing" description={serverConfig?.writable ? `Overlay: ${serverConfig.overlayPath}` : serverConfig?.disabledReason ?? 'Server configuration is read-only.'}>
-                <SettingsRow icon={GitPullRequest} label="Source projects" description="Map GitHub repositories and GitLab projects to DotCraft workspaces." control={<StatusPill tone={routeStatusTone} label={routeStatusLabel} />} />
+              <SettingsGroup title={t('projects.groupTitle')} description={serverConfig?.writable ? t('common.overlay', { path: serverConfig.overlayPath }) : serverConfig?.disabledReason ?? t('common.readOnly')}>
+                <SettingsRow icon={GitPullRequest} label={t('projects.sourceProjects')} description={t('projects.sourceProjectsDescription')} control={<StatusPill tone={routeStatusTone} label={routeStatusLabel} />} />
                 <div className="repository-card-list">
                   {projectCards.length ? projectCards.map((card, index) => (
                     <ProjectRouteCard
@@ -1016,11 +1046,11 @@ export function SettingsView({
                   />
                 ) : null}
                 <div className="repository-add-row">
-                  <SelectControl label="Source provider" value={newProjectProvider} disabled={!serverConfig?.writable} options={sourceProviderOptions} onChange={(value) => setNewProjectProvider(value as SourceProviderId)} />
+                  <SelectControl label={t('projects.sourceProvider')} value={newProjectProvider} disabled={!serverConfig?.writable} options={sourceProviderOptions} onChange={(value) => setNewProjectProvider(value as SourceProviderId)} />
                   <TextControl placeholder={sourceProjectPlaceholder} value={newProjectPath} disabled={!serverConfig?.writable} onChange={setNewProjectPath} commitOnBlur={false} />
                   <WorkspacePathControl
                     value={newWorkspacePath}
-                    placeholder="DotCraft workspace path"
+                    placeholder={t('projects.workspacePlaceholder')}
                     disabled={!serverConfig?.writable}
                     canBrowse={Boolean(window.oratorioDesktop?.selectDirectory)}
                     onChange={setNewWorkspacePath}
@@ -1029,7 +1059,7 @@ export function SettingsView({
                   />
                   <button className="secondary-button inline compact-row-action settings-action-button" disabled={addProjectDisabled} onClick={addProjectCard}>
                     <Plus size={14} />
-                    Add
+                    {t('projects.add')}
                   </button>
                 </div>
                 {workspaceError ? <SettingsNotice tone="error">{workspaceError}</SettingsNotice> : null}
@@ -1039,79 +1069,79 @@ export function SettingsView({
 
           {activeSection === 'credentials' ? (
             <div className="settings-stack">
-              <SettingsGroup title="GitHub credentials" description="Secrets are submitted once and never echoed back.">
-                <SettingsRow icon={Code2} label="Endpoint" description="GitHub API base URL." control={<TextControl value={configDraft?.gitHub.endpoint ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateGitHubConfig({ endpoint: value }, 'immediate')} />} />
-                <SettingsRow icon={KeyRound} label="App ID" description="GitHub App identifier." control={<TextControl value={configDraft?.gitHub.appId ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateGitHubConfig({ appId: emptyToNull(value) }, 'immediate')} />} />
-                <SettingsRow icon={ShieldCheck} label="Authentication" description="Resolved credential shape; values are redacted." control={<ValuePill>{githubAuthenticationLabel}</ValuePill>} />
-                <SettingsRow icon={CheckCircle2} label="GitHub writes" description="Issue comments, PR reviews, check runs, and Auto PR delivery." control={<button className="toggle-button" aria-pressed={configDraft?.gitHub.writesEnabled ?? false} disabled={!serverConfig?.writable} onClick={() => updateGitHubConfig({ writesEnabled: !(configDraft?.gitHub.writesEnabled ?? false) })}>{configDraft?.gitHub.writesEnabled ? 'On' : 'Off'}</button>} />
-                <SecretSettingsRow icon={KeyRound} label="Token" field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).token} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('token', next)} />
-                <SecretSettingsRow icon={KeyRound} label="Private key" multiline field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKey} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('privateKey', next)} />
-                <SecretSettingsRow icon={KeyRound} label="Private key path" field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKeyPath} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('privateKeyPath', next)} />
-                <SecretSettingsRow icon={KeyRound} label="Webhook secret" field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).webhookSecret} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('webhookSecret', next)} />
+              <SettingsGroup title={t('credentials.github.title')} description={t('credentials.github.description')}>
+                <SettingsRow icon={Code2} label={t('credentials.github.endpoint')} description={t('credentials.github.endpointDescription')} control={<TextControl value={configDraft?.gitHub.endpoint ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateGitHubConfig({ endpoint: value }, 'immediate')} />} />
+                <SettingsRow icon={KeyRound} label={t('credentials.github.appId')} description={t('credentials.github.appIdDescription')} control={<TextControl value={configDraft?.gitHub.appId ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateGitHubConfig({ appId: emptyToNull(value) }, 'immediate')} />} />
+                <SettingsRow icon={ShieldCheck} label={t('credentials.github.authentication')} description={t('credentials.github.authenticationDescription')} control={<ValuePill>{githubAuthenticationLabel}</ValuePill>} />
+                <SettingsRow icon={CheckCircle2} label={t('credentials.github.writes')} description={t('credentials.github.writesDescription')} control={<button className="toggle-button" aria-pressed={configDraft?.gitHub.writesEnabled ?? false} disabled={!serverConfig?.writable} onClick={() => updateGitHubConfig({ writesEnabled: !(configDraft?.gitHub.writesEnabled ?? false) })}>{configDraft?.gitHub.writesEnabled ? t('common.on') : t('common.off')}</button>} />
+                <SecretSettingsRow icon={KeyRound} label={t('credentials.github.token')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).token} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('token', next)} />
+                <SecretSettingsRow icon={KeyRound} label={t('credentials.github.privateKey')} multiline field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKey} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('privateKey', next)} />
+                <SecretSettingsRow icon={KeyRound} label={t('credentials.github.privateKeyPath')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKeyPath} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('privateKeyPath', next)} />
+                <SecretSettingsRow icon={KeyRound} label={t('credentials.github.webhookSecret')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).webhookSecret} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('webhookSecret', next)} />
               </SettingsGroup>
-              <SettingsGroup title="GitLab" description="Token-based import, review publication, and merge request delivery.">
-                <SettingsRow icon={CheckCircle2} label="GitLab read sync" description="Controls GitLab issue and MR import." control={<button className="toggle-button" aria-pressed={gitLabConfig.enabled} disabled={!serverConfig?.writable} onClick={() => updateGitLabConfig({ enabled: !gitLabConfig.enabled })}>{gitLabConfig.enabled ? 'On' : 'Off'}</button>} />
-                <SettingsRow icon={GitPullRequest} label="GitLab writes" description="Issue notes, MR notes, discussions, commit status, and MR delivery." control={<button className="toggle-button" aria-pressed={gitLabConfig.writesEnabled} disabled={!serverConfig?.writable} onClick={() => updateGitLabConfig({ writesEnabled: !gitLabConfig.writesEnabled })}>{gitLabConfig.writesEnabled ? 'On' : 'Off'}</button>} />
-                <SettingsRow icon={Code2} label="Endpoint" description={gitLabEndpointDescription} control={<TextControl value={gitLabConfig.endpoint} disabled={!serverConfig?.writable} onChange={(value) => updateGitLabConfig({ endpoint: value }, 'immediate')} />} />
-                <SettingsRow icon={ShieldCheck} label="Authentication" description="Resolved token presence; values are redacted." control={<ValuePill>{gitLabAuthenticationLabel}</ValuePill>} />
-                <SettingsRow icon={ShieldCheck} label="Write credentials" description="GitLab writes happen as the configured token identity." control={<ValuePill>{diagnosticsGitLabWriteLabel}</ValuePill>} />
-                <SettingsRow icon={ShieldCheck} label="Webhook verification" description="Signing tokens are preferred; secret tokens remain supported." control={<ValuePill>{gitLabWebhookLabel}</ValuePill>} />
-                <SettingsRow icon={ShieldCheck} label="Local webhook bypass" description="Only for local development receivers." control={<button className="toggle-button" aria-pressed={gitLabConfig.allowLocalDevelopmentUnsafeWebhooks} disabled={!serverConfig?.writable} onClick={() => updateGitLabConfig({ allowLocalDevelopmentUnsafeWebhooks: !gitLabConfig.allowLocalDevelopmentUnsafeWebhooks })}>{gitLabConfig.allowLocalDevelopmentUnsafeWebhooks ? 'On' : 'Off'}</button>} />
+              <SettingsGroup title={t('credentials.gitlab.title')} description={t('credentials.gitlab.description')}>
+                <SettingsRow icon={CheckCircle2} label={t('credentials.gitlab.readSync')} description={t('credentials.gitlab.readSyncDescription')} control={<button className="toggle-button" aria-pressed={gitLabConfig.enabled} disabled={!serverConfig?.writable} onClick={() => updateGitLabConfig({ enabled: !gitLabConfig.enabled })}>{gitLabConfig.enabled ? t('common.on') : t('common.off')}</button>} />
+                <SettingsRow icon={GitPullRequest} label={t('credentials.gitlab.writes')} description={t('credentials.gitlab.writesDescription')} control={<button className="toggle-button" aria-pressed={gitLabConfig.writesEnabled} disabled={!serverConfig?.writable} onClick={() => updateGitLabConfig({ writesEnabled: !gitLabConfig.writesEnabled })}>{gitLabConfig.writesEnabled ? t('common.on') : t('common.off')}</button>} />
+                <SettingsRow icon={Code2} label={t('credentials.gitlab.endpoint')} description={gitLabEndpointDescription} control={<TextControl value={gitLabConfig.endpoint} disabled={!serverConfig?.writable} onChange={(value) => updateGitLabConfig({ endpoint: value }, 'immediate')} />} />
+                <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.authentication')} description={t('credentials.gitlab.authenticationDescription')} control={<ValuePill>{gitLabAuthenticationLabel}</ValuePill>} />
+                <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.writeCredentials')} description={t('credentials.gitlab.writeCredentialsDescription')} control={<ValuePill>{diagnosticsGitLabWriteLabel}</ValuePill>} />
+                <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.webhookVerification')} description={t('credentials.gitlab.webhookVerificationDescription')} control={<ValuePill>{gitLabWebhookLabel}</ValuePill>} />
+                <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.localBypass')} description={t('credentials.gitlab.localBypassDescription')} control={<button className="toggle-button" aria-pressed={gitLabConfig.allowLocalDevelopmentUnsafeWebhooks} disabled={!serverConfig?.writable} onClick={() => updateGitLabConfig({ allowLocalDevelopmentUnsafeWebhooks: !gitLabConfig.allowLocalDevelopmentUnsafeWebhooks })}>{gitLabConfig.allowLocalDevelopmentUnsafeWebhooks ? t('common.on') : t('common.off')}</button>} />
               </SettingsGroup>
             </div>
           ) : null}
 
           {activeSection === 'agents' ? (
             <div className="settings-stack">
-              <SettingsGroup title="DotCraft bridge" description={dotcraftStatus.message ?? 'DotCraft bridge status.'} headerAction={bridgeActions}>
+              <SettingsGroup title={t('agents.bridge.title')} description={dotcraftStatus.message ?? t('agents.bridge.defaultMessage')} headerAction={bridgeActions}>
                 <SettingsRow
                   icon={Code2}
-                  label="Health"
-                  description="Current AppServer reachability."
+                  label={t('agents.bridge.health')}
+                  description={t('agents.bridge.healthDescription')}
                   control={<StatusPill tone={dotcraftStatus.connected ? 'ok' : dotcraftStatus.configured ? 'warn' : 'muted'} label={healthLabel(dotcraftStatus.health)} />}
                 />
-                <SettingsRow icon={Code2} label="Endpoint" description={dotcraftEndpoint} control={<ValuePill>{dotcraftEndpointSource}</ValuePill>} />
-                <SettingsRow icon={ShieldCheck} label="Approval policy" description="Prompt guard policy used for AppServer runs." control={<ValuePill>{dotcraftApprovalPolicy}</ValuePill>} />
-                <SettingsRow icon={Activity} label="Run timeout" description="Maximum AppServer run duration." control={<ValuePill>{formatSecondsDuration(dotcraftRunTimeoutSeconds)}</ValuePill>} />
-                <SettingsRow icon={GitPullRequest} label="Hub discovery" description="Whether Oratorio may discover AppServer endpoints through Hub." control={<StatusPill tone={dotcraftHubDiscoveryEnabled ? 'ok' : 'muted'} label={dotcraftHubDiscoveryEnabled ? 'Enabled' : 'Disabled'} />} />
+                <SettingsRow icon={Code2} label={t('agents.bridge.endpoint')} description={dotcraftEndpoint} control={<ValuePill>{dotcraftEndpointSource}</ValuePill>} />
+                <SettingsRow icon={ShieldCheck} label={t('agents.bridge.approvalPolicy')} description={t('agents.bridge.approvalPolicyDescription')} control={<ValuePill>{dotcraftApprovalPolicy}</ValuePill>} />
+                <SettingsRow icon={Activity} label={t('agents.bridge.runTimeout')} description={t('agents.bridge.runTimeoutDescription')} control={<ValuePill>{formatSecondsDuration(dotcraftRunTimeoutSeconds)}</ValuePill>} />
+                <SettingsRow icon={GitPullRequest} label={t('agents.bridge.hubDiscovery')} description={t('agents.bridge.hubDiscoveryDescription')} control={<StatusPill tone={dotcraftHubDiscoveryEnabled ? 'ok' : 'muted'} label={dotcraftHubDiscoveryEnabled ? t('agents.bridge.enabled') : t('agents.bridge.disabled')} />} />
               </SettingsGroup>
-              <SettingsGroup title="Agent connection" description={serverConfig?.writable ? 'Changes apply after Oratorio server restart.' : serverConfig?.disabledReason ?? 'Server configuration is read-only.'}>
-                <SettingsRow icon={Code2} label="AppServer URL" description="Absolute ws or wss endpoint used when Hub discovery is unavailable." control={<TextControl value={configDraft?.dotCraft.appServerUrl ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateDotCraftConfig({ appServerUrl: value }, 'immediate')} />} />
-                <SettingsRow icon={GitPullRequest} label="Hub discovery" description="Allows Oratorio to discover AppServer endpoints through DotCraft Hub." control={<button className="toggle-button" aria-pressed={configDraft?.dotCraft.hubDiscoveryEnabled ?? false} disabled={!serverConfig?.writable} onClick={() => updateDotCraftConfig({ hubDiscoveryEnabled: !(configDraft?.dotCraft.hubDiscoveryEnabled ?? false) })}>{configDraft?.dotCraft.hubDiscoveryEnabled ? 'On' : 'Off'}</button>} />
-                <SettingsRow icon={Code2} label="Hub lock path" description="Optional absolute path to DotCraft Hub workspace lock data." control={<TextControl value={configDraft?.dotCraft.hubLockPath ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateDotCraftConfig({ hubLockPath: value }, 'immediate')} />} />
-                <SettingsRow icon={ShieldCheck} label="Approval policy" description="Prompt guard policy for new DotCraft threads." control={<SelectControl label="Approval policy" value={configDraft?.dotCraft.approvalPolicy ?? 'interrupt'} disabled={!serverConfig?.writable} options={approvalPolicyOptions} onChange={(value) => updateDotCraftConfig({ approvalPolicy: value })} />} />
-                <SettingsRow icon={Activity} label="Run timeout" description="Maximum AppServer run duration." control={<DurationControl label="Run timeout" value={configDraft?.dotCraft.runTimeoutSeconds ?? DEFAULT_RUN_TIMEOUT_SECONDS} disabled={!serverConfig?.writable} min={30} max={7200} units={secondsDurationUnits} onChange={(value) => updateDotCraftConfig({ runTimeoutSeconds: value })} />} />
+              <SettingsGroup title={t('agents.connection.title')} description={serverConfig?.writable ? t('agents.connection.restartDescription') : serverConfig?.disabledReason ?? t('common.readOnly')}>
+                <SettingsRow icon={Code2} label={t('agents.connection.appServerUrl')} description={t('agents.connection.appServerUrlDescription')} control={<TextControl value={configDraft?.dotCraft.appServerUrl ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateDotCraftConfig({ appServerUrl: value }, 'immediate')} />} />
+                <SettingsRow icon={GitPullRequest} label={t('agents.connection.hubDiscovery')} description={t('agents.connection.hubDiscoveryDescription')} control={<button className="toggle-button" aria-pressed={configDraft?.dotCraft.hubDiscoveryEnabled ?? false} disabled={!serverConfig?.writable} onClick={() => updateDotCraftConfig({ hubDiscoveryEnabled: !(configDraft?.dotCraft.hubDiscoveryEnabled ?? false) })}>{configDraft?.dotCraft.hubDiscoveryEnabled ? t('common.on') : t('common.off')}</button>} />
+                <SettingsRow icon={Code2} label={t('agents.connection.hubLockPath')} description={t('agents.connection.hubLockPathDescription')} control={<TextControl value={configDraft?.dotCraft.hubLockPath ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateDotCraftConfig({ hubLockPath: value }, 'immediate')} />} />
+                <SettingsRow icon={ShieldCheck} label={t('agents.connection.approvalPolicy')} description={t('agents.connection.approvalPolicyDescription')} control={<SelectControl label={t('agents.connection.approvalPolicy')} value={configDraft?.dotCraft.approvalPolicy ?? 'interrupt'} disabled={!serverConfig?.writable} options={approvalPolicyOptions()} onChange={(value) => updateDotCraftConfig({ approvalPolicy: value })} />} />
+                <SettingsRow icon={Activity} label={t('agents.connection.runTimeout')} description={t('agents.connection.runTimeoutDescription')} control={<DurationControl label={t('worktree.stepperLabels.runTimeout')} value={configDraft?.dotCraft.runTimeoutSeconds ?? DEFAULT_RUN_TIMEOUT_SECONDS} disabled={!serverConfig?.writable} min={30} max={7200} units={secondsDurationUnits()} onChange={(value) => updateDotCraftConfig({ runTimeoutSeconds: value })} />} />
               </SettingsGroup>
             </div>
           ) : null}
 
           {activeSection === 'worktree' ? (
             <div className="settings-stack">
-              <SettingsGroup title="Worktrees and scheduling" description={serverConfig?.writable ? 'Changes affect new scheduling and worktree cleanup decisions after restart.' : serverConfig?.disabledReason ?? 'Server configuration is read-only.'}>
-                <SettingsRow icon={ShieldCheck} label="Managed worktrees" description="Prepare DotCraft runs in Oratorio-managed worktrees." control={<button className="toggle-button" aria-pressed={configDraft?.runtime.managedWorktreesEnabled ?? false} disabled={!serverConfig?.writable} onClick={() => updateRuntimeConfig({ managedWorktreesEnabled: !(configDraft?.runtime.managedWorktreesEnabled ?? false) })}>{configDraft?.runtime.managedWorktreesEnabled ? 'On' : 'Off'}</button>} />
-                <SettingsRow icon={Code2} label="Worktree root" description="Absolute root path, or blank for each workspace default." control={<TextControl value={configDraft?.runtime.worktreeRoot ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateRuntimeConfig({ worktreeRoot: value }, 'immediate')} />} />
-                <SettingsRow icon={GitPullRequest} label="Branch prefix" description="Namespace for generated worktree branches." control={<TextControl value={configDraft?.runtime.worktreeBranchPrefix ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateRuntimeConfig({ worktreeBranchPrefix: value }, 'immediate')} />} />
-                <SettingsRow icon={Activity} label="Concurrency" description="Global, per repository, and per source active run limits." control={<NumberTripleControl values={[configDraft?.runtime.globalMaxActiveRuns ?? 1, configDraft?.runtime.maxActiveRunsPerRepository ?? 1, configDraft?.runtime.maxActiveRunsPerSource ?? 1]} disabled={!serverConfig?.writable} onChange={([globalMaxActiveRuns, maxActiveRunsPerRepository, maxActiveRunsPerSource]) => updateRuntimeConfig({ globalMaxActiveRuns, maxActiveRunsPerRepository, maxActiveRunsPerSource })} />} />
-                <SettingsRow icon={RefreshCw} label="Retries" description="Attempts plus initial and maximum backoff." control={<RetryPolicyControl attempts={configDraft?.runtime.maxRunAttempts ?? 1} initialBackoffSeconds={configDraft?.runtime.retryBackoffSeconds ?? 1} maxBackoffSeconds={configDraft?.runtime.maxRetryBackoffSeconds ?? 1} disabled={!serverConfig?.writable} onChange={(maxRunAttempts, retryBackoffSeconds, maxRetryBackoffSeconds) => updateRuntimeConfig({ maxRunAttempts, retryBackoffSeconds, maxRetryBackoffSeconds })} />} />
-                <SettingsRow icon={Activity} label="Stall timeout" description="How long a silent active run can continue before being treated as stalled." control={<DurationControl label="Stall timeout" value={configDraft?.runtime.stallTimeoutSeconds ?? 300} disabled={!serverConfig?.writable} min={5} max={7200} units={secondsDurationUnits} onChange={(value) => updateRuntimeConfig({ stallTimeoutSeconds: value })} />} />
-                <SettingsRow icon={RotateCcw} label="Retention" description="How long successful and failed worktrees are kept." control={<RetentionControl succeededHours={configDraft?.runtime.succeededWorktreeRetentionHours ?? 24} failedHours={configDraft?.runtime.failedWorktreeRetentionHours ?? 168} disabled={!serverConfig?.writable} onChange={(succeededWorktreeRetentionHours, failedWorktreeRetentionHours) => updateRuntimeConfig({ succeededWorktreeRetentionHours, failedWorktreeRetentionHours })} />} />
-                <SettingsRow icon={RotateCcw} label="Cleanup worker" description="Enable cleanup and set the worker interval." control={<CleanupControl enabled={configDraft?.runtime.worktreeCleanupEnabled ?? false} interval={configDraft?.runtime.worktreeCleanupIntervalSeconds ?? 60} disabled={!serverConfig?.writable} onChange={(worktreeCleanupEnabled, worktreeCleanupIntervalSeconds) => updateRuntimeConfig({ worktreeCleanupEnabled, worktreeCleanupIntervalSeconds })} />} />
+              <SettingsGroup title={t('worktree.group.title')} description={serverConfig?.writable ? t('worktree.group.restartDescription') : serverConfig?.disabledReason ?? t('common.readOnly')}>
+                <SettingsRow icon={ShieldCheck} label={t('worktree.managedWorktrees')} description={t('worktree.managedWorktreesDescription')} control={<button className="toggle-button" aria-pressed={configDraft?.runtime.managedWorktreesEnabled ?? false} disabled={!serverConfig?.writable} onClick={() => updateRuntimeConfig({ managedWorktreesEnabled: !(configDraft?.runtime.managedWorktreesEnabled ?? false) })}>{configDraft?.runtime.managedWorktreesEnabled ? t('common.on') : t('common.off')}</button>} />
+                <SettingsRow icon={Code2} label={t('worktree.worktreeRoot')} description={t('worktree.worktreeRootDescription')} control={<TextControl value={configDraft?.runtime.worktreeRoot ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateRuntimeConfig({ worktreeRoot: value }, 'immediate')} />} />
+                <SettingsRow icon={GitPullRequest} label={t('worktree.branchPrefix')} description={t('worktree.branchPrefixDescription')} control={<TextControl value={configDraft?.runtime.worktreeBranchPrefix ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateRuntimeConfig({ worktreeBranchPrefix: value }, 'immediate')} />} />
+                <SettingsRow icon={Activity} label={t('worktree.concurrency')} description={t('worktree.concurrencyDescription')} control={<NumberTripleControl values={[configDraft?.runtime.globalMaxActiveRuns ?? 1, configDraft?.runtime.maxActiveRunsPerRepository ?? 1, configDraft?.runtime.maxActiveRunsPerSource ?? 1]} disabled={!serverConfig?.writable} onChange={([globalMaxActiveRuns, maxActiveRunsPerRepository, maxActiveRunsPerSource]) => updateRuntimeConfig({ globalMaxActiveRuns, maxActiveRunsPerRepository, maxActiveRunsPerSource })} />} />
+                <SettingsRow icon={RefreshCw} label={t('worktree.retries')} description={t('worktree.retriesDescription')} control={<RetryPolicyControl attempts={configDraft?.runtime.maxRunAttempts ?? 1} initialBackoffSeconds={configDraft?.runtime.retryBackoffSeconds ?? 1} maxBackoffSeconds={configDraft?.runtime.maxRetryBackoffSeconds ?? 1} disabled={!serverConfig?.writable} onChange={(maxRunAttempts, retryBackoffSeconds, maxRetryBackoffSeconds) => updateRuntimeConfig({ maxRunAttempts, retryBackoffSeconds, maxRetryBackoffSeconds })} />} />
+                <SettingsRow icon={Activity} label={t('worktree.stallTimeout')} description={t('worktree.stallTimeoutDescription')} control={<DurationControl label={t('worktree.stepperLabels.stallTimeout')} value={configDraft?.runtime.stallTimeoutSeconds ?? 300} disabled={!serverConfig?.writable} min={5} max={7200} units={secondsDurationUnits()} onChange={(value) => updateRuntimeConfig({ stallTimeoutSeconds: value })} />} />
+                <SettingsRow icon={RotateCcw} label={t('worktree.retention')} description={t('worktree.retentionDescription')} control={<RetentionControl succeededHours={configDraft?.runtime.succeededWorktreeRetentionHours ?? 24} failedHours={configDraft?.runtime.failedWorktreeRetentionHours ?? 168} disabled={!serverConfig?.writable} onChange={(succeededWorktreeRetentionHours, failedWorktreeRetentionHours) => updateRuntimeConfig({ succeededWorktreeRetentionHours, failedWorktreeRetentionHours })} />} />
+                <SettingsRow icon={RotateCcw} label={t('worktree.cleanupWorker')} description={t('worktree.cleanupWorkerDescription')} control={<CleanupControl enabled={configDraft?.runtime.worktreeCleanupEnabled ?? false} interval={configDraft?.runtime.worktreeCleanupIntervalSeconds ?? 60} disabled={!serverConfig?.writable} onChange={(worktreeCleanupEnabled, worktreeCleanupIntervalSeconds) => updateRuntimeConfig({ worktreeCleanupEnabled, worktreeCleanupIntervalSeconds })} />} />
               </SettingsGroup>
-              <SettingsGroup title="Automation policy" description="Implementation auto-dispatch and delivery defaults.">
-                <SettingsRow icon={Activity} label="Implementation auto-dispatch" description={implementationAutoDispatchDescription} control={<button className="toggle-button" aria-pressed={configDraft?.automation.autoDispatchEnabled ?? false} disabled={!serverConfig?.writable} onClick={() => updateAutomationConfig({ autoDispatchEnabled: !(configDraft?.automation.autoDispatchEnabled ?? false) })}>{configDraft?.automation.autoDispatchEnabled ? 'On' : 'Off'}</button>} />
-                <SettingsRow icon={GitPullRequest} label="Auto-dispatch allow labels" description="Empty means every unblocked eligible item may run." control={<LabelListControl labels={configDraft?.automation.autoDispatchAllowLabels ?? []} disabled={!serverConfig?.writable} placeholder="Add allow label" emptyLabel="All unblocked items" ariaLabel="Auto-dispatch allow labels" onChange={(labels) => updateAutomationConfig({ autoDispatchAllowLabels: labels })} />} />
-                <SettingsRow icon={ShieldCheck} label="Auto-dispatch block labels" description="Any matching label prevents implementation auto-dispatch." control={<LabelListControl labels={configDraft?.automation.autoDispatchBlockLabels ?? []} disabled={!serverConfig?.writable} placeholder="Add block label" emptyLabel="No block labels" ariaLabel="Auto-dispatch block labels" onChange={(labels) => updateAutomationConfig({ autoDispatchBlockLabels: labels })} />} />
-                <SettingsRow icon={Activity} label="Implementation turns" description="Maximum continuation turns before an implementation run finishes without a draft." control={<NumberControl label="Implementation turns" value={configDraft?.automation.maxImplementationTurns ?? 3} disabled={!serverConfig?.writable} min={1} max={10} onChange={(value) => updateAutomationConfig({ maxImplementationTurns: value })} />} />
-                <SettingsRow icon={ShieldCheck} label="Implementation delivery" description={deliveryDescription} control={<SelectControl label="Implementation delivery" value={configDraft?.automation.deliveryPolicy ?? 'manualDelivery'} disabled={!serverConfig?.writable} options={deliveryPolicyOptions.map((option) => option.value === 'autoPr' ? { ...option, label: deliveryLabel } : option)} onChange={(value) => updateAutomationConfig({ deliveryPolicy: value as DeliveryPolicy })} />} />
+              <SettingsGroup title={t('worktree.automation.title')} description={t('worktree.automation.description')}>
+                <SettingsRow icon={Activity} label={t('worktree.automation.autoDispatch')} description={implementationAutoDispatchDescription} control={<button className="toggle-button" aria-pressed={configDraft?.automation.autoDispatchEnabled ?? false} disabled={!serverConfig?.writable} onClick={() => updateAutomationConfig({ autoDispatchEnabled: !(configDraft?.automation.autoDispatchEnabled ?? false) })}>{configDraft?.automation.autoDispatchEnabled ? t('common.on') : t('common.off')}</button>} />
+                <SettingsRow icon={GitPullRequest} label={t('worktree.automation.allowLabels')} description={t('worktree.automation.allowLabelsDescription')} control={<LabelListControl labels={configDraft?.automation.autoDispatchAllowLabels ?? []} disabled={!serverConfig?.writable} placeholder={t('worktree.automation.addAllowLabel')} emptyLabel={t('worktree.automation.allUnblockedItems')} ariaLabel={t('worktree.automation.allowLabels')} onChange={(labels) => updateAutomationConfig({ autoDispatchAllowLabels: labels })} />} />
+                <SettingsRow icon={ShieldCheck} label={t('worktree.automation.blockLabels')} description={t('worktree.automation.blockLabelsDescription')} control={<LabelListControl labels={configDraft?.automation.autoDispatchBlockLabels ?? []} disabled={!serverConfig?.writable} placeholder={t('worktree.automation.addBlockLabel')} emptyLabel={t('worktree.automation.noBlockLabels')} ariaLabel={t('worktree.automation.blockLabels')} onChange={(labels) => updateAutomationConfig({ autoDispatchBlockLabels: labels })} />} />
+                <SettingsRow icon={Activity} label={t('worktree.automation.implementationTurns')} description={t('worktree.automation.implementationTurnsDescription')} control={<NumberControl label={t('worktree.automation.implementationTurns')} value={configDraft?.automation.maxImplementationTurns ?? 3} disabled={!serverConfig?.writable} min={1} max={10} onChange={(value) => updateAutomationConfig({ maxImplementationTurns: value })} />} />
+                <SettingsRow icon={ShieldCheck} label={t('worktree.automation.delivery')} description={deliveryDescription} control={<SelectControl label={t('worktree.automation.delivery')} value={configDraft?.automation.deliveryPolicy ?? 'manualDelivery'} disabled={!serverConfig?.writable} options={deliveryPolicyOptions().map((option) => option.value === 'autoPr' ? { ...option, label: deliveryLabel } : option)} onChange={(value) => updateAutomationConfig({ deliveryPolicy: value as DeliveryPolicy })} />} />
               </SettingsGroup>
             </div>
           ) : null}
 
           {activeSection === 'review' ? (
             <div className="settings-stack">
-              <SettingsGroup title="Automatic review" description={reviewPolicyDescription}>
+              <SettingsGroup title={t('review.group.title')} description={reviewPolicyDescription}>
                 <RepositoryAllowlistCard
-                  title={hasGitLabProject ? 'Project allowlist' : 'Repository allowlist'}
+                  title={hasGitLabProject ? t('review.projectAllowlist') : t('review.repositoryAllowlist')}
                   description={`${autoReviewAllowlistDescription} ${reviewSourceSupports}`}
                   repositories={configDraft?.automation.autoReviewRepositories ?? []}
                   disabled={!serverConfig?.writable}
@@ -1121,7 +1151,7 @@ export function SettingsView({
                   onRemove={(repository) => updateAutoReviewRepositories(removeRepository(configDraft?.automation.autoReviewRepositories ?? [], repository))}
                 />
                 <RepositoryAllowlistCard
-                  title="Publish allowlist"
+                  title={t('review.publishAllowlist')}
                   description={publishAllowlistDescription}
                   repositories={effectiveAutoReviewPublishRepositories(configDraft?.automation)}
                   disabled={!serverConfig?.writable}
@@ -1224,21 +1254,22 @@ function SourceProviderCard({
   onConfigure: () => void
   onRouteProjects: () => void
 }) {
+  const { t } = useTranslation('settings')
   const active = isActiveSourceSyncJob(job)
   const failedRuns = job?.projects.filter((run) => run.status === 'failed') ?? []
   const canSync = provider.readCapability.available && !active && !isStarting && !pendingRestart
   const stateTone = provider.configured ? 'ok' : provider.readCapability.available ? 'warn' : 'muted'
-  const stateLabel = provider.configured ? 'Configured' : provider.readCapability.available ? 'Ready' : 'Needs setup'
-  const endpoint = formatEndpoint(provider.endpoint) || 'No endpoint configured.'
+  const stateLabel = provider.configured ? t('sources.card.stateConfigured') : provider.readCapability.available ? t('sources.card.stateReady') : t('sources.card.stateNeedsSetup')
+  const endpoint = formatEndpoint(provider.endpoint) || t('sources.card.noEndpoint')
   const latestFailure = provider.recentSourceWriteFailures?.[0] ?? provider.recentSyncFailures?.[0] ?? job?.errorMessage ?? provider.diagnostic ?? null
   const providerLabel = provider.provider === 'gitlab' ? 'GitLab' : provider.provider === 'github' ? 'GitHub' : provider.displayName
-  const projectTerm = provider.provider === 'gitlab' ? 'projects' : 'repositories'
-  const reviewTargetTerm = provider.provider === 'gitlab' ? 'MRs' : 'PRs'
+  const projectTerm = provider.provider === 'gitlab' ? t('sources.card.termProjects') : t('sources.card.termRepositories')
+  const reviewTargetTerm = provider.provider === 'gitlab' ? t('sources.card.reviewMRs') : t('sources.card.reviewPRs')
   const writeLabel = provider.writeCapability.available
-    ? 'Writes ready'
+    ? t('sources.card.writesReady')
     : provider.writeCapability.state === 'disabled'
-      ? 'Writes off'
-      : provider.writeCapability.reason ?? 'Writes unavailable'
+      ? t('sources.card.writesOff')
+      : provider.writeCapability.reason ?? t('sources.card.writesUnavailable')
 
   return (
     <section className="source-provider-card">
@@ -1252,15 +1283,15 @@ function SourceProviderCard({
         </span>
         <StatusPill tone={stateTone} label={stateLabel} />
       </header>
-      <div className="source-provider-capabilities" role="list" aria-label={`${providerLabel} capabilities`}>
-        <CapabilityPill label="Read" capability={provider.readCapability} />
-        <CapabilityPill label="Write" capability={provider.writeCapability} fallback={writeLabel} />
-        <CapabilityPill label="Webhook" capability={provider.webhookCapability} />
+      <div className="source-provider-capabilities" role="list" aria-label={t('sources.card.capabilities', { provider: providerLabel })}>
+        <CapabilityPill label={t('sources.card.read')} capability={provider.readCapability} />
+        <CapabilityPill label={t('sources.card.write')} capability={provider.writeCapability} fallback={writeLabel} />
+        <CapabilityPill label={t('sources.card.webhook')} capability={provider.webhookCapability} />
       </div>
       <div className="source-provider-meta">
-        <span>{provider.configuredProjectCount} configured {projectTerm}</span>
-        <span>{provider.lastSyncAt ? `Last sync ${relativeTime(provider.lastSyncAt)}` : 'No sync yet'}</span>
-        <span>{reviewTargetTerm} use head-SHA re-review when available</span>
+        <span>{t('sources.card.configuredProjects', { count: provider.configuredProjectCount, term: projectTerm })}</span>
+        <span>{provider.lastSyncAt ? t('sources.card.lastSync', { time: relativeTime(provider.lastSyncAt) }) : t('sources.card.noSyncYet')}</span>
+        <span>{t('sources.card.headShaReReview', { term: reviewTargetTerm })}</span>
       </div>
       <SourceSyncSchedulePanel
         provider={provider}
@@ -1278,21 +1309,21 @@ function SourceProviderCard({
       {latestFailure ? <SettingsNotice tone="error">{latestFailure}</SettingsNotice> : null}
       <footer className="source-provider-actions">
         <button className="secondary-button inline compact-row-action settings-action-button" type="button" onClick={onConfigure}>
-          Configure
+          {t('sources.card.configure')}
         </button>
         <button className="secondary-button inline compact-row-action settings-action-button" type="button" onClick={onRouteProjects}>
-          Route projects
+          {t('sources.card.routeProjects')}
         </button>
         {failedRuns.length > 0 ? (
           <button className="secondary-button inline compact-row-action settings-action-button" type="button" disabled={active || isStarting} onClick={() => onRetryFailed(failedRuns.map((run) => run.sourceProjectKey || run.projectPath))}>
-            Sync failed
+            {t('sources.card.syncFailed')}
           </button>
         ) : null}
         <button className="secondary-button inline compact-row-action settings-action-button" type="button" onClick={onFullRepair} disabled={active || isStarting || !provider.configured}>
-          Full repair
+          {t('sources.card.fullRepair')}
         </button>
         <button className="primary-button inline compact-row-action settings-action-button" type="button" onClick={onSync} disabled={!canSync}>
-          {isStarting ? 'Starting' : active ? 'Syncing' : 'Sync now'}
+          {isStarting ? t('sources.card.starting') : active ? t('sources.card.syncing') : t('sources.card.syncNow')}
         </button>
       </footer>
     </section>
@@ -1300,8 +1331,9 @@ function SourceProviderCard({
 }
 
 function CapabilityPill({ label, capability, fallback }: { label: string; capability: SourceProviderStatus['readCapability']; fallback?: string }) {
+  const { t } = useTranslation('settings')
   const tone = capability.available ? 'ok' : capability.state === 'disabled' || capability.state === 'unconfigured' ? 'muted' : 'warn'
-  const text = capability.available ? `${label} ready` : fallback ?? capability.reason ?? `${label} unavailable`
+  const text = capability.available ? t('sources.card.capabilityReady', { label }) : fallback ?? capability.reason ?? t('sources.card.capabilityUnavailable', { label })
   return <StatusPill tone={tone} label={text} />
 }
 
@@ -1316,25 +1348,26 @@ function SourceSyncSchedulePanel({
   saving: boolean
   onChange: (request: SourceSyncScheduleUpdateRequest) => void
 }) {
+  const { t } = useTranslation('settings')
   const intervalSeconds = schedule?.intervalSeconds ?? sourceSyncScheduleDefaultIntervalSeconds
   const enabled = schedule?.enabled ?? false
   const readAvailable = schedule?.readAvailable ?? provider.readCapability.available
-  const disabledReason = schedule?.disabledReason ?? provider.readCapability.reason ?? 'Configure read sync before enabling scheduled sync.'
+  const disabledReason = schedule?.disabledReason ?? provider.readCapability.reason ?? t('sources.schedule.defaultDisabledReason')
   const controlsDisabled = saving || !readAvailable
   const summary = !readAvailable
     ? disabledReason
     : enabled
-      ? `Every ${formatScheduleInterval(intervalSeconds)} · ${formatScheduleNextRun(schedule?.nextRunAt)}`
-      : `Off · interval ${formatScheduleInterval(intervalSeconds)}`
+      ? t('sources.schedule.every', { interval: formatScheduleInterval(intervalSeconds), nextRun: formatScheduleNextRun(schedule?.nextRunAt) })
+      : t('sources.schedule.offInterval', { interval: formatScheduleInterval(intervalSeconds) })
   const failure = schedule?.lastErrorMessage ?? null
 
   return (
-    <section className="settings-row source-schedule-panel" aria-label={`${provider.displayName} scheduled sync`}>
+    <section className="settings-row source-schedule-panel" aria-label={t('sources.schedule.ariaLabel', { provider: provider.displayName })}>
       <span className="settings-row-icon source-schedule-icon">
         <Clock size={15} />
       </span>
       <span className="settings-row-copy source-schedule-copy">
-        <strong>Scheduled sync</strong>
+        <strong>{t('sources.schedule.scheduledSync')}</strong>
         <small>{summary}</small>
         {failure ? <small className="github-sync-error">{failure}</small> : null}
       </span>
@@ -1352,7 +1385,7 @@ function SourceSyncSchedulePanel({
           title={!readAvailable ? disabledReason : undefined}
           onClick={() => onChange({ enabled: !enabled, intervalSeconds })}
         >
-          {saving ? 'Saving' : enabled ? 'On' : 'Off'}
+          {saving ? t('sources.schedule.saving') : enabled ? t('sources.schedule.on') : t('sources.schedule.off')}
         </button>
       </span>
     </section>
@@ -1368,7 +1401,8 @@ function ScheduleIntervalControl({
   disabled: boolean
   onChange: (intervalSeconds: number) => void
 }) {
-  const preset = sourceSyncSchedulePresets.find((option) => option.value === String(intervalSeconds))
+  const { t } = useTranslation('settings')
+  const preset = sourceSyncSchedulePresets().find((option) => option.value === String(intervalSeconds))
   const [customMode, setCustomMode] = useState(!preset)
   useEffect(() => {
     if (preset) {
@@ -1382,10 +1416,10 @@ function ScheduleIntervalControl({
   return (
     <span className="source-schedule-interval">
       <SelectControl
-        label="Scheduled sync interval"
+        label={t('sources.schedule.interval')}
         value={selected}
         disabled={disabled}
-        options={sourceSyncSchedulePresets}
+        options={sourceSyncSchedulePresets()}
         onChange={(value) => {
           if (value === 'custom') {
             setCustomMode(true)
@@ -1399,14 +1433,14 @@ function ScheduleIntervalControl({
       {selected === 'custom' ? (
         <span className="source-schedule-custom">
           <NumberControl
-            label="Custom scheduled sync interval in minutes"
+            label={t('sources.schedule.customInterval')}
             value={customMinutes}
             disabled={disabled}
             min={Math.ceil(sourceSyncScheduleMinSeconds / 60)}
             max={Math.floor(sourceSyncScheduleMaxSeconds / 60)}
             onChange={(minutes) => onChange(minutes * 60)}
           />
-          <small>min</small>
+          <small>{t('sources.schedule.minutesAbbrev')}</small>
         </span>
       ) : null}
     </span>
@@ -1426,20 +1460,21 @@ function SourceSyncPanel({
   job: SourceSyncJob | null
   pendingRestart: boolean
 }) {
+  const { t } = useTranslation('settings')
   const projectRuns = job?.projects ?? []
   const completed = job ? `${job.projectsCompleted}/${job.projectsTotal}` : '0/0'
   const summary = job
-    ? `${completed} ${projectTerm} · ${job.issuesImported} issues · ${job.reviewTargetsImported} ${reviewTargetTerm} · ${job.commentsImported} comments`
-    : 'No active sync.'
+    ? t('sources.syncPanel.summary', { completed, term: projectTerm, issues: job.issuesImported, reviewTargets: job.reviewTargetsImported, reviewTerm: reviewTargetTerm, comments: job.commentsImported })
+    : t('sources.syncPanel.noActiveSync')
   return (
-    <section className="settings-row github-sync-panel source-sync-panel" aria-label={`${providerLabel(provider)} sync progress`}>
+    <section className="settings-row github-sync-panel source-sync-panel" aria-label={t('sources.syncPanel.scanProgress', { provider: providerLabel(provider) })}>
       <span className="settings-row-icon github-sync-icon">
         {sourceSyncStatusIcon(job)}
       </span>
       <span className="settings-row-copy github-sync-copy">
-        <strong>{job ? sourceSyncJobStatusLabel(job.status) : 'Sync idle'}</strong>
+        <strong>{job ? sourceSyncJobStatusLabel(job.status) : t('sources.syncPanel.idle')}</strong>
         <small>{summary}</small>
-        {pendingRestart ? <small className="github-sync-warning">Saved source changes need a restart before Sync now can use them.</small> : null}
+        {pendingRestart ? <small className="github-sync-warning">{t('sources.syncPanel.pendingRestart')}</small> : null}
       </span>
       {projectRuns.length ? (
         <div className="github-sync-repository-list">
@@ -1453,7 +1488,8 @@ function SourceSyncPanel({
 }
 
 function SourceSyncProjectRow({ run, reviewTargetTerm }: { run: SourceSyncProjectRun; reviewTargetTerm: string }) {
-  const phase = run.completedAt ? `${sourceProjectPhaseLabel(run)} · completed ${relativeTime(run.completedAt)}` : sourceProjectPhaseLabel(run)
+  const { t } = useTranslation('settings')
+  const phase = run.completedAt ? t('sources.phase.completedAt', { phase: sourceProjectPhaseLabel(run), time: relativeTime(run.completedAt) }) : sourceProjectPhaseLabel(run)
   return (
     <div className={`github-sync-repository-row ${run.status}`}>
       <span className="github-sync-repository-name">
@@ -1464,7 +1500,7 @@ function SourceSyncProjectRow({ run, reviewTargetTerm }: { run: SourceSyncProjec
         </span>
       </span>
       <span className="github-sync-counts">
-        {run.issuesImported} issues · {run.reviewTargetsImported} {reviewTargetTerm} · {run.commentsImported} comments
+        {t('sources.syncPanel.rowCounts', { issues: run.issuesImported, reviewTargets: run.reviewTargetsImported, reviewTerm: reviewTargetTerm, comments: run.commentsImported })}
       </span>
       {run.errorMessage ? <small className="github-sync-error">{run.errorMessage}</small> : null}
     </div>
@@ -1523,21 +1559,22 @@ function ProjectRouteCard({
   onBrowseWorkspace: () => void
   onRemove: () => void
 }) {
+  const { t } = useTranslation('settings')
   const providerName = providerLabel(card.provider)
-  const projectPlaceholder = card.provider === 'gitlab' ? 'group/project or group/subgroup/project' : 'owner/name'
+  const projectPlaceholder = card.provider === 'gitlab' ? t('projects.gitlabPlaceholder') : t('projects.githubPlaceholder')
   const gitLabStatus = gitLabProfile ? gitLabProfileStatus(gitLabProfile, sourceProject) : null
   return (
     <div className="repository-card">
       <header className="repository-card-header">
         <span>
-          <strong>{card.projectPath || `New ${providerName} project`}</strong>
-          <small>{card.canonicalKey || 'Canonical source id will appear after a project path is set.'}</small>
+          <strong>{card.projectPath || t('projects.card.newProject', { provider: providerName })}</strong>
+          <small>{card.canonicalKey || t('projects.card.canonicalHint')}</small>
         </span>
         <span className="settings-actions">
           {gitLabStatus ? <StatusPill tone={gitLabStatus.tone} label={gitLabStatus.label} /> : null}
-          {card.workspace ? <StatusPill tone={workspaceTone(card.workspace)} label={healthLabel(card.workspace.health)} /> : <StatusPill tone="muted" label="Not probed" />}
-          <Tooltip content="Remove project">
-            <button className="icon-button repository-remove-button" type="button" aria-label={`Remove ${card.projectPath || 'project'}`} disabled={disabled} onClick={onRemove}>
+          {card.workspace ? <StatusPill tone={workspaceTone(card.workspace)} label={healthLabel(card.workspace.health)} /> : <StatusPill tone="muted" label={t('projects.card.notProbed')} />}
+          <Tooltip content={t('projects.card.removeProject')}>
+            <button className="icon-button repository-remove-button" type="button" aria-label={t('projects.card.removeNamed', { name: card.projectPath || t('projects.card.removeFallback') })} disabled={disabled} onClick={onRemove}>
               <Trash2 size={14} />
             </button>
           </Tooltip>
@@ -1545,27 +1582,27 @@ function ProjectRouteCard({
       </header>
       <div className="repository-card-fields">
         <label>
-          <span>Provider</span>
-          <SelectControl label="Project provider" value={card.provider} disabled={disabled} options={sourceProviderOptions} onChange={(value) => onProviderChange(value as SourceProviderId)} />
+          <span>{t('projects.card.provider')}</span>
+          <SelectControl label={t('projects.card.providerLabel')} value={card.provider} disabled={disabled} options={sourceProviderOptions} onChange={(value) => onProviderChange(value as SourceProviderId)} />
         </label>
         <label>
-          <span>{card.provider === 'gitlab' ? 'GitLab project' : 'GitHub repository'}</span>
+          <span>{card.provider === 'gitlab' ? t('projects.card.gitlabProject') : t('projects.card.githubRepository')}</span>
           <TextControl value={card.projectPath} placeholder={projectPlaceholder} disabled={disabled} onChange={onProjectPathChange} />
         </label>
         <label>
-          <span>DotCraft workspace</span>
-          <WorkspacePathControl value={card.workspacePath} placeholder="Absolute workspace path" disabled={disabled} canBrowse={canBrowseWorkspace} onChange={onWorkspacePathChange} onBrowse={onBrowseWorkspace} />
+          <span>{t('projects.card.dotcraftWorkspace')}</span>
+          <WorkspacePathControl value={card.workspacePath} placeholder={t('projects.card.workspaceAbsolute')} disabled={disabled} canBrowse={canBrowseWorkspace} onChange={onWorkspacePathChange} onBrowse={onBrowseWorkspace} />
         </label>
       </div>
       {card.provider === 'gitlab' && gitLabProfile ? (
-        <div className="gitlab-project-profile-fields" aria-label={`GitLab profile for ${card.projectPath}`}>
+        <div className="gitlab-project-profile-fields" aria-label={t('projects.card.gitlabProfile', { name: card.projectPath })}>
           <label>
-            <span>Token kind</span>
-            <TextControl value={gitLabProfile.tokenKind} placeholder="accessToken" disabled={disabled} onChange={onGitLabProfileTokenKindChange} />
+            <span>{t('projects.card.tokenKind')}</span>
+            <TextControl value={gitLabProfile.tokenKind} placeholder={t('projects.card.tokenKindPlaceholder')} disabled={disabled} onChange={onGitLabProfileTokenKindChange} />
           </label>
-          <ProjectSecretField label="GitLab token" field={gitLabProfile.secrets.token} disabled={disabled} onChange={(next) => onGitLabProfileSecretChange('token', next)} />
-          <ProjectSecretField label="Webhook secret" field={gitLabProfile.secrets.webhookSecret} disabled={disabled} onChange={(next) => onGitLabProfileSecretChange('webhookSecret', next)} />
-          <ProjectSecretField label="Signing token" field={gitLabProfile.secrets.webhookSigningToken} disabled={disabled} onChange={(next) => onGitLabProfileSecretChange('webhookSigningToken', next)} />
+          <ProjectSecretField label={t('projects.card.gitlabToken')} field={gitLabProfile.secrets.token} disabled={disabled} onChange={(next) => onGitLabProfileSecretChange('token', next)} />
+          <ProjectSecretField label={t('projects.card.webhookSecret')} field={gitLabProfile.secrets.webhookSecret} disabled={disabled} onChange={(next) => onGitLabProfileSecretChange('webhookSecret', next)} />
+          <ProjectSecretField label={t('projects.card.signingToken')} field={gitLabProfile.secrets.webhookSigningToken} disabled={disabled} onChange={(next) => onGitLabProfileSecretChange('webhookSigningToken', next)} />
         </div>
       ) : null}
     </div>
@@ -1583,15 +1620,16 @@ function GitHubInstallationProfileList({
   onChange: (instance: string, owner: string, installationId: string) => void
   onDetect: () => void
 }) {
+  const { t } = useTranslation('settings')
   return (
-    <div className="github-installation-profile-list" aria-label="GitHub installation profiles">
+    <div className="github-installation-profile-list" aria-label={t('projects.installations.ariaLabel')}>
       <header className="github-installation-profile-list-header">
         <span>
-          <strong>GitHub installation profiles</strong>
-          <small>Profiles are shared by repositories under the same GitHub owner.</small>
+          <strong>{t('projects.installations.title')}</strong>
+          <small>{t('projects.installations.description')}</small>
         </span>
-        <Tooltip content="Detect missing installations">
-          <button className="icon-button repository-remove-button" type="button" aria-label="Detect GitHub installations" disabled={disabled} onClick={onDetect}>
+        <Tooltip content={t('projects.installations.detectTooltip')}>
+          <button className="icon-button repository-remove-button" type="button" aria-label={t('projects.installations.detectAria')} disabled={disabled} onClick={onDetect}>
             <RefreshCw size={14} />
           </button>
         </Tooltip>
@@ -1603,12 +1641,12 @@ function GitHubInstallationProfileList({
             <div className="github-installation-profile-row" key={profileKey(row.instance, row.owner)}>
               <span className="github-installation-profile-copy">
                 <strong>{row.owner}</strong>
-                <small>{row.instance} · {row.repositories.length} {row.repositories.length === 1 ? 'repository' : 'repositories'}</small>
+                <small>{t('projects.installations.meta', { instance: row.instance, count: row.repositories.length, repositoryTerm: row.repositories.length === 1 ? t('projects.installations.repositorySingular') : t('projects.installations.repositoryPlural') })}</small>
                 {row.warning ? <small className="github-installation-profile-warning">{row.warning.message}</small> : null}
               </span>
               <TextControl
                 value={row.installationId}
-                placeholder="Installation ID"
+                placeholder={t('projects.installations.installationId')}
                 disabled={disabled}
                 onChange={(value) => onChange(row.instance, row.owner, value)}
               />
@@ -1632,6 +1670,7 @@ function ProjectSecretField({
   disabled: boolean
   onChange: (next: Partial<SecretConfigurationField>) => void
 }) {
+  const { t } = useTranslation('settings')
   const mode = field.mode ?? 'unchanged'
   const [revealed, setRevealed] = useState(false)
   const incomingDraftValue = mode === 'replace' ? field.value ?? '' : ''
@@ -1653,18 +1692,19 @@ function ProjectSecretField({
     lastCommittedRef.current = draftValue
     onChange(draftValue.length > 0 ? { mode: 'replace', value: draftValue } : { mode: 'unchanged', value: null })
   }
+  const toggleLabel = revealed ? t('common.hide', { label }) : t('common.show', { label })
 
   return (
     <label className="gitlab-project-secret-field">
       <span>{label}</span>
       <span className="secret-input-shell">
         <input
-          aria-label={`${label} value`}
+          aria-label={t('credentials.secret.value', { label })}
           className="settings-input secret-value"
           type={revealed ? 'text' : 'password'}
           value={draftValue}
           disabled={disabled}
-          placeholder={field.configured ? 'Configured' : 'Empty'}
+          placeholder={field.configured ? t('credentials.secret.configuredPlaceholder') : t('credentials.secret.emptyPlaceholder')}
           onFocus={() => setFocused(true)}
           onChange={(event) => setDraftValue(event.target.value)}
           onBlur={() => {
@@ -1679,11 +1719,11 @@ function ProjectSecretField({
             }
           }}
         />
-        <Tooltip content={`${revealed ? 'Hide' : 'Show'} ${label}`}>
+        <Tooltip content={toggleLabel}>
           <button
             className="icon-button secret-visibility-button"
             type="button"
-            aria-label={`${revealed ? 'Hide' : 'Show'} ${label}`}
+            aria-label={toggleLabel}
             disabled={disabled}
             onClick={() => setRevealed((current) => !current)}
           >
@@ -1712,15 +1752,16 @@ function WorkspacePathControl({
   onChange: (value: string) => void
   onBrowse: () => void
 }) {
+  const { t } = useTranslation('settings')
   const browseDisabled = disabled || !canBrowse
   return (
     <span className="workspace-path-control">
       <TextControl value={value} placeholder={placeholder} disabled={disabled} onChange={onChange} commitOnBlur={commitOnBlur} />
-      <Tooltip content={canBrowse ? 'Choose workspace folder' : 'Folder picker is available in the desktop app'}>
+      <Tooltip content={canBrowse ? t('projects.workspacePicker.available') : t('projects.workspacePicker.unavailable')}>
         <button
           className="icon-button workspace-browse-button"
           type="button"
-          aria-label="Choose workspace folder"
+          aria-label={t('projects.workspacePicker.choose')}
           disabled={browseDisabled}
           onClick={onBrowse}
         >
@@ -1746,6 +1787,7 @@ function SecretSettingsRow({
   multiline?: boolean
   onChange: (next: Partial<SecretConfigurationField>) => void
 }) {
+  const { t } = useTranslation('settings')
   const mode = field.mode ?? 'unchanged'
   const [revealed, setRevealed] = useState(false)
   const incomingDraftValue = mode === 'replace' ? field.value ?? '' : ''
@@ -1762,12 +1804,14 @@ function SecretSettingsRow({
 
   const hasDraftValue = draftValue.length > 0
   const description = hasDraftValue
-    ? 'New value will be encrypted automatically.'
+    ? t('credentials.secret.newValue')
     : field.configured
-      ? 'Configured. Enter a new value to replace it.'
-      : 'Empty. Enter a value to configure it.'
+      ? t('credentials.secret.configured')
+      : t('credentials.secret.empty')
   const inputId = `settings-secret-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
-  const toggleLabel = `${revealed ? 'Hide' : 'Show'} ${label}`
+  const toggleLabel = revealed ? t('common.hide', { label }) : t('common.show', { label })
+  const valueLabel = t('credentials.secret.value', { label })
+  const placeholderText = field.configured ? t('credentials.secret.configuredPlaceholder') : t('credentials.secret.emptyPlaceholder')
   const commitDraft = () => {
     if (draftValue === lastCommittedRef.current) {
       return
@@ -1787,12 +1831,12 @@ function SecretSettingsRow({
             {multiline ? (
               <textarea
                 id={inputId}
-                aria-label={`${label} value`}
+                aria-label={valueLabel}
                 className={`settings-textarea secret-value${revealed ? '' : ' masked'}`}
                 value={draftValue}
                 disabled={disabled}
                 rows={3}
-                placeholder={field.configured ? 'Configured' : 'Empty'}
+                placeholder={placeholderText}
                 spellCheck={false}
                 onFocus={() => setFocused(true)}
                 onChange={(event) => setDraftValue(event.target.value)}
@@ -1811,12 +1855,12 @@ function SecretSettingsRow({
             ) : (
               <input
                 id={inputId}
-                aria-label={`${label} value`}
+                aria-label={valueLabel}
                 className="settings-input secret-value"
                 type={revealed ? 'text' : 'password'}
                 value={draftValue}
                 disabled={disabled}
-                placeholder={field.configured ? 'Configured' : 'Empty'}
+                placeholder={placeholderText}
                 onFocus={() => setFocused(true)}
                 onChange={(event) => setDraftValue(event.target.value)}
                 onBlur={() => {
@@ -1869,6 +1913,7 @@ function RepositoryAllowlistCard({
   onManage: () => void
   onRemove: (repository: string) => void
 }) {
+  const { t } = useTranslation('settings')
   const normalized = normalizeRepositoryList(repositories)
 
   return (
@@ -1876,11 +1921,11 @@ function RepositoryAllowlistCard({
       <header className="repository-allowlist-card-header">
         <span>
           <strong>{title}</strong>
-          <small>{normalized.length} included {normalized.length === 1 ? 'repository' : 'repositories'}</small>
+          <small>{normalized.length === 1 ? t('review.allowlistCard.includedSingular', { count: normalized.length }) : t('review.allowlistCard.includedPlural', { count: normalized.length })}</small>
           <small>{description}</small>
         </span>
         <button className="secondary-button inline compact-row-action settings-action-button" type="button" disabled={manageDisabled} onClick={onManage}>
-          Manage
+          {t('review.allowlistCard.manage')}
         </button>
       </header>
       <div className="repository-allowlist-card-body">
@@ -1888,8 +1933,8 @@ function RepositoryAllowlistCard({
           normalized.map((repository) => (
             <div className="repository-allowlist-row" key={repository}>
               <strong>{repository}</strong>
-              <Tooltip content={`Remove ${repository}`}>
-                <button className="icon-button repository-allowlist-remove" type="button" aria-label={`Remove ${repository}`} disabled={disabled} onClick={() => onRemove(repository)}>
+              <Tooltip content={t('review.allowlistCard.removeTooltip', { name: repository })}>
+                <button className="icon-button repository-allowlist-remove" type="button" aria-label={t('review.allowlistCard.removeAria', { name: repository })} disabled={disabled} onClick={() => onRemove(repository)}>
                   <Trash2 size={14} />
                 </button>
               </Tooltip>
@@ -1920,6 +1965,7 @@ function RepositoryAllowlistModal({
   onCancel: () => void
   onSave: (repositories: string[]) => void
 }) {
+  const { t } = useTranslation('settings')
   const normalizedRepositories = useMemo(() => normalizeRepositoryList(repositories), [repositories])
   const [query, setQuery] = useState('')
   const [draftSelection, setDraftSelection] = useState(() => filterRepositories(selectedRepositories, normalizedRepositories))
@@ -1934,10 +1980,10 @@ function RepositoryAllowlistModal({
     searchRef.current?.focus()
   }, [])
 
-  const title = kind === 'autoReview' ? 'Select source projects' : 'Select publish projects'
+  const title = kind === 'autoReview' ? t('review.modal.autoReviewTitle') : t('review.modal.publishTitle')
   const description = kind === 'autoReview'
-    ? `Select source projects to enable automatic ${targetTerm} reviews.`
-    : `Select source projects whose Review Drafts may be published through ${publishRouteTerm}.`
+    ? t('review.modal.autoReviewDescription', { term: targetTerm })
+    : t('review.modal.publishDescription', { route: publishRouteTerm })
   const filteredRepositories = normalizedRepositories.filter((repository) => repositoryMatchesQuery(repository, query))
 
   const toggleRepository = (repository: string) => {
@@ -1961,8 +2007,8 @@ function RepositoryAllowlistModal({
             <h2>{title}</h2>
             <p>{description}</p>
           </span>
-          <Tooltip content="Close">
-            <button className="icon-button" type="button" aria-label="Close" onClick={onCancel}>
+          <Tooltip content={t('review.modal.close')}>
+            <button className="icon-button" type="button" aria-label={t('review.modal.close')} onClick={onCancel}>
               <X size={16} />
             </button>
           </Tooltip>
@@ -1972,8 +2018,8 @@ function RepositoryAllowlistModal({
           <input
             ref={searchRef}
             value={query}
-            placeholder="Search source projects..."
-            aria-label="Search source projects"
+            placeholder={t('review.modal.searchPlaceholder')}
+            aria-label={t('review.modal.searchAria')}
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
@@ -1993,15 +2039,15 @@ function RepositoryAllowlistModal({
               )
             })
           ) : (
-            <p className="settings-repository-picker-empty">{normalizedRepositories.length ? 'No source projects match your search.' : 'No source projects configured.'}</p>
+            <p className="settings-repository-picker-empty">{normalizedRepositories.length ? t('review.modal.noMatch') : t('review.modal.noConfigured')}</p>
           )}
         </div>
         <footer className="settings-repository-modal-footer">
           <button className="secondary-button inline compact-row-action settings-action-button" type="button" onClick={onCancel}>
-            Cancel
+            {t('review.modal.cancel')}
           </button>
           <button className="primary-button inline compact-row-action settings-action-button" type="submit">
-            Apply selection ({draftSelection.length} selected)
+            {t('review.modal.apply', { count: draftSelection.length })}
           </button>
         </footer>
       </form>
@@ -2024,6 +2070,7 @@ function LabelListControl({
   ariaLabel: string
   onChange: (labels: string[]) => void
 }) {
+  const { t } = useTranslation('settings')
   const [draft, setDraft] = useState('')
   const normalizedLabels = normalizeLabels(labels)
   const commitDraft = () => {
@@ -2041,8 +2088,8 @@ function LabelListControl({
           normalizedLabels.map((label) => (
             <span className="settings-label-chip" key={label}>
               <span>{label}</span>
-              <Tooltip content={`Remove ${label}`}>
-                <button type="button" aria-label={`Remove ${label}`} disabled={disabled} onClick={() => onChange(removeLabel(normalizedLabels, label))}>
+              <Tooltip content={t('common.remove', { name: label })}>
+                <button type="button" aria-label={t('common.remove', { name: label })} disabled={disabled} onClick={() => onChange(removeLabel(normalizedLabels, label))}>
                   <X size={13} />
                 </button>
               </Tooltip>
@@ -2055,7 +2102,7 @@ function LabelListControl({
       <span className="label-list-input-row">
         <input
           className="settings-input label-list-input"
-          aria-label={`${ariaLabel} input`}
+          aria-label={t('worktree.automation.labelInput', { label: ariaLabel })}
           value={draft}
           disabled={disabled}
           placeholder={placeholder}
@@ -2105,6 +2152,7 @@ function ValuePill({ children }: { children: ReactNode }) {
 }
 
 function SettingsAutosaveStatus({ saveState, onRetry }: { saveState: ConfigSaveState; onRetry: () => void }) {
+  const { t } = useTranslation('settings')
   if (saveState === 'idle') {
     return null
   }
@@ -2113,8 +2161,8 @@ function SettingsAutosaveStatus({ saveState, onRetry }: { saveState: ConfigSaveS
     return (
       <span className="settings-autosave-status failed" role="status">
         <XCircle size={13} />
-        <span>Save failed</span>
-        <button type="button" onClick={onRetry}>Retry</button>
+        <span>{t('autosave.saveFailed')}</span>
+        <button type="button" onClick={onRetry}>{t('autosave.retry')}</button>
       </span>
     )
   }
@@ -2122,7 +2170,7 @@ function SettingsAutosaveStatus({ saveState, onRetry }: { saveState: ConfigSaveS
   return (
     <span className={`settings-autosave-status ${saveState}`} role="status">
       {saveState === 'saving' ? <RefreshCw size={13} className="spin-icon" /> : <CheckCircle2 size={13} />}
-      <span>{saveState === 'saving' ? 'Saving...' : 'Saved'}</span>
+      <span>{saveState === 'saving' ? t('autosave.saving') : t('autosave.saved')}</span>
     </span>
   )
 }
@@ -2201,7 +2249,7 @@ function NumberControl({
   max: number
   onChange: (value: number) => void
 }) {
-  return <NumberStepperControl label={label ?? 'Number'} value={value} disabled={disabled} min={min} max={max} onChange={onChange} />
+  return <NumberStepperControl label={label ?? i18n.t('settings:control.number')} value={value} disabled={disabled} min={min} max={max} onChange={onChange} />
 }
 
 function NumberStepperControl({
@@ -2221,6 +2269,7 @@ function NumberStepperControl({
   onChange: (value: number) => void
   className?: string
 }) {
+  const { t } = useTranslation('settings')
   const decrementDisabled = disabled || value <= min
   const incrementDisabled = disabled || value >= max
   const [draftValue, setDraftValue] = useState(String(value))
@@ -2284,7 +2333,7 @@ function NumberStepperControl({
           className="number-stepper-button"
           type="button"
           tabIndex={-1}
-          aria-label={`Increase ${label}`}
+          aria-label={t('control.increase', { label })}
           disabled={incrementDisabled}
           onClick={() => changeBy(1)}
         >
@@ -2294,7 +2343,7 @@ function NumberStepperControl({
           className="number-stepper-button"
           type="button"
           tabIndex={-1}
-          aria-label={`Decrease ${label}`}
+          aria-label={t('control.decrease', { label })}
           disabled={decrementDisabled}
           onClick={() => changeBy(-1)}
         >
@@ -2342,16 +2391,20 @@ type DurationUnit = {
   multiplier: number
 }
 
-const secondsDurationUnits: DurationUnit[] = [
-  { value: 'seconds', label: 'sec', multiplier: 1 },
-  { value: 'minutes', label: 'min', multiplier: 60 },
-  { value: 'hours', label: 'hr', multiplier: 3600 },
-]
+function secondsDurationUnits(): DurationUnit[] {
+  return [
+    { value: 'seconds', label: i18n.t('settings:duration.sec'), multiplier: 1 },
+    { value: 'minutes', label: i18n.t('settings:duration.min'), multiplier: 60 },
+    { value: 'hours', label: i18n.t('settings:duration.hr'), multiplier: 3600 },
+  ]
+}
 
-const hoursDurationUnits: DurationUnit[] = [
-  { value: 'hours', label: 'hr', multiplier: 1 },
-  { value: 'days', label: 'days', multiplier: 24 },
-]
+function hoursDurationUnits(): DurationUnit[] {
+  return [
+    { value: 'hours', label: i18n.t('settings:duration.hr'), multiplier: 1 },
+    { value: 'days', label: i18n.t('settings:duration.days'), multiplier: 24 },
+  ]
+}
 
 function DurationControl({
   label,
@@ -2370,6 +2423,7 @@ function DurationControl({
   units: DurationUnit[]
   onChange: (value: number) => void
 }) {
+  const { t } = useTranslation('settings')
   const unit = pickDurationUnit(value, units)
   const amount = Math.max(0, Math.round(value / unit.multiplier))
   const minAmount = Math.max(0, Math.ceil(min / unit.multiplier))
@@ -2381,7 +2435,7 @@ function DurationControl({
   return (
     <span className="duration-control">
       <NumberStepperControl
-        label={`${label} amount`}
+        label={t('duration.amount', { label })}
         className="duration-value"
         value={amount}
         disabled={disabled}
@@ -2390,7 +2444,7 @@ function DurationControl({
         onChange={(nextAmount) => setAmount(String(nextAmount))}
       />
       <SelectControl
-        label={`${label} unit`}
+        label={t('duration.unit', { label })}
         className="duration-unit"
         value={unit.value}
         disabled={disabled}
@@ -2419,7 +2473,7 @@ function NumberTripleControl({
         <NumberStepperControl
           key={index}
           className="compact"
-          label={concurrencyControlLabels[index]}
+          label={concurrencyControlLabels()[index]}
           value={value}
           disabled={disabled}
           min={1}
@@ -2448,13 +2502,14 @@ function RetryPolicyControl({
   disabled: boolean
   onChange: (attempts: number, initialBackoffSeconds: number, maxBackoffSeconds: number) => void
 }) {
+  const { t } = useTranslation('settings')
   return (
     <span className="settings-field-cluster retry-policy-control">
       <label className="settings-labeled-control">
-        <span>Attempts</span>
+        <span>{t('worktree.retry.attempts')}</span>
         <NumberStepperControl
           className="compact"
-          label="Retry attempts"
+          label={t('worktree.retry.attemptsLabel')}
           value={attempts}
           disabled={disabled}
           min={1}
@@ -2463,12 +2518,12 @@ function RetryPolicyControl({
         />
       </label>
       <label className="settings-labeled-control">
-        <span>Initial</span>
-        <DurationControl label="Initial backoff" value={initialBackoffSeconds} disabled={disabled} min={1} max={300} units={secondsDurationUnits} onChange={(value) => onChange(attempts, value, maxBackoffSeconds)} />
+        <span>{t('worktree.retry.initial')}</span>
+        <DurationControl label={t('worktree.retry.initialBackoff')} value={initialBackoffSeconds} disabled={disabled} min={1} max={300} units={secondsDurationUnits()} onChange={(value) => onChange(attempts, value, maxBackoffSeconds)} />
       </label>
       <label className="settings-labeled-control">
-        <span>Maximum</span>
-        <DurationControl label="Maximum backoff" value={maxBackoffSeconds} disabled={disabled} min={1} max={1800} units={secondsDurationUnits} onChange={(value) => onChange(attempts, initialBackoffSeconds, value)} />
+        <span>{t('worktree.retry.maximum')}</span>
+        <DurationControl label={t('worktree.retry.maximumBackoff')} value={maxBackoffSeconds} disabled={disabled} min={1} max={1800} units={secondsDurationUnits()} onChange={(value) => onChange(attempts, initialBackoffSeconds, value)} />
       </label>
     </span>
   )
@@ -2485,15 +2540,16 @@ function RetentionControl({
   disabled: boolean
   onChange: (succeededHours: number, failedHours: number) => void
 }) {
+  const { t } = useTranslation('settings')
   return (
     <span className="settings-field-cluster retention-control">
       <label className="settings-labeled-control">
-        <span>Success</span>
-        <DurationControl label="Successful worktree retention" value={succeededHours} disabled={disabled} min={0} max={24 * 30} units={hoursDurationUnits} onChange={(value) => onChange(value, failedHours)} />
+        <span>{t('worktree.retentionControl.success')}</span>
+        <DurationControl label={t('worktree.retentionControl.successLabel')} value={succeededHours} disabled={disabled} min={0} max={24 * 30} units={hoursDurationUnits()} onChange={(value) => onChange(value, failedHours)} />
       </label>
       <label className="settings-labeled-control">
-        <span>Failed</span>
-        <DurationControl label="Failed worktree retention" value={failedHours} disabled={disabled} min={1} max={24 * 60} units={hoursDurationUnits} onChange={(value) => onChange(succeededHours, value)} />
+        <span>{t('worktree.retentionControl.failed')}</span>
+        <DurationControl label={t('worktree.retentionControl.failedLabel')} value={failedHours} disabled={disabled} min={1} max={24 * 60} units={hoursDurationUnits()} onChange={(value) => onChange(succeededHours, value)} />
       </label>
     </span>
   )
@@ -2510,47 +2566,48 @@ function CleanupControl({
   disabled: boolean
   onChange: (enabled: boolean, interval: number) => void
 }) {
+  const { t } = useTranslation('settings')
   return (
     <span className="settings-field-cluster cleanup-control">
       <button className="toggle-button" aria-pressed={enabled} disabled={disabled} onClick={() => onChange(!enabled, interval)}>
-        {enabled ? 'On' : 'Off'}
+        {enabled ? t('common.on') : t('common.off')}
       </button>
-      <DurationControl label="Cleanup interval" value={interval} disabled={disabled} min={5} max={3600} units={secondsDurationUnits} onChange={(value) => onChange(enabled, value)} />
+      <DurationControl label={t('worktree.cleanupControl.interval')} value={interval} disabled={disabled} min={5} max={3600} units={secondsDurationUnits()} onChange={(value) => onChange(enabled, value)} />
     </span>
   )
 }
 
 function activeSectionCopy(section: SettingsSection) {
-  if (section === 'sources') return 'Inspect source provider status, capabilities, sync progress, and recent failures.'
-  if (section === 'projects') return 'Map each GitHub repository or GitLab project to the DotCraft workspace it should run against.'
-  if (section === 'credentials') return 'Manage source identity and secret presence without exposing plaintext.'
-  if (section === 'agents') return 'Configure DotCraft bridge health, AppServer discovery, and agent guardrails.'
-  if (section === 'worktree') return 'Tune managed worktrees, scheduling, retries, cleanup, and implementation dispatch.'
-  if (section === 'review') return 'Configure source project-level PR/MR review triggers and draft publication.'
-  return 'Manage browser-local preferences for the Oratorio console.'
+  if (section === 'sources') return i18n.t('settings:sectionCopy.sources')
+  if (section === 'projects') return i18n.t('settings:sectionCopy.projects')
+  if (section === 'credentials') return i18n.t('settings:sectionCopy.credentials')
+  if (section === 'agents') return i18n.t('settings:sectionCopy.agents')
+  if (section === 'worktree') return i18n.t('settings:sectionCopy.worktree')
+  if (section === 'review') return i18n.t('settings:sectionCopy.review')
+  return i18n.t('settings:sectionCopy.default')
 }
 
 function authLabel(value?: string) {
-  if (value === 'githubApp+staticToken') return 'GitHub App + token'
-  if (value === 'githubApp') return 'GitHub App'
-  if (value === 'staticToken') return 'Static token'
-  if (value === 'projectProfiles') return 'Project profiles'
-  if (value === 'accessToken' || value === 'token') return 'Token'
-  if (value === 'partial') return 'Partial'
-  return 'None'
+  if (value === 'githubApp+staticToken') return i18n.t('settings:credentials.authLabel.githubAppToken')
+  if (value === 'githubApp') return i18n.t('settings:credentials.authLabel.githubApp')
+  if (value === 'staticToken') return i18n.t('settings:credentials.authLabel.staticToken')
+  if (value === 'projectProfiles') return i18n.t('settings:credentials.authLabel.projectProfiles')
+  if (value === 'accessToken' || value === 'token') return i18n.t('settings:credentials.authLabel.token')
+  if (value === 'partial') return i18n.t('settings:credentials.authLabel.partial')
+  return i18n.t('settings:credentials.authLabel.none')
 }
 
 function gitLabWebhookModeLabel(value?: string) {
-  if (value === 'signingToken') return 'Signing token'
-  if (value === 'secretToken') return 'Secret token'
-  if (value === 'localDevelopmentDisabled') return 'Local bypass'
-  return 'None'
+  if (value === 'signingToken') return i18n.t('settings:credentials.webhookMode.signingToken')
+  if (value === 'secretToken') return i18n.t('settings:credentials.webhookMode.secretToken')
+  if (value === 'localDevelopmentDisabled') return i18n.t('settings:credentials.webhookMode.localBypass')
+  return i18n.t('settings:credentials.webhookMode.none')
 }
 
 function healthLabel(health: DotCraftHealth) {
-  if (health === 'connected') return 'Connected'
-  if (health === 'configured') return 'Configured'
-  return 'Unavailable'
+  if (health === 'connected') return i18n.t('settings:agents.health.connected')
+  if (health === 'configured') return i18n.t('settings:agents.health.configured')
+  return i18n.t('settings:agents.health.unavailable')
 }
 
 function workspaceTone(workspace: DotCraftWorkspace): 'ok' | 'warn' | 'muted' {
@@ -2560,10 +2617,10 @@ function workspaceTone(workspace: DotCraftWorkspace): 'ok' | 'warn' | 'muted' {
 }
 
 function gitHubProfileStatus(row: GitHubInstallationProfileRow): { tone: 'ok' | 'warn' | 'muted'; label: string } {
-  if (row.warning) return { tone: 'warn', label: 'Error' }
-  if (!row.installationId) return { tone: 'warn', label: 'Missing profile' }
-  if (row.source === 'detected') return { tone: 'ok', label: 'Detected' }
-  return { tone: 'ok', label: 'Manual' }
+  if (row.warning) return { tone: 'warn', label: i18n.t('settings:projects.installations.statusError') }
+  if (!row.installationId) return { tone: 'warn', label: i18n.t('settings:projects.installations.statusMissing') }
+  if (row.source === 'detected') return { tone: 'ok', label: i18n.t('settings:projects.installations.statusDetected') }
+  return { tone: 'ok', label: i18n.t('settings:projects.installations.statusManual') }
 }
 
 function formatEndpoint(endpoint: string) {
@@ -2577,9 +2634,9 @@ function formatEndpoint(endpoint: string) {
 }
 
 function formatSecondsDuration(seconds: number) {
-  if (seconds % 3600 === 0) return `${seconds / 3600} hr`
-  if (seconds % 60 === 0) return `${seconds / 60} min`
-  return `${seconds} sec`
+  if (seconds % 3600 === 0) return i18n.t('settings:durationFormat.hr', { value: seconds / 3600 })
+  if (seconds % 60 === 0) return i18n.t('settings:durationFormat.min', { value: seconds / 60 })
+  return i18n.t('settings:durationFormat.sec', { value: seconds })
 }
 
 function relativeTime(value: string) {
@@ -2589,11 +2646,11 @@ function relativeTime(value: string) {
   }
 
   const diffSeconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000))
-  if (diffSeconds < 60) return 'just now'
+  if (diffSeconds < 60) return i18n.t('settings:relativeTime.justNow')
   const diffMinutes = Math.round(diffSeconds / 60)
-  if (diffMinutes < 60) return `${diffMinutes} min ago`
+  if (diffMinutes < 60) return i18n.t('settings:relativeTime.minAgo', { value: diffMinutes })
   const diffHours = Math.round(diffMinutes / 60)
-  if (diffHours < 24) return `${diffHours} hr ago`
+  if (diffHours < 24) return i18n.t('settings:relativeTime.hrAgo', { value: diffHours })
   return new Date(value).toLocaleDateString()
 }
 
@@ -2829,12 +2886,12 @@ function buildSourceProviderCards(
       writeCapability: {
         available: githubStatus.writesEnabled && githubStatus.writeConfigured,
         state: githubStatus.writesEnabled ? githubStatus.writeConfigured ? 'available' : 'credentialsMissing' : 'disabled',
-        reason: githubStatus.writesEnabled ? null : 'GitHub writes are disabled.',
+        reason: githubStatus.writesEnabled ? null : i18n.t('settings:providerReasons.githubWritesDisabled'),
       },
       webhookCapability: {
         available: false,
         state: 'unconfigured',
-        reason: 'Webhook status is available in diagnostics when configured.',
+        reason: i18n.t('settings:providerReasons.webhookInDiagnostics'),
       },
       configuredProjectCount: githubStatus.repositories.length,
       lastSyncAt: githubStatus.lastSyncAt,
@@ -2866,21 +2923,21 @@ function buildSourceProviderCards(
       readCapability: {
         available: configured && tokenConfigured,
         state: !gitLabConfig.enabled ? 'disabled' : gitLabConfig.projects.length ? allTokensConfigured ? 'available' : tokenConfigured ? 'partial' : 'credentialsMissing' : 'unconfigured',
-        reason: !gitLabConfig.enabled ? 'GitLab read sync is disabled.' : gitLabConfig.projects.length ? allTokensConfigured ? null : 'GitLab read sync requires project profile tokens.' : 'No GitLab projects are configured.',
+        reason: !gitLabConfig.enabled ? i18n.t('settings:providerReasons.gitlabReadDisabled') : gitLabConfig.projects.length ? allTokensConfigured ? null : i18n.t('settings:providerReasons.gitlabReadRequiresTokens') : i18n.t('settings:providerReasons.gitlabNoProjects'),
       },
       writeCapability: {
         available: configured && gitLabConfig.writesEnabled && writeConfigured,
         state: !gitLabConfig.enabled ? 'disabled' : !gitLabConfig.writesEnabled ? 'disabled' : allTokensConfigured ? 'available' : writeConfigured ? 'partial' : 'credentialsMissing',
-        reason: !gitLabConfig.enabled ? 'GitLab provider is disabled.' : !gitLabConfig.writesEnabled ? 'GitLab writes are disabled.' : allTokensConfigured ? null : 'GitLab writes require project profile tokens.',
+        reason: !gitLabConfig.enabled ? i18n.t('settings:providerReasons.gitlabProviderDisabled') : !gitLabConfig.writesEnabled ? i18n.t('settings:providerReasons.gitlabWritesDisabled') : allTokensConfigured ? null : i18n.t('settings:providerReasons.gitlabWritesRequireTokens'),
       },
       webhookCapability: {
         available: diagnosticsGitLab?.webhookVerificationMode !== undefined && diagnosticsGitLab.webhookVerificationMode !== 'none',
         state: diagnosticsGitLab?.webhookVerificationMode === 'none' ? 'unconfigured' : diagnosticsGitLab?.webhookVerificationMode ?? 'unconfigured',
-        reason: diagnosticsGitLab?.webhookVerificationMode ? gitLabWebhookModeLabel(diagnosticsGitLab.webhookVerificationMode) : 'GitLab webhook verification is not configured.',
+        reason: diagnosticsGitLab?.webhookVerificationMode ? gitLabWebhookModeLabel(diagnosticsGitLab.webhookVerificationMode) : i18n.t('settings:providerReasons.gitlabWebhookUnconfigured'),
       },
       configuredProjectCount: gitLabConfig.projects.length,
       lastSyncAt: diagnosticsGitLab?.lastSyncAt ?? null,
-      diagnostic: diagnosticsGitLab?.enabled === false ? 'GitLab read sync is disabled.' : null,
+      diagnostic: diagnosticsGitLab?.enabled === false ? i18n.t('settings:providerReasons.gitlabReadDisabled') : null,
       projects: gitLabConfig.projects.map((projectPath) => {
         const key = gitLabProjectKey(projectPath, gitLabConfig.endpoint)
         const profile = gitLabProfileForProject(gitLabConfig, projectPath)
@@ -2893,15 +2950,15 @@ function buildSourceProviderCards(
           displayName: projectPath,
           readCapability: profileTokenConfigured
             ? { available: true, state: 'available', reason: null }
-            : { available: false, state: 'credentialsMissing', reason: 'GitLab project profile token is missing.' },
+            : { available: false, state: 'credentialsMissing', reason: i18n.t('settings:providerReasons.gitlabProjectTokenMissing') },
           writeCapability: !gitLabConfig.writesEnabled
-            ? { available: false, state: 'disabled', reason: 'GitLab writes are disabled.' }
+            ? { available: false, state: 'disabled', reason: i18n.t('settings:providerReasons.gitlabWritesDisabled') }
             : profileTokenConfigured
               ? { available: true, state: 'available', reason: null }
-              : { available: false, state: 'credentialsMissing', reason: 'GitLab project profile token is missing.' },
+              : { available: false, state: 'credentialsMissing', reason: i18n.t('settings:providerReasons.gitlabProjectTokenMissing') },
           webhookCapability: gitLabProfileWebhookConfigured(profile)
             ? { available: true, state: 'available', reason: null }
-            : { available: false, state: 'unconfigured', reason: 'GitLab project webhook verification is not configured.' },
+            : { available: false, state: 'unconfigured', reason: i18n.t('settings:providerReasons.gitlabProjectWebhookUnconfigured') },
         }
       }),
       writeConfigured,
@@ -3188,9 +3245,9 @@ function gitLabProfileWebhookConfigured(profile: GitLabProjectProfileRow | null)
 
 function gitLabProfileStatus(profile: GitLabProjectProfileRow, sourceProject: SourceProviderStatus['projects'][number] | null): { tone: 'ok' | 'warn' | 'muted'; label: string } {
   const status = gitLabProjectProfileStatus(profile)
-  if (!status.hasToken) return { tone: 'warn', label: 'Missing token' }
-  if (sourceProject?.readCapability?.state === 'partial' || sourceProject?.readCapability?.available === false) return { tone: 'warn', label: 'Profile issue' }
-  return { tone: status.hasWebhook ? 'ok' : 'warn', label: status.hasWebhook ? 'Profile ready' : 'No webhook' }
+  if (!status.hasToken) return { tone: 'warn', label: i18n.t('settings:projects.gitLabStatus.missingToken') }
+  if (sourceProject?.readCapability?.state === 'partial' || sourceProject?.readCapability?.available === false) return { tone: 'warn', label: i18n.t('settings:projects.gitLabStatus.profileIssue') }
+  return { tone: status.hasWebhook ? 'ok' : 'warn', label: status.hasWebhook ? i18n.t('settings:projects.gitLabStatus.profileReady') : i18n.t('settings:projects.gitLabStatus.noWebhook') }
 }
 
 function gitLabProfileKey(instance: string, projectPath: string) {
@@ -3356,64 +3413,64 @@ function isActiveSourceSyncJob(job: SourceSyncJob | null) {
 function formatScheduleInterval(intervalSeconds: number) {
   if (intervalSeconds % 3600 === 0) {
     const hours = intervalSeconds / 3600
-    return `${hours} ${hours === 1 ? 'hour' : 'hours'}`
+    return i18n.t('settings:scheduleFormat.hours', { count: hours })
   }
 
   if (intervalSeconds % 60 === 0) {
     const minutes = intervalSeconds / 60
-    return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
+    return i18n.t('settings:scheduleFormat.minutes', { count: minutes })
   }
 
-  return `${intervalSeconds} seconds`
+  return i18n.t('settings:scheduleFormat.seconds', { count: intervalSeconds })
 }
 
 function formatScheduleNextRun(nextRunAt?: string | null) {
   if (!nextRunAt) {
-    return 'next run not scheduled'
+    return i18n.t('settings:scheduleFormat.notScheduled')
   }
 
   const timestamp = new Date(nextRunAt).getTime()
   if (Number.isNaN(timestamp)) {
-    return `next ${nextRunAt}`
+    return i18n.t('settings:scheduleFormat.nextRaw', { value: nextRunAt })
   }
 
   const diffSeconds = Math.round((timestamp - Date.now()) / 1000)
   if (diffSeconds <= 0) {
-    return 'due now'
+    return i18n.t('settings:scheduleFormat.dueNow')
   }
 
   if (diffSeconds < 60) {
-    return `next in ${diffSeconds} sec`
+    return i18n.t('settings:scheduleFormat.nextInSec', { count: diffSeconds })
   }
 
   const diffMinutes = Math.round(diffSeconds / 60)
   if (diffMinutes < 60) {
-    return `next in ${diffMinutes} min`
+    return i18n.t('settings:scheduleFormat.nextInMin', { count: diffMinutes })
   }
 
   const diffHours = Math.round(diffMinutes / 60)
   if (diffHours < 24) {
-    return `next in ${diffHours} hr`
+    return i18n.t('settings:scheduleFormat.nextInHr', { count: diffHours })
   }
 
-  return `next ${new Date(nextRunAt).toLocaleString()}`
+  return i18n.t('settings:scheduleFormat.nextRaw', { value: new Date(nextRunAt).toLocaleString() })
 }
 
 function sourceSyncJobStatusLabel(status: SourceSyncJob['status']) {
-  if (status === 'queued') return 'Sync queued'
-  if (status === 'running') return 'Sync running'
-  if (status === 'succeeded') return 'Sync complete'
-  if (status === 'partialFailed') return 'Sync partially failed'
-  return 'Sync failed'
+  if (status === 'queued') return i18n.t('settings:sources.status.queued')
+  if (status === 'running') return i18n.t('settings:sources.status.running')
+  if (status === 'succeeded') return i18n.t('settings:sources.status.succeeded')
+  if (status === 'partialFailed') return i18n.t('settings:sources.status.partialFailed')
+  return i18n.t('settings:sources.status.failed')
 }
 
 function sourceProjectPhaseLabel(run: SourceSyncProjectRun) {
-  if (run.errorMessage) return 'Failed'
-  if (run.phase === 'queued') return 'Queued'
-  if (run.phase === 'fetching') return `Fetching ${run.displayName || run.projectPath}`
-  if (run.phase === 'importing') return `${run.issuesDiscovered} issues and ${run.reviewTargetsDiscovered} review targets discovered`
-  if (run.phase === 'done') return run.completedAt ? `Done ${relativeTime(run.completedAt)}` : 'Done'
-  return 'Failed'
+  if (run.errorMessage) return i18n.t('settings:sources.phase.failed')
+  if (run.phase === 'queued') return i18n.t('settings:sources.phase.queued')
+  if (run.phase === 'fetching') return i18n.t('settings:sources.phase.fetching', { name: run.displayName || run.projectPath })
+  if (run.phase === 'importing') return i18n.t('settings:sources.phase.importing', { issues: run.issuesDiscovered, reviewTargets: run.reviewTargetsDiscovered })
+  if (run.phase === 'done') return run.completedAt ? i18n.t('settings:sources.phase.doneAt', { time: relativeTime(run.completedAt) }) : i18n.t('settings:sources.phase.done')
+  return i18n.t('settings:sources.phase.failed')
 }
 
 function sourceSyncStatusIcon(job: SourceSyncJob | null) {

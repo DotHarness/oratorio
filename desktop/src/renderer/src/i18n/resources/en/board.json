@@ -1,0 +1,104 @@
+{
+  "appName": "Oratorio",
+  "search": {
+    "placeholder": "Search tasks",
+    "help": "Advanced search supports s:github, source:github, l:frontend, and label:\"good first issue\"."
+  },
+  "viewMode": {
+    "active": "Active",
+    "all": "All",
+    "cancelled": "Cancelled",
+    "archived": "Archived"
+  },
+  "closedDescription": {
+    "all": "All tasks, newest updates first.",
+    "cancelled": "Rejected tasks.",
+    "archived": "Archived tasks."
+  },
+  "empty": "No tasks here.",
+  "loading": "Loading tasks...",
+  "loadingMore": "Loading more tasks...",
+  "actions": {
+    "newLocalTask": "New local task",
+    "refresh": "Refresh",
+    "settings": "Settings"
+  },
+  "sync": {
+    "startingSource": "Starting source sync",
+    "syncingSources": "Syncing sources",
+    "syncSources": "Sync sources",
+    "startingGitHub": "Starting GitHub pull",
+    "pullingGitHub": "Pulling GitHub",
+    "pullGitHub": "Pull GitHub",
+    "syncTitle": "Sync configured GitHub and GitLab sources"
+  },
+  "filters": {
+    "assignee": "Assignee",
+    "allAssignees": "All assignees",
+    "allRepositories": "All repositories",
+    "repositoryFilter": "Repository filter"
+  },
+  "undo": "Undo",
+  "drag": {
+    "doneNotReopen": "Done tasks cannot be reopened by dragging.",
+    "cannotMove": "Cannot move from {{from}} to {{to}}.",
+    "notAvailable": "This move is not available.",
+    "addFeedbackBefore": "Add feedback before moving {{name}}.",
+    "movedTo": "{{name}} moved to {{status}}.",
+    "moveUndone": "{{name}} move undone.",
+    "changesRequested": "Changes requested for {{name}}.",
+    "dispatch": "Dispatching {{name}}.",
+    "approve": "Approved {{name}}.",
+    "reject": "Rejected {{name}}.",
+    "archive": "Archived {{name}}.",
+    "reopen": "Reopened {{name}}.",
+    "requestChanges": "Requesting changes for {{name}}.",
+    "moved": "Moved {{name}}."
+  },
+  "localTask": {
+    "eyebrow": "Local task",
+    "newTask": "New task",
+    "editTask": "Edit task",
+    "title": "Title",
+    "description": "Description",
+    "sourceProject": "Source project",
+    "sourceProjectPlaceholder": "GitHub/GitLab project or canonical key",
+    "labels": "Labels",
+    "labelsPlaceholder": "bug, docs, frontend",
+    "labelPresets": "Label presets",
+    "routingFields": "Task routing fields",
+    "assignee": "Assignee",
+    "assigneePlaceholder": "Pick a recent assignee or leave blank",
+    "assigneePresets": "Assignee presets",
+    "baseBranch": "Base branch",
+    "baseBranchHint": "Optional · used as run base ref",
+    "baseBranchPlaceholder": "main",
+    "baseBranchPresets": "Base branch presets",
+    "create": "Create task",
+    "saveChanges": "Save changes"
+  },
+  "queue": {
+    "reviewQueue": "Review queue",
+    "searchItems": "Search items",
+    "stateFilters": "State filters",
+    "allItems": "All items"
+  },
+  "aria": {
+    "taskBoard": "Task board",
+    "boardFilters": "Board filters",
+    "boardView": "Board view",
+    "statusColumns": "Task status columns",
+    "closedTasks": "{{label}} tasks"
+  },
+  "chip": {
+    "local": "Local",
+    "localTask": "Local task",
+    "pullRequest": "Pull request",
+    "issue": "Issue",
+    "pr": "PR",
+    "task": "Task"
+  },
+  "card": {
+    "updated": "updated {{value}}"
+  }
+}

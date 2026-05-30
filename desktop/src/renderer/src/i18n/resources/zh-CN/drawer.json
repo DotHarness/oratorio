@@ -1,0 +1,19 @@
+{
+  "panelAria": "任务抽屉",
+  "drawerForName": "{{name}} 的任务抽屉",
+  "resizeDrawer": "调整任务抽屉大小",
+  "statusPanel": "任务状态",
+  "kicker": "任务抽屉",
+  "loading": "正在加载任务……",
+  "closeDrawer": "关闭任务抽屉",
+  "localShort": "本地",
+  "moreActions": "更多任务操作",
+  "menu": {
+    "openDetail": "打开详情页",
+    "openSource": "打开来源",
+    "editLocal": "编辑本地任务",
+    "reopen": "重新打开任务",
+    "archive": "归档任务",
+    "copyId": "复制任务 ID"
+  }
+}

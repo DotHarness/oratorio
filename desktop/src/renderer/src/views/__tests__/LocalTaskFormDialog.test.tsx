@@ -9,13 +9,31 @@ describe('LocalTaskFormDialog', () => {
   afterEach(cleanup)
 
   it('shows routing fields directly with clearer placeholders', () => {
-    renderDialog()
+    const { container } = renderDialog()
 
     expect(screen.queryByText('More fields')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Source project')).toBeInTheDocument()
     expect(screen.getByLabelText('Assignee')).toHaveAttribute('placeholder', 'Pick a recent assignee or leave blank')
     expect(screen.getByPlaceholderText('main')).toBeInTheDocument()
     expect(screen.queryByPlaceholderText('codex/oratorio-ui')).not.toBeInTheDocument()
+    expect(container.querySelector('datalist')).not.toBeInTheDocument()
+  })
+
+  it('shows custom routing suggestion menus while keeping manual input free-form', () => {
+    renderDialog({ assignees: ['mika'], branches: ['feature/local-task-form', 'main'] })
+
+    const assigneeInput = screen.getByLabelText('Assignee') as HTMLInputElement
+    fireEvent.focus(assigneeInput)
+    expect(screen.getByRole('option', { name: 'mika' })).toBeInTheDocument()
+    fireEvent.change(assigneeInput, { target: { value: 'codex' } })
+    expect(assigneeInput).toHaveValue('codex')
+
+    fireEvent.keyDown(assigneeInput, { key: 'Escape' })
+    const branchInput = screen.getByLabelText('Base branch') as HTMLInputElement
+    fireEvent.focus(branchInput)
+    expect(screen.getByRole('option', { name: 'feature/local-task-form' })).toBeInTheDocument()
+    fireEvent.change(branchInput, { target: { value: 'release/next' } })
+    expect(branchInput).toHaveValue('release/next')
   })
 
   it('offers canonical source projects while keeping manual input free-form', () => {
@@ -25,7 +43,7 @@ describe('LocalTaskFormDialog', () => {
     expect(sourceProject).toHaveValue('example-owner/oratorio')
     fireEvent.change(sourceProject, { target: { value: 'group/project' } })
     expect(sourceProject).toHaveValue('group/project')
-    expect(document.querySelector('option[value="gitlab:gitlab.example.test/group/project"]')).toHaveAttribute('label', 'GitLab: group/project')
+    expect(screen.getByRole('option', { name: 'GitLab: group/project' })).toBeInTheDocument()
   })
 
   it('fills and clears assignee and base branch from quick-pick chips', () => {

@@ -1,0 +1,74 @@
+{
+  "page": {
+    "detailForName": "Task detail for {{name}}",
+    "detail": "Task detail",
+    "backToBoard": "Back to board",
+    "breadcrumb": "Task breadcrumb",
+    "stageLabel": "Stage: {{stage}}",
+    "loadingTask": "Loading task"
+  },
+  "chip": {
+    "local": "Local",
+    "pr": "PR",
+    "issue": "Issue",
+    "task": "Task"
+  },
+  "loading": {
+    "title": "Loading task",
+    "description": "Fetching the selected task."
+  },
+  "implementTooltip": "Starts an implementation run. The agent may change the managed worktree and submits an implementation draft for manual delivery.",
+  "reviewOnlyTooltip": "Starts a read-only analysis run. The agent should inspect and summarize without making implementation changes.",
+  "autoPrTooltip": "Starts an implementation run with Auto {{target}} delivery. Oratorio attempts to commit, push, and create a {{longTarget}} after the draft is submitted.",
+  "summary": {
+    "title": "Summary",
+    "description": "A compact brief for board triage."
+  },
+  "run": {
+    "attempt": "{{kind}} attempt {{attempt}}",
+    "waiting": "Waiting for runner update.",
+    "progress": "Run progress"
+  },
+  "reReview": {
+    "title": "Review latest commit",
+    "button": "Re-review {{target}}"
+  },
+  "start": {
+    "implementation": "Start implementation",
+    "retry": "Retry run",
+    "review": "Start {{target}} review",
+    "dispatch": "Dispatch round",
+    "runner": "Runner: {{mode}}",
+    "implement": "Implement",
+    "autoTarget": "Auto {{target}}",
+    "reviewOnly": "Review only",
+    "dispatchReview": "Dispatch {{target}} review"
+  },
+  "target": {
+    "pr": "PR",
+    "mr": "MR"
+  },
+  "longTarget": {
+    "pr": "pull request",
+    "mr": "merge request"
+  },
+  "nextAction": {
+    "reviewAgentDraft": { "label": "Review agent draft", "description": "Agent review output needs operator judgment." },
+    "reviewDeliveryDraft": { "label": "Review delivery draft", "description": "Implementation delivery needs operator review." },
+    "reviewFollowUps": { "label": "Review follow-ups", "description": "Follow-up proposals need operator action." },
+    "viewComments": { "label": "View comments", "description": "Open the review discussion and feedback composer." },
+    "recordDecision": { "label": "Record decision", "description": "Review is ready for an operator decision." }
+  },
+  "artifacts": {
+    "title": "Review artifacts",
+    "description": "Open the detail panel to review drafts, follow-ups, comments, and decisions.",
+    "reviewDrafts": "review drafts",
+    "followUps": "follow-ups",
+    "writes": "writes",
+    "comments": "comments"
+  },
+  "commentAction": {
+    "view": "View comments",
+    "add": "Add comment"
+  }
+}

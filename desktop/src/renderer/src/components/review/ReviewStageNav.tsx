@@ -1,7 +1,8 @@
 import { Check } from 'lucide-react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ReviewStageId, Run, WorkItem } from '../../lib/types'
-import { runStatusLabel, sourceLifecycleLabel, stateLabels } from '../../lib/format'
+import { runStatusLabel, sourceLifecycleLabel, stateLabel } from '../../lib/format'
 
 export function ReviewStageNav({
   item,
@@ -14,17 +15,18 @@ export function ReviewStageNav({
   activeStage: ReviewStageId
   onStageChange: (stage: ReviewStageId) => void
 }) {
+  const { t } = useTranslation('review')
   const closedReached = item.state === 'approved' || item.state === 'rejected' || item.state === 'archived'
   const decisionReached = closedReached
   const analysisComplete = Boolean(run && ['succeeded', 'failed', 'cancelled', 'timedOut'].includes(run.status))
   const reviewReached = item.state === 'awaitingReview' || decisionReached
   const currentIndex = closedReached ? 4 : decisionReached ? 3 : reviewReached ? 2 : run ? 1 : 0
   const steps = [
-    { id: 'intake' as const, label: 'Intake', meta: item.updated, badge: item.sourceKey === 'local' ? 'Local' : sourceLifecycleLabel(item.sourceState) },
-    { id: 'analysis' as const, label: 'Analysis', meta: analysisComplete ? 'Completed' : run ? 'In progress' : 'Pending', badge: run ? runStatusLabel(run.status) : 'No run' },
-    { id: 'review' as const, label: 'Review', meta: reviewReached ? 'In progress' : 'Pending', badge: item.reviewDrafts.length > 0 ? `${item.reviewDrafts.length} drafts` : item.followUpDrafts.length > 0 ? `${item.followUpDrafts.length} follow-ups` : `${item.comments.length} feedback` },
-    { id: 'decision' as const, label: 'Decision', meta: decisionReached ? stateLabels[item.state] : 'Pending', badge: item.sourceWrites.length > 0 ? `${item.sourceWrites.length} writes` : decisionReached ? stateLabels[item.state] : 'Open' },
-    { id: 'closed' as const, label: 'Closed', meta: closedReached ? stateLabels[item.state] : 'Pending', badge: closedReached ? stateLabels[item.state] : 'Open' },
+    { id: 'intake' as const, label: t('stages.intake'), meta: item.updated, badge: item.sourceKey === 'local' ? t('localBadge') : sourceLifecycleLabel(item.sourceState) },
+    { id: 'analysis' as const, label: t('stages.analysis'), meta: analysisComplete ? t('meta.completed') : run ? t('meta.inProgress') : t('meta.pending'), badge: run ? runStatusLabel(run.status) : t('badge.noRun') },
+    { id: 'review' as const, label: t('stages.review'), meta: reviewReached ? t('meta.inProgress') : t('meta.pending'), badge: item.reviewDrafts.length > 0 ? t('badge.drafts', { count: item.reviewDrafts.length }) : item.followUpDrafts.length > 0 ? t('badge.followUps', { count: item.followUpDrafts.length }) : t('badge.feedback', { count: item.comments.length }) },
+    { id: 'decision' as const, label: t('stages.decision'), meta: decisionReached ? stateLabel(item.state) : t('meta.pending'), badge: item.sourceWrites.length > 0 ? t('badge.writes', { count: item.sourceWrites.length }) : decisionReached ? stateLabel(item.state) : t('badge.open') },
+    { id: 'closed' as const, label: t('stages.closed'), meta: closedReached ? stateLabel(item.state) : t('meta.pending'), badge: closedReached ? stateLabel(item.state) : t('badge.open') },
   ]
   const stageIds = steps.map((step) => step.id)
 
@@ -54,7 +56,7 @@ export function ReviewStageNav({
   }
 
   return (
-    <ol className="lifecycle-stepper review-stage-nav" aria-label="Review lifecycle stages" role="tablist">
+    <ol className="lifecycle-stepper review-stage-nav" aria-label={t('ariaStages')} role="tablist">
       {steps.map((step, index) => {
         const state = index < currentIndex ? 'complete' : index === currentIndex ? 'current' : 'pending'
         const isActive = activeStage === step.id

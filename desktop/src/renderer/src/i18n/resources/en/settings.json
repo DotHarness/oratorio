@@ -1,0 +1,490 @@
+{
+  "pageTitle": "Settings",
+  "refresh": "Refresh settings",
+  "refreshing": "Refreshing settings",
+  "windowBehavior": {
+    "label": "Window behavior",
+    "description": "Choose what the close button does."
+  },
+  "sections": {
+    "general": { "label": "General", "description": "Local preferences" },
+    "sources": { "label": "Sources", "description": "Provider sync and status" },
+    "projects": { "label": "Projects", "description": "Project workspace routing" },
+    "credentials": { "label": "Credentials", "description": "Source auth presence" },
+    "agents": { "label": "Agents", "description": "AppServer connection" },
+    "worktree": { "label": "Worktree", "description": "Dispatch and cleanup" },
+    "review": { "label": "Review", "description": "PR/MR review policy" }
+  },
+  "appearance": {
+    "title": "Appearance",
+    "description": "Browser-local preferences for this console."
+  },
+  "theme": {
+    "label": "Theme",
+    "description": "Stored in this browser and applied immediately.",
+    "dark": "Dark",
+    "light": "Light"
+  },
+  "language": {
+    "label": "Language",
+    "description": "Stored in this browser and applied immediately."
+  },
+  "desktop": {
+    "title": "Desktop",
+    "description": "Window and tray preferences for this device."
+  },
+  "common": {
+    "on": "On",
+    "off": "Off",
+    "add": "Add",
+    "manage": "Manage",
+    "retry": "Retry",
+    "configure": "Configure",
+    "remove": "Remove {{name}}",
+    "show": "Show {{label}}",
+    "hide": "Hide {{label}}",
+    "readOnly": "Server configuration is read-only.",
+    "overlay": "Overlay: {{path}}",
+    "configured": "Configured",
+    "configuredPlaceholder": "Configured",
+    "empty": "Empty",
+    "none": "None"
+  },
+  "notices": {
+    "serverConfigUnavailable": "Server configuration is unavailable.",
+    "workspaceInventoryUnavailable": "Workspace inventory is unavailable.",
+    "serverConfigSaveFailed": "Server configuration save failed.",
+    "githubInstallationDetectionFailed": "GitHub installation detection failed.",
+    "selectWorkspaceFailed": "Could not select workspace folder.",
+    "scheduleSaveFailed": "Scheduled sync settings could not be saved."
+  },
+  "sectionCopy": {
+    "sources": "Inspect source provider status, capabilities, sync progress, and recent failures.",
+    "projects": "Map each GitHub repository or GitLab project to the DotCraft workspace it should run against.",
+    "credentials": "Manage source identity and secret presence without exposing plaintext.",
+    "agents": "Configure DotCraft bridge health, AppServer discovery, and agent guardrails.",
+    "worktree": "Tune managed worktrees, scheduling, retries, cleanup, and implementation dispatch.",
+    "review": "Configure source project-level PR/MR review triggers and draft publication.",
+    "default": "Manage browser-local preferences for the Oratorio console."
+  },
+  "sources": {
+    "groupTitle": "Source providers",
+    "providerCount": "{{configured}}/{{total}} providers configured",
+    "noProviders": "No source providers configured.",
+    "card": {
+      "capabilities": "{{provider}} capabilities",
+      "read": "Read",
+      "write": "Write",
+      "webhook": "Webhook",
+      "capabilityReady": "{{label}} ready",
+      "capabilityUnavailable": "{{label}} unavailable",
+      "writesReady": "Writes ready",
+      "writesOff": "Writes off",
+      "writesUnavailable": "Writes unavailable",
+      "stateConfigured": "Configured",
+      "stateReady": "Ready",
+      "stateNeedsSetup": "Needs setup",
+      "noEndpoint": "No endpoint configured.",
+      "configuredProjects": "{{count}} configured {{term}}",
+      "lastSync": "Last sync {{time}}",
+      "noSyncYet": "No sync yet",
+      "headShaReReview": "{{term}} use head-SHA re-review when available",
+      "configure": "Configure",
+      "routeProjects": "Route projects",
+      "syncFailed": "Sync failed",
+      "fullRepair": "Full repair",
+      "starting": "Starting",
+      "syncing": "Syncing",
+      "syncNow": "Sync now",
+      "termProjects": "projects",
+      "termRepositories": "repositories",
+      "reviewMRs": "MRs",
+      "reviewPRs": "PRs"
+    },
+    "schedule": {
+      "ariaLabel": "{{provider}} scheduled sync",
+      "scheduledSync": "Scheduled sync",
+      "defaultDisabledReason": "Configure read sync before enabling scheduled sync.",
+      "every": "Every {{interval}} · {{nextRun}}",
+      "offInterval": "Off · interval {{interval}}",
+      "interval": "Scheduled sync interval",
+      "custom": "Custom",
+      "customInterval": "Custom scheduled sync interval in minutes",
+      "minutesAbbrev": "min",
+      "saving": "Saving",
+      "on": "On",
+      "off": "Off"
+    },
+    "syncPanel": {
+      "scanProgress": "{{provider}} sync progress",
+      "summary": "{{completed}} {{term}} · {{issues}} issues · {{reviewTargets}} {{reviewTerm}} · {{comments}} comments",
+      "noActiveSync": "No active sync.",
+      "idle": "Sync idle",
+      "pendingRestart": "Saved source changes need a restart before Sync now can use them.",
+      "rowCounts": "{{issues}} issues · {{reviewTargets}} {{reviewTerm}} · {{comments}} comments"
+    },
+    "status": {
+      "queued": "Sync queued",
+      "running": "Sync running",
+      "succeeded": "Sync complete",
+      "partialFailed": "Sync partially failed",
+      "failed": "Sync failed"
+    },
+    "phase": {
+      "failed": "Failed",
+      "queued": "Queued",
+      "fetching": "Fetching {{name}}",
+      "importing": "{{issues}} issues and {{reviewTargets}} review targets discovered",
+      "done": "Done",
+      "doneAt": "Done {{time}}",
+      "completedAt": "{{phase}} · completed {{time}}"
+    }
+  },
+  "projects": {
+    "groupTitle": "Project routing",
+    "sourceProjects": "Source projects",
+    "sourceProjectsDescription": "Map GitHub repositories and GitLab projects to DotCraft workspaces.",
+    "routeStatusProjects": "{{count}} projects",
+    "routeStatusNoProjects": "No projects",
+    "routeStatusNoProviders": "No providers",
+    "emptyNoProjects": "No source projects configured.",
+    "emptyNoProviders": "No source providers configured.",
+    "sourceProvider": "Source provider",
+    "gitlabPlaceholder": "group/project or group/subgroup/project",
+    "githubPlaceholder": "owner/name",
+    "workspacePlaceholder": "DotCraft workspace path",
+    "add": "Add",
+    "card": {
+      "newProject": "New {{provider}} project",
+      "canonicalHint": "Canonical source id will appear after a project path is set.",
+      "notProbed": "Not probed",
+      "removeProject": "Remove project",
+      "removeNamed": "Remove {{name}}",
+      "removeFallback": "project",
+      "provider": "Provider",
+      "providerLabel": "Project provider",
+      "gitlabProject": "GitLab project",
+      "githubRepository": "GitHub repository",
+      "dotcraftWorkspace": "DotCraft workspace",
+      "workspaceAbsolute": "Absolute workspace path",
+      "gitlabProfile": "GitLab profile for {{name}}",
+      "tokenKind": "Token kind",
+      "tokenKindPlaceholder": "accessToken",
+      "gitlabToken": "GitLab token",
+      "webhookSecret": "Webhook secret",
+      "signingToken": "Signing token"
+    },
+    "gitLabStatus": {
+      "missingToken": "Missing token",
+      "profileIssue": "Profile issue",
+      "profileReady": "Profile ready",
+      "noWebhook": "No webhook"
+    },
+    "installations": {
+      "ariaLabel": "GitHub installation profiles",
+      "title": "GitHub installation profiles",
+      "description": "Profiles are shared by repositories under the same GitHub owner.",
+      "detectTooltip": "Detect missing installations",
+      "detectAria": "Detect GitHub installations",
+      "meta": "{{instance}} · {{count}} {{repositoryTerm}}",
+      "repositorySingular": "repository",
+      "repositoryPlural": "repositories",
+      "installationId": "Installation ID",
+      "statusError": "Error",
+      "statusMissing": "Missing profile",
+      "statusDetected": "Detected",
+      "statusManual": "Manual"
+    },
+    "workspacePicker": {
+      "choose": "Choose workspace folder",
+      "available": "Choose workspace folder",
+      "unavailable": "Folder picker is available in the desktop app"
+    }
+  },
+  "credentials": {
+    "github": {
+      "title": "GitHub credentials",
+      "description": "Secrets are submitted once and never echoed back.",
+      "endpoint": "Endpoint",
+      "endpointDescription": "GitHub API base URL.",
+      "appId": "App ID",
+      "appIdDescription": "GitHub App identifier.",
+      "authentication": "Authentication",
+      "authenticationDescription": "Resolved credential shape; values are redacted.",
+      "writes": "GitHub writes",
+      "writesDescription": "Issue comments, PR reviews, check runs, and Auto PR delivery.",
+      "token": "Token",
+      "privateKey": "Private key",
+      "privateKeyPath": "Private key path",
+      "webhookSecret": "Webhook secret"
+    },
+    "gitlab": {
+      "title": "GitLab",
+      "description": "Token-based import, review publication, and merge request delivery.",
+      "readSync": "GitLab read sync",
+      "readSyncDescription": "Controls GitLab issue and MR import.",
+      "writes": "GitLab writes",
+      "writesDescription": "Issue notes, MR notes, discussions, commit status, and MR delivery.",
+      "endpoint": "Endpoint",
+      "endpointDefault": "GitLab instance URL.",
+      "endpointHostChange": "Changing host clears GitLab project profiles on save; new profiles are required after restart.",
+      "authentication": "Authentication",
+      "authenticationDescription": "Resolved token presence; values are redacted.",
+      "writeCredentials": "Write credentials",
+      "writeCredentialsDescription": "GitLab writes happen as the configured token identity.",
+      "webhookVerification": "Webhook verification",
+      "webhookVerificationDescription": "Signing tokens are preferred; secret tokens remain supported.",
+      "localBypass": "Local webhook bypass",
+      "localBypassDescription": "Only for local development receivers."
+    },
+    "secret": {
+      "newValue": "New value will be encrypted automatically.",
+      "configured": "Configured. Enter a new value to replace it.",
+      "empty": "Empty. Enter a value to configure it.",
+      "value": "{{label}} value",
+      "configuredPlaceholder": "Configured",
+      "emptyPlaceholder": "Empty"
+    },
+    "authLabel": {
+      "githubAppToken": "GitHub App + token",
+      "githubApp": "GitHub App",
+      "staticToken": "Static token",
+      "projectProfiles": "Project profiles",
+      "token": "Token",
+      "partial": "Partial",
+      "none": "None",
+      "configured": "Configured"
+    },
+    "webhookMode": {
+      "signingToken": "Signing token",
+      "secretToken": "Secret token",
+      "localBypass": "Local bypass",
+      "none": "None"
+    },
+    "gitlabWriteLabel": {
+      "partial": "Partial",
+      "configured": "Configured",
+      "missingToken": "Missing token"
+    }
+  },
+  "agents": {
+    "bridge": {
+      "title": "DotCraft bridge",
+      "defaultMessage": "DotCraft bridge status.",
+      "startServer": "Start server",
+      "starting": "Starting...",
+      "health": "Health",
+      "healthDescription": "Current AppServer reachability.",
+      "endpoint": "Endpoint",
+      "noEndpoint": "No endpoint configured.",
+      "approvalPolicy": "Approval policy",
+      "approvalPolicyDescription": "Prompt guard policy used for AppServer runs.",
+      "runTimeout": "Run timeout",
+      "runTimeoutDescription": "Maximum AppServer run duration.",
+      "hubDiscovery": "Hub discovery",
+      "hubDiscoveryDescription": "Whether Oratorio may discover AppServer endpoints through Hub.",
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "connection": {
+      "title": "Agent connection",
+      "restartDescription": "Changes apply after Oratorio server restart.",
+      "appServerUrl": "AppServer URL",
+      "appServerUrlDescription": "Absolute ws or wss endpoint used when Hub discovery is unavailable.",
+      "hubDiscovery": "Hub discovery",
+      "hubDiscoveryDescription": "Allows Oratorio to discover AppServer endpoints through DotCraft Hub.",
+      "hubLockPath": "Hub lock path",
+      "hubLockPathDescription": "Optional absolute path to DotCraft Hub workspace lock data.",
+      "approvalPolicy": "Approval policy",
+      "approvalPolicyDescription": "Prompt guard policy for new DotCraft threads.",
+      "runTimeout": "Run timeout",
+      "runTimeoutDescription": "Maximum AppServer run duration."
+    },
+    "approvalPolicyOptions": {
+      "default": "Default",
+      "interrupt": "Interrupt",
+      "autoApprove": "Auto approve"
+    },
+    "health": {
+      "connected": "Connected",
+      "configured": "Configured",
+      "unavailable": "Unavailable"
+    }
+  },
+  "worktree": {
+    "group": {
+      "title": "Worktrees and scheduling",
+      "restartDescription": "Changes affect new scheduling and worktree cleanup decisions after restart."
+    },
+    "managedWorktrees": "Managed worktrees",
+    "managedWorktreesDescription": "Prepare DotCraft runs in Oratorio-managed worktrees.",
+    "worktreeRoot": "Worktree root",
+    "worktreeRootDescription": "Absolute root path, or blank for each workspace default.",
+    "branchPrefix": "Branch prefix",
+    "branchPrefixDescription": "Namespace for generated worktree branches.",
+    "concurrency": "Concurrency",
+    "concurrencyDescription": "Global, per repository, and per source active run limits.",
+    "retries": "Retries",
+    "retriesDescription": "Attempts plus initial and maximum backoff.",
+    "stallTimeout": "Stall timeout",
+    "stallTimeoutDescription": "How long a silent active run can continue before being treated as stalled.",
+    "retention": "Retention",
+    "retentionDescription": "How long successful and failed worktrees are kept.",
+    "cleanupWorker": "Cleanup worker",
+    "cleanupWorkerDescription": "Enable cleanup and set the worker interval.",
+    "concurrencyLabels": {
+      "global": "Global concurrency",
+      "perRepository": "Per repository concurrency",
+      "perSource": "Per source concurrency"
+    },
+    "retry": {
+      "attempts": "Attempts",
+      "attemptsLabel": "Retry attempts",
+      "initial": "Initial",
+      "initialBackoff": "Initial backoff",
+      "maximum": "Maximum",
+      "maximumBackoff": "Maximum backoff"
+    },
+    "retentionControl": {
+      "success": "Success",
+      "successLabel": "Successful worktree retention",
+      "failed": "Failed",
+      "failedLabel": "Failed worktree retention"
+    },
+    "cleanupControl": {
+      "interval": "Cleanup interval"
+    },
+    "stepperLabels": {
+      "stallTimeout": "Stall timeout",
+      "cleanupInterval": "Cleanup interval",
+      "runTimeout": "Run timeout"
+    },
+    "automation": {
+      "title": "Automation policy",
+      "description": "Implementation auto-dispatch and delivery defaults.",
+      "autoDispatch": "Implementation auto-dispatch",
+      "autoDispatchWithGitlab": "Starts eligible GitHub/GitLab issues and local tasks when allow/block labels permit it.",
+      "autoDispatchDefault": "Starts eligible GitHub issues and local tasks when allow/block labels permit it.",
+      "allowLabels": "Auto-dispatch allow labels",
+      "allowLabelsDescription": "Empty means every unblocked eligible item may run.",
+      "addAllowLabel": "Add allow label",
+      "labelInput": "{{label}} input",
+      "allUnblockedItems": "All unblocked items",
+      "blockLabels": "Auto-dispatch block labels",
+      "blockLabelsDescription": "Any matching label prevents implementation auto-dispatch.",
+      "addBlockLabel": "Add block label",
+      "noBlockLabels": "No block labels",
+      "implementationTurns": "Implementation turns",
+      "implementationTurnsDescription": "Maximum continuation turns before an implementation run finishes without a draft.",
+      "delivery": "Implementation delivery",
+      "deliveryWithGitlab": "Default delivery policy for auto-dispatched implementation items. Auto delivery creates a GitHub PR or GitLab MR from the origin project.",
+      "deliveryDefault": "Default delivery policy for auto-dispatched implementation items.",
+      "deliveryLabelManual": "Manual delivery",
+      "deliveryLabelAutoPr": "Auto PR",
+      "deliveryLabelAutoPrMr": "Auto PR/MR"
+    }
+  },
+  "review": {
+    "group": {
+      "title": "Automatic review",
+      "descriptionWithGitlab": "Project-level PR/MR review triggers and draft publication policy.",
+      "descriptionDefault": "Repository-level PR review triggers and draft publication policy."
+    },
+    "projectAllowlist": "Project allowlist",
+    "repositoryAllowlist": "Repository allowlist",
+    "autoReviewWithGitlab": "Automatically queues read-only PR/MR reviews for enabled projects.",
+    "autoReviewDefault": "Automatically queues read-only PR reviews for enabled repositories.",
+    "reviewSupportsWithGitlab": "GitHub PRs and GitLab MRs support head-SHA re-review.",
+    "reviewSupportsDefault": "GitHub PRs support head-SHA re-review.",
+    "publishAllowlist": "Publish allowlist",
+    "publishWithGitlab": "Publishes valid Review Drafts through the provider-specific route for selected projects.",
+    "publishDefault": "Publishes valid Review Drafts as GitHub COMMENT reviews only.",
+    "emptyWithGitlab": "No projects included.",
+    "emptyDefault": "No repositories included.",
+    "allowlistCard": {
+      "includedSingular": "{{count}} included repository",
+      "includedPlural": "{{count}} included repositories",
+      "manage": "Manage",
+      "removeTooltip": "Remove {{name}}",
+      "removeAria": "Remove {{name}}"
+    },
+    "modal": {
+      "autoReviewTitle": "Select source projects",
+      "publishTitle": "Select publish projects",
+      "autoReviewDescription": "Select source projects to enable automatic {{term}} reviews.",
+      "publishDescription": "Select source projects whose Review Drafts may be published through {{route}}.",
+      "close": "Close",
+      "searchPlaceholder": "Search source projects...",
+      "searchAria": "Search source projects",
+      "noMatch": "No source projects match your search.",
+      "noConfigured": "No source projects configured.",
+      "cancel": "Cancel",
+      "apply": "Apply selection ({{count}} selected)"
+    },
+    "term": {
+      "prmr": "PR/MR",
+      "pr": "PR",
+      "providerRoutes": "provider review routes",
+      "githubComment": "GitHub COMMENT reviews"
+    }
+  },
+  "autosave": {
+    "saveFailed": "Save failed",
+    "retry": "Retry",
+    "saving": "Saving...",
+    "saved": "Saved"
+  },
+  "duration": {
+    "sec": "sec",
+    "min": "min",
+    "hr": "hr",
+    "days": "days",
+    "amount": "{{label}} amount",
+    "unit": "{{label}} unit"
+  },
+  "control": {
+    "number": "Number",
+    "increase": "Increase {{label}}",
+    "decrease": "Decrease {{label}}"
+  },
+  "scheduleFormat": {
+    "hours_one": "{{count}} hour",
+    "hours_other": "{{count}} hours",
+    "minutes_one": "{{count}} minute",
+    "minutes_other": "{{count}} minutes",
+    "seconds_one": "{{count}} seconds",
+    "seconds_other": "{{count}} seconds",
+    "notScheduled": "next run not scheduled",
+    "nextRaw": "next {{value}}",
+    "dueNow": "due now",
+    "nextInSec_one": "next in {{count}} sec",
+    "nextInSec_other": "next in {{count}} sec",
+    "nextInMin_one": "next in {{count}} min",
+    "nextInMin_other": "next in {{count}} min",
+    "nextInHr_one": "next in {{count}} hr",
+    "nextInHr_other": "next in {{count}} hr"
+  },
+  "durationFormat": {
+    "hr": "{{value}} hr",
+    "min": "{{value}} min",
+    "sec": "{{value}} sec"
+  },
+  "relativeTime": {
+    "justNow": "just now",
+    "minAgo": "{{value}} min ago",
+    "hrAgo": "{{value}} hr ago"
+  },
+  "providerReasons": {
+    "githubWritesDisabled": "GitHub writes are disabled.",
+    "webhookInDiagnostics": "Webhook status is available in diagnostics when configured.",
+    "gitlabReadDisabled": "GitLab read sync is disabled.",
+    "gitlabReadRequiresTokens": "GitLab read sync requires project profile tokens.",
+    "gitlabNoProjects": "No GitLab projects are configured.",
+    "gitlabProviderDisabled": "GitLab provider is disabled.",
+    "gitlabWritesDisabled": "GitLab writes are disabled.",
+    "gitlabWritesRequireTokens": "GitLab writes require project profile tokens.",
+    "gitlabWebhookUnconfigured": "GitLab webhook verification is not configured.",
+    "gitlabProjectTokenMissing": "GitLab project profile token is missing.",
+    "gitlabProjectWebhookUnconfigured": "GitLab project webhook verification is not configured."
+  }
+}

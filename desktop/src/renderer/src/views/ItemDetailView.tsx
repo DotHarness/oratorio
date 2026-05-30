@@ -34,6 +34,8 @@ import {
   UserRound,
   XCircle,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import i18n from '../i18n'
 import { draftSuggestionDiffLines } from '../suggestionDiff'
 import { ProductSection, ProductTextarea } from '../ui'
 import type {
@@ -79,7 +81,7 @@ import {
   stateClassName,
   stateCopy,
   stateIcon,
-  stateLabels,
+  stateLabel,
   summaryPreviewLines,
   technicalPreview,
   timeLabel,
@@ -177,13 +179,13 @@ function DraftSuggestionPreview({ comment }: { comment: ReviewDraftComment }) {
       <div className="draft-suggestion-header">
         <span className="draft-suggestion-title">
           <Code2 size={13} />
-          <span>Suggested replacement</span>
+          <span>{i18n.t('itemDetail:suggestion.title')}</span>
         </span>
         <span className="draft-suggestion-location">
           {comment.path}:{comment.startLine ? `${comment.startLine}-` : ''}{comment.line} · {comment.side}
         </span>
       </div>
-      <div className="draft-suggestion-diff" aria-label="Suggested replacement diff preview">
+      <div className="draft-suggestion-diff" aria-label={i18n.t('itemDetail:suggestion.diffAria')}>
         {lines.map((line, index) => (
           <div className="draft-suggestion-line" key={`${line.lineNumber ?? 'line'}-${index}`}>
             <span className="draft-suggestion-marker" aria-hidden="true">{line.marker}</span>
@@ -200,28 +202,24 @@ function CommentOnlyReasonBadge({ reason }: { reason: string }) {
   return (
     <small className="draft-comment-reason">
       <MessageSquareText size={13} />
-      <span>Comment-only: {commentOnlyReasonLabel(reason)}</span>
+      <span>{i18n.t('itemDetail:commentOnly.label', { reason: commentOnlyReasonLabel(reason) })}</span>
     </small>
   )
 }
 
 function commentOnlyReasonLabel(reason: string) {
-  if (reason === 'needsHumanDecision') return 'Needs human decision'
-  if (reason === 'requiresLargerChange') return 'Requires larger change'
-  if (reason === 'cannotAnchorSafely') return 'Cannot anchor safely'
-  if (reason === 'investigateOnly') return 'Investigate only'
-  if (reason === 'leftSideOrDeletion') return 'Left-side or deletion'
+  if (reason === 'needsHumanDecision') return i18n.t('itemDetail:commentOnly.needsHumanDecision')
+  if (reason === 'requiresLargerChange') return i18n.t('itemDetail:commentOnly.requiresLargerChange')
+  if (reason === 'cannotAnchorSafely') return i18n.t('itemDetail:commentOnly.cannotAnchorSafely')
+  if (reason === 'investigateOnly') return i18n.t('itemDetail:commentOnly.investigateOnly')
+  if (reason === 'leftSideOrDeletion') return i18n.t('itemDetail:commentOnly.leftSideOrDeletion')
   return reason
 }
 
-function pluralizeCount(count: number, singular: string, plural = `${singular}s`) {
-  return `${count} ${count === 1 ? singular : plural}`
-}
-
 function discussionPurposeLabel(purpose?: CommentPurpose) {
-  if (purpose === 'discussionQuestion') return 'Question'
-  if (purpose === 'discussionReply') return 'Agent reply'
-  if (purpose === 'systemNote') return 'System note'
+  if (purpose === 'discussionQuestion') return i18n.t('itemDetail:discussionPurpose.question')
+  if (purpose === 'discussionReply') return i18n.t('itemDetail:discussionPurpose.agentReply')
+  if (purpose === 'systemNote') return i18n.t('itemDetail:discussionPurpose.systemNote')
   return null
 }
 
@@ -290,9 +288,10 @@ export function ItemDetailView({
   moveSidecarResize,
   stopSidecarResize,
 }: ItemDetailViewProps) {
+  const { t } = useTranslation('itemDetail')
   const isGitLabItem = selectedItem?.sourceKey === 'gitlab'
-  const reviewTargetName = isGitLabItem ? 'MR' : 'PR'
-  const sourceProjectLabel = isGitLabItem ? 'Project' : 'Repository'
+  const reviewTargetName = isGitLabItem ? t('target.mr') : t('target.pr')
+  const sourceProjectLabel = isGitLabItem ? t('sourceProject.project') : t('sourceProject.repository')
   const showSourceDetailsPanel = selectedReviewStage === 'intake' &&
     (selectedItem?.sourceKey === 'github' || selectedItem?.sourceKey === 'gitlab') &&
     (sourceDetailsSyncing || selectedItem.sourceDetailsStatus !== 'current' || selectedItem.sourceComments.length > 0)
@@ -301,8 +300,8 @@ export function ItemDetailView({
   const latestFailedDiscussionTurn = selectedItem?.discussionTurns?.slice().reverse().find((turn) => turn.status === 'failed') ?? null
   const askAgentReason = activeDiscussionTurn
     ? activeDiscussionTurn.status === 'pending'
-      ? 'Agent question queued.'
-      : 'Agent is answering.'
+      ? t('askAgent.queued')
+      : t('askAgent.answering')
     : askAgentDisabledReason ?? latestFailedDiscussionTurn?.errorMessage ?? null
   const canAskAgent = !isBusy && !askAgentDisabledReason && !activeDiscussionTurn && Boolean(feedbackDraft.trim())
   useEffect(() => {
@@ -323,15 +322,15 @@ export function ItemDetailView({
     <>
       {selectedItem ? (
         <>
-          <section className="detail-pane" aria-label="Selected item detail">
+          <section className="detail-pane" aria-label={t('aria.selectedItemDetail')}>
             <header className="detail-header">
               <div className="title-row">
                 <h1>{selectedItem.title}</h1>
                 <div className="title-actions">
                   {selectedItem.externalUrl ? (
                     <ActionIcon
-                      label="Open source task"
-                      title="Open source task"
+                      label={t('header.openSourceTask')}
+                      title={t('header.openSourceTask')}
                       href={selectedItem.externalUrl}
                     >
                       <ExternalLink size={17} />
@@ -339,7 +338,7 @@ export function ItemDetailView({
                   ) : null}
                   <div className="action-menu-wrap">
                     <ActionIcon
-                      label="More actions"
+                      label={t('header.moreActions')}
                       onClick={() => setActionMenuItemId((current) => (current === selectedItem.id ? null : selectedItem.id))}
                     >
                       <MoreHorizontal size={17} />
@@ -350,7 +349,7 @@ export function ItemDetailView({
                           <>
                             <button role="menuitem" onClick={openEditLocalTask} disabled={!selectedCanEditLocalTask || isBusy}>
                               <Pencil size={15} />
-                              Edit local task
+                              {t('header.editLocalTask')}
                             </button>
                             {selectedItem.state === 'archived' ? (
                               <button
@@ -359,7 +358,7 @@ export function ItemDetailView({
                                 disabled={!selectedCanReopen || isBusy}
                               >
                                 <ArchiveRestore size={15} />
-                                Reopen local task
+                                {t('header.reopenLocalTask')}
                               </button>
                             ) : (
                               <button
@@ -368,7 +367,7 @@ export function ItemDetailView({
                                 disabled={!selectedCanArchive || isBusy}
                               >
                                 <Archive size={15} />
-                                Archive local task
+                                {t('header.archiveLocalTask')}
                               </button>
                             )}
                           </>
@@ -377,29 +376,29 @@ export function ItemDetailView({
                             {selectedItem.externalUrl ? (
                               <a role="menuitem" href={selectedItem.externalUrl} target="_blank" rel="noreferrer">
                                 <ExternalLink size={15} />
-                                Open source
+                                {t('header.openSource')}
                               </a>
                             ) : null}
                             <button role="menuitem" onClick={() => void refreshSelectedItem()} disabled={isBusy}>
                               <RefreshCw size={15} />
-                              Refresh item
+                              {t('header.refreshItem')}
                             </button>
                             {selectedItem.state === 'archived' ? (
                               <button role="menuitem" onClick={reopenSelectedItem} disabled={!selectedCanReopen || isBusy}>
                                 <ArchiveRestore size={15} />
-                                Reopen item
+                                {t('header.reopenItem')}
                               </button>
                             ) : (
                               <button role="menuitem" onClick={() => void archiveSelectedItem()} disabled={!selectedCanArchive || isBusy}>
                                 <Archive size={15} />
-                                Archive item
+                                {t('header.archiveItem')}
                               </button>
                             )}
                           </>
                         )}
                         <button role="menuitem" onClick={() => void copySelectedItemId()}>
                           <Clipboard size={15} />
-                          Copy item id
+                          {t('header.copyItemId')}
                         </button>
                       </div>
                     ) : null}
@@ -421,7 +420,7 @@ export function ItemDetailView({
                 ) : null}
                 <span>
                   <RotateCcw size={14} />
-                  Round {selectedItem.round}
+                  {t('header.round', { round: selectedItem.round })}
                 </span>
                 {selectedItem.headSha ? (
                   <span>
@@ -432,12 +431,12 @@ export function ItemDetailView({
                 {selectedItem.lastSourceSync ? (
                   <span>
                     <RefreshCw size={14} />
-                    Synced {selectedItem.lastSourceSync}
+                    {t('header.synced', { time: selectedItem.lastSourceSync })}
                   </span>
                 ) : null}
-                {selectedItem.isDraft ? <span className="draft-pill">Draft</span> : null}
+                {selectedItem.isDraft ? <span className="draft-pill">{t('header.draft')}</span> : null}
                 {sourceLifecycleBadge(selectedItem)}
-                <Tooltip content={`oratorio/review: ${checkLabel(selectedItem.check)}`}>
+                <Tooltip content={t('header.checkTooltip', { check: checkLabel(selectedItem.check) })}>
                   <span className={`mini-check ${selectedItem.check}`}>
                     {checkIcon(selectedItem.check)}
                     {checkLabel(selectedItem.check)}
@@ -451,7 +450,7 @@ export function ItemDetailView({
                 onStageChange={setSelectedReviewStage}
               />
               {selectedItem.labels.length > 0 ? (
-                <div className="label-row" aria-label="Source labels">
+                <div className="label-row" aria-label={t('aria.sourceLabels')}>
                   {selectedItem.labels.map((label) => (
                     <span className="label-chip" key={label}>
                       <Tag size={12} />
@@ -475,12 +474,12 @@ export function ItemDetailView({
                 className="stage-action-section rereview-action-section"
                 tone="blue"
                 icon={<GitPullRequest size={16} />}
-                title="Review latest commit"
+                title={t('reReview.title')}
                 description={reReviewInfo.description}
                 action={
                   <button className="primary-button inline" onClick={reReviewPullRequest} disabled={isBusy}>
                     <RefreshCw size={16} />
-                    Re-review {reviewTargetName}
+                    {t('reReview.button', { target: reviewTargetName })}
                   </button>
                 }
               />
@@ -491,15 +490,15 @@ export function ItemDetailView({
                 className="stage-action-section dispatch-action-section"
                 tone={selectedCanImplementationDispatch ? 'green' : 'blue'}
                 icon={<Play size={16} />}
-                title={selectedCanImplementationDispatch ? 'Start implementation' : selectedIsPullRequest ? `Start ${reviewTargetName} review` : 'Dispatch analysis'}
+                title={selectedCanImplementationDispatch ? t('dispatch.startImplementation') : selectedIsPullRequest ? t('dispatch.startReview', { target: reviewTargetName }) : t('dispatch.dispatchAnalysis')}
                 description={
                   selectedCanImplementationDispatch
-                    ? 'Create an implementation draft.'
+                    ? t('dispatch.createImplementationDraft')
                     : selectedItem.state === 'failed'
-                      ? 'Retry the latest run.'
+                      ? t('dispatch.retryLatestRun')
                       : selectedIsPullRequest
                         ? undefined
-                        : 'Ready for analysis.'
+                        : t('dispatch.readyForAnalysis')
                 }
                 action={
                   <div className="next-action-controls">
@@ -508,21 +507,21 @@ export function ItemDetailView({
                       <>
                         <button className="primary-button inline" onClick={() => dispatchImplementationRound('manualDelivery')} disabled={!selectedCanImplementationDispatch}>
                           <GitBranch size={16} />
-                          Implement
+                          {t('dispatch.implement')}
                         </button>
                         <button className="secondary-button inline" onClick={() => dispatchImplementationRound('autoPr')} disabled={!selectedCanImplementationDispatch}>
                           <GitPullRequest size={16} />
-                          Auto {reviewTargetName}
+                          {t('dispatch.autoTarget', { target: reviewTargetName })}
                         </button>
                         <button className="secondary-button inline" onClick={dispatchRound} disabled={!selectedCanDispatch}>
                           <Play size={16} />
-                          Review only
+                          {t('dispatch.reviewOnly')}
                         </button>
                       </>
                     ) : (
                       <button className="primary-button inline" onClick={dispatchRound} disabled={!selectedCanDispatch}>
                         <Play size={16} />
-                        {selectedItem.state === 'failed' ? 'Retry run' : selectedIsPullRequest ? `Dispatch ${reviewTargetName} review` : 'Dispatch round'}
+                        {selectedItem.state === 'failed' ? t('dispatch.retryRun') : selectedIsPullRequest ? t('dispatch.dispatchReview', { target: reviewTargetName }) : t('dispatch.dispatchRound')}
                       </button>
                     )}
                   </div>
@@ -535,27 +534,27 @@ export function ItemDetailView({
                 className="brief-section"
                 tone="blue"
                 icon={<ClipboardList size={16} />}
-                title="Brief"
-                description={selectedIsLocalTask ? 'Local task description.' : 'Operator-facing summary derived from the source body.'}
+                title={t('brief.title')}
+                description={selectedIsLocalTask ? t('brief.localDescription') : t('brief.sourceDescription')}
               >
                 <InfoRowGroup className="brief-definition-rows">
                   {selectedBrief.summary ? (
-                    <InfoRow label="Summary" multiline>
+                    <InfoRow label={t('brief.summary')} multiline>
                       <MarkdownBlock value={selectedBrief.summary} className="description-markdown" compact />
                     </InfoRow>
                   ) : null}
                   {selectedBrief.keyDetails ? (
-                    <InfoRow label="Key details" multiline>
+                    <InfoRow label={t('brief.keyDetails')} multiline>
                       <MarkdownBlock value={selectedBrief.keyDetails} className="description-markdown" compact />
                     </InfoRow>
                   ) : null}
                   {selectedBrief.whyItMatters ? (
-                    <InfoRow label="Why it matters" multiline>
+                    <InfoRow label={t('brief.whyItMatters')} multiline>
                       <MarkdownBlock value={selectedBrief.whyItMatters} className="description-markdown" compact />
                     </InfoRow>
                   ) : null}
                   {selectedBrief.desiredOutcome ? (
-                    <InfoRow label="Desired outcome" multiline>
+                    <InfoRow label={t('brief.desiredOutcome')} multiline>
                       <MarkdownBlock value={selectedBrief.desiredOutcome} className="description-markdown" compact />
                     </InfoRow>
                   ) : null}
@@ -564,7 +563,7 @@ export function ItemDetailView({
                   <details className="technical-disclosure">
                     <summary>
                       <Code2 size={15} />
-                      Raw source body
+                      {t('brief.rawSourceBody')}
                     </summary>
                     <MarkdownBlock value={selectedItem.description} className="event-markdown" compact />
                   </details>
@@ -577,16 +576,16 @@ export function ItemDetailView({
               className="brief-section source-section"
               tone="green"
               icon={<Code2 size={16} />}
-              title="Source"
-              description="Compact metadata from the originating system."
+              title={t('source.title')}
+              description={t('source.description')}
             >
               <InfoRowGroup>
                 <InfoRow label={sourceProjectLabel}>{selectedItem.repository}</InfoRow>
-                <InfoRow label="Identifier">{selectedItem.number}</InfoRow>
-                <InfoRow label="Source updated">{selectedItem.sourceUpdated ?? <MissingValue />}</InfoRow>
-                <InfoRow label="Last source sync">{selectedItem.lastSourceSync ?? <MissingValue />}</InfoRow>
-                <InfoRow label="Snapshot">{sourceSnapshotLabel(selectedItem.sourceSnapshot)}</InfoRow>
-                <InfoRow label="Head SHA">{selectedItem.headSha ? shortSha(selectedItem.headSha) : <MissingValue />}</InfoRow>
+                <InfoRow label={t('source.identifier')}>{selectedItem.number}</InfoRow>
+                <InfoRow label={t('source.sourceUpdated')}>{selectedItem.sourceUpdated ?? <MissingValue />}</InfoRow>
+                <InfoRow label={t('source.lastSourceSync')}>{selectedItem.lastSourceSync ?? <MissingValue />}</InfoRow>
+                <InfoRow label={t('source.snapshot')}>{sourceSnapshotLabel(selectedItem.sourceSnapshot)}</InfoRow>
+                <InfoRow label={t('source.headSha')}>{selectedItem.headSha ? shortSha(selectedItem.headSha) : <MissingValue />}</InfoRow>
               </InfoRowGroup>
             </SectionBlock>
             ) : null}
@@ -596,8 +595,8 @@ export function ItemDetailView({
                 className="source-activity-section"
                 tone="blue"
                 icon={<Activity size={16} />}
-                title="Source activity"
-                description="Imported changes from the connected source."
+                title={t('sourceActivity.title')}
+                description={t('sourceActivity.description')}
                 action={<span className="count-badge">{selectedSourceActivity.length}</span>}
               >
                 <div className="source-activity-list">
@@ -615,7 +614,7 @@ export function ItemDetailView({
                     <details className="source-activity-more">
                       <summary>
                         <ChevronRight size={15} />
-                        Show {hiddenSourceActivity.length} more source events
+                        {t('sourceActivity.showMore', { count: hiddenSourceActivity.length })}
                       </summary>
                       <div className="source-activity-list compact">
                         {hiddenSourceActivity.map((event) => (
@@ -640,12 +639,12 @@ export function ItemDetailView({
                 className="source-comments-section"
                 tone="blue"
                 icon={<MessageSquareText size={16} />}
-                title="Source comments"
-                description={sourceDetailsSyncing ? `Loading comments and reviews from ${isGitLabItem ? 'GitLab' : 'GitHub'}.` : sourceDetailsFailed ? `${isGitLabItem ? 'GitLab' : 'GitHub'} source details could not be loaded.` : 'Comments imported from the originating system.'}
+                title={t('sourceComments.title')}
+                description={sourceDetailsSyncing ? t('sourceComments.loadingDescription', { provider: isGitLabItem ? 'GitLab' : 'GitHub' }) : sourceDetailsFailed ? t('sourceComments.failedDescription', { provider: isGitLabItem ? 'GitLab' : 'GitHub' }) : t('sourceComments.description')}
                 action={
                   sourceDetailsFailed ? (
                     <button className="secondary-button inline compact-row-action" type="button" onClick={() => void syncSelectedSourceDetails()}>
-                      Retry
+                      {t('sourceComments.retry')}
                     </button>
                   ) : (
                     <span className="count-badge">{selectedItem.sourceComments.length}</span>
@@ -653,14 +652,14 @@ export function ItemDetailView({
                 }
               >
                 {sourceDetailsSyncing || (selectedItem.sourceDetailsStatus === 'stale' && selectedItem.sourceComments.length === 0) ? (
-                  <div className="source-comments source-comments-loading" aria-label="Loading source comments">
+                  <div className="source-comments source-comments-loading" aria-label={t('aria.loadingSourceComments')}>
                     <span className="source-comment-skeleton" />
                     <span className="source-comment-skeleton short" />
                   </div>
                 ) : sourceDetailsFailed ? (
                   <div className="source-details-error">
                     <AlertTriangle size={15} />
-                    <span>{selectedItem.sourceDetailsErrorMessage || `${isGitLabItem ? 'GitLab' : 'GitHub'} source details failed to sync.`}</span>
+                    <span>{selectedItem.sourceDetailsErrorMessage || t('sourceComments.failedFallback', { provider: isGitLabItem ? 'GitLab' : 'GitHub' })}</span>
                   </div>
                 ) : (
                   <div className="source-comments">
@@ -672,7 +671,7 @@ export function ItemDetailView({
                             {comment.source} · {comment.time}
                           </span>
                           {comment.externalUrl ? (
-                            <ActionIcon className="icon-button small source-comment-link" label="Open source comment" href={comment.externalUrl}>
+                            <ActionIcon className="icon-button small source-comment-link" label={t('sourceComments.openSourceComment')} href={comment.externalUrl}>
                               <ExternalLink size={14} />
                             </ActionIcon>
                           ) : null}
@@ -690,14 +689,14 @@ export function ItemDetailView({
               className="brief-section agent-result-section"
               tone="amber"
               icon={<Bot size={16} />}
-              title="Agent result"
-              description="Latest analysis output from the runner."
-              action={<span className={`state-pill ${stateClassName(selectedItem.state)}`}>{stateLabels[selectedItem.state]}</span>}
+              title={t('agentResult.title')}
+              description={t('agentResult.description')}
+              action={<span className={`state-pill ${stateClassName(selectedItem.state)}`}>{stateLabel(selectedItem.state)}</span>}
             >
               <InfoRowGroup className="agent-result-facts">
-                <InfoRow label="Agent">{selectedRun ? runnerKindLabel(selectedRun.runnerKind) : 'No agent yet'}</InfoRow>
-                <InfoRow label="Attempt">{selectedRun ? selectedRun.attempt : 0}</InfoRow>
-                <InfoRow label="Status">{selectedRun ? runStatusLabel(selectedRun.status) : 'Pending'}</InfoRow>
+                <InfoRow label={t('agentResult.agent')}>{selectedRun ? runnerKindLabel(selectedRun.runnerKind) : t('agentResult.noAgentYet')}</InfoRow>
+                <InfoRow label={t('agentResult.attempt')}>{selectedRun ? selectedRun.attempt : 0}</InfoRow>
+                <InfoRow label={t('agentResult.status')}>{selectedRun ? runStatusLabel(selectedRun.status) : t('agentResult.pending')}</InfoRow>
               </InfoRowGroup>
               <div className="agent-brief">
                 <div className="agent-brief-icon">
@@ -712,7 +711,7 @@ export function ItemDetailView({
               <details className="technical-disclosure">
                 <summary>
                   <Code2 size={15} />
-                  Raw agent markdown
+                  {t('agentResult.rawAgentMarkdown')}
                 </summary>
                 <MarkdownBlock value={selectedItem.summary} className="summary-markdown" />
               </details>
@@ -724,13 +723,13 @@ export function ItemDetailView({
                 className="source-write-section"
                 tone="green"
                 icon={<GitCommit size={16} />}
-                title={`${sourceLabel(selectedItem.sourceKey)} writes`}
-                description="Auditable writes created for source feedback and review outcomes."
+                title={t('sourceWrites.title', { source: sourceLabel(selectedItem.sourceKey) })}
+                description={t('sourceWrites.description')}
                 action={<span className="count-badge">{selectedItem.sourceWrites.length}</span>}
               >
                 <details className="audit-details section-disclosure" open={selectedItem.sourceWrites.some((write) => write.status !== 'succeeded')}>
                   <summary>
-                    <span>Write audit</span>
+                    <span>{t('sourceWrites.writeAudit')}</span>
                   </summary>
                 <div className="source-write-list">
                   {selectedItem.sourceWrites.map((write) => (
@@ -740,19 +739,19 @@ export function ItemDetailView({
                         <strong>{sourceWriteKindLabel(write.kind)}</strong>
                         <span>
                           {write.repository}
-                          {write.number ? ` #${write.number}` : ''} · {sourceWriteIntentLabel(write.intent)} · attempt {write.attemptCount}
+                          {write.number ? ` #${write.number}` : ''} · {sourceWriteIntentLabel(write.intent)} · {t('sourceWrites.attempt', { count: write.attemptCount })}
                         </span>
                       </div>
                       <div className="source-write-actions">
                         {write.externalUrl ? (
-                          <ActionIcon label="Open source artifact" href={write.externalUrl}>
+                          <ActionIcon label={t('sourceWrites.openSourceArtifact')} href={write.externalUrl}>
                             <ExternalLink size={15} />
                           </ActionIcon>
                         ) : null}
                         {write.status === 'failed' ? (
                           <button className="secondary-button inline" onClick={() => void retrySourceWrite(write.writeId)} disabled={isBusy}>
                             <RefreshCw size={15} />
-                            {write.intent.startsWith('implementation') ? 'Retry delivery' : 'Retry'}
+                            {write.intent.startsWith('implementation') ? t('sourceWrites.retryDelivery') : t('sourceWrites.retry')}
                           </button>
                         ) : null}
                       </div>
@@ -769,13 +768,13 @@ export function ItemDetailView({
                 className="review-draft-section"
                 tone="amber"
                 icon={<Sparkles size={16} />}
-                title="Review drafts"
-                description={`Structured ${reviewTargetName} review drafts awaiting operator action or audit.`}
+                title={t('reviewDrafts.title')}
+                description={t('reviewDrafts.description', { target: reviewTargetName })}
                 action={<span className="count-badge">{selectedItem.reviewDrafts.length}</span>}
               >
                 <details className="audit-details section-disclosure" open={selectedItem.reviewDrafts.some((draft) => draft.status === 'draft' || draft.status === 'publishFailed')}>
                   <summary>
-                    <span>Draft details</span>
+                    <span>{t('reviewDrafts.draftDetails')}</span>
                   </summary>
                 <div className="review-draft-list">
                   {selectedItem.reviewDrafts.map((draft) => {
@@ -784,7 +783,7 @@ export function ItemDetailView({
                     const publishButton = (
                       <button className="primary-button inline" onClick={() => void publishReviewDraft(draft.draftId)} disabled={publishDisabled}>
                         <Send size={15} />
-                        Publish
+                        {t('reviewDrafts.publish')}
                       </button>
                     )
 
@@ -794,8 +793,8 @@ export function ItemDetailView({
                         <span className={`write-status ${draft.status === 'published' ? 'succeeded' : draft.status === 'publishFailed' ? 'failed' : 'pending'}`}>
                           {reviewDraftStatusLabel(draft.status)}
                         </span>
-                        <strong>{draft.majorCount} major · {draft.minorCount} minor · {pluralizeCount(draft.suggestionCount, 'code suggestion')} · {pluralizeCount(commentOnlyCount, 'comment-only finding', 'comment-only findings')}</strong>
-                        <span>{draft.acceptedCount} accepted · {draft.warningCount} warning{draft.resolvedCount > 0 ? ` · ${draft.resolvedCount} resolved` : ''}</span>
+                        <strong>{t('reviewDrafts.headlineFindings', { major: draft.majorCount, minor: draft.minorCount, suggestions: t('reviewDrafts.codeSuggestion', { count: draft.suggestionCount }), commentOnly: t('reviewDrafts.commentOnlyFinding', { count: commentOnlyCount }) })}</strong>
+                        <span>{draft.resolvedCount > 0 ? t('reviewDrafts.statsResolved', { accepted: draft.acceptedCount, warning: draft.warningCount, resolved: draft.resolvedCount }) : t('reviewDrafts.stats', { accepted: draft.acceptedCount, warning: draft.warningCount })}</span>
                       </div>
                       <MarkdownBlock value={draft.summaryBody} className="summary-markdown compact" />
                       {draft.warnings.length > 0 ? (
@@ -826,8 +825,9 @@ export function ItemDetailView({
                               <div className="draft-comment-resolution">
                                 <span className="resolution-chip">
                                   <CheckCircle2 size={13} />
-                                  Resolved · {comment.resolutionKind === 'fixed' ? 'Fixed' : 'Dismissed'}
-                                  {comment.resolvedByKind ? ` · ${comment.resolvedByKind}` : ''}
+                                  {comment.resolvedByKind
+                                    ? t('reviewDrafts.resolvedWithBy', { kind: comment.resolutionKind === 'fixed' ? t('reviewDrafts.resolvedFixed') : t('reviewDrafts.resolvedDismissed'), by: comment.resolvedByKind })
+                                    : t('reviewDrafts.resolved', { kind: comment.resolutionKind === 'fixed' ? t('reviewDrafts.resolvedFixed') : t('reviewDrafts.resolvedDismissed') })}
                                 </span>
                                 {comment.resolutionNote ? <span className="resolution-note">{comment.resolutionNote}</span> : null}
                               </div>
@@ -836,15 +836,15 @@ export function ItemDetailView({
                               <div className="draft-comment-resolution-actions">
                                 {resolved ? (
                                   <button className="link-button" onClick={() => void reopenReviewFinding(draft.draftId, comment.draftCommentId)} disabled={isBusy}>
-                                    Reopen
+                                    {t('reviewDrafts.reopen')}
                                   </button>
                                 ) : (
                                   <>
                                     <button className="link-button" onClick={() => void resolveReviewFinding(draft.draftId, comment.draftCommentId, 'fixed', null)} disabled={isBusy}>
-                                      Mark fixed
+                                      {t('reviewDrafts.markFixed')}
                                     </button>
                                     <button className="link-button" onClick={() => void resolveReviewFinding(draft.draftId, comment.draftCommentId, 'dismissed', null)} disabled={isBusy}>
-                                      Mark dismissed
+                                      {t('reviewDrafts.markDismissed')}
                                     </button>
                                   </>
                                 )}
@@ -857,11 +857,11 @@ export function ItemDetailView({
                       <div className="review-draft-actions">
                         <button className="secondary-button inline" onClick={() => void editReviewDraftSummary(draft)} disabled={isBusy || draft.status !== 'draft'}>
                           <Pencil size={15} />
-                          Edit
+                          {t('reviewDrafts.edit')}
                         </button>
                         <button className="secondary-button inline" onClick={() => void discardReviewDraft(draft.draftId)} disabled={isBusy || draft.status !== 'draft'}>
                           <XCircle size={15} />
-                          Discard
+                          {t('reviewDrafts.discard')}
                         </button>
                         {reviewDraftPublishDisabledReason ? (
                           <Tooltip content={reviewDraftPublishDisabledReason}>
@@ -882,13 +882,13 @@ export function ItemDetailView({
                 className="review-draft-section implementation-draft-section"
                 tone="green"
                 icon={<GitPullRequest size={16} />}
-                title="Implementation drafts"
-                description="Proposed implementation delivery payloads from agent runs."
+                title={t('implementationDrafts.title')}
+                description={t('implementationDrafts.description')}
                 action={<span className="count-badge">{selectedItem.implementationDrafts.length}</span>}
               >
                 <details className="audit-details section-disclosure" open>
                   <summary>
-                    <span>Delivery details</span>
+                    <span>{t('implementationDrafts.deliveryDetails')}</span>
                   </summary>
                   <div className="review-draft-list">
                     {selectedItem.implementationDrafts.map((draft) => (
@@ -897,18 +897,18 @@ export function ItemDetailView({
                           <span className={`write-status ${draft.status === 'delivered' ? 'succeeded' : draft.status === 'deliveryFailed' ? 'failed' : 'pending'}`}>
                             {implementationDraftStatusLabel(draft.status)}
                           </span>
-                          <strong>{draft.deliveryPolicy === 'autoPr' ? `Auto ${reviewTargetName}` : deliveryPolicyLabel(draft.deliveryPolicy)}</strong>
-                          <span>{draft.changedFiles.length} changed file{draft.changedFiles.length === 1 ? '' : 's'}</span>
+                          <strong>{draft.deliveryPolicy === 'autoPr' ? t('implementationDrafts.autoTarget', { target: reviewTargetName }) : deliveryPolicyLabel(draft.deliveryPolicy)}</strong>
+                          <span>{t('implementationDrafts.changedFiles', { count: draft.changedFiles.length })}</span>
                         </div>
                         <MarkdownBlock value={draft.summary} className="summary-markdown compact" />
                         <InfoRowGroup>
-                          <InfoRow label="Commit">{draft.commitSha ?? 'Not delivered'}</InfoRow>
-                          <InfoRow label="Branch">{draft.branchName ?? 'Pending'}</InfoRow>
-                          <InfoRow label={`Generated ${reviewTargetName}`}>
+                          <InfoRow label={t('implementationDrafts.commit')}>{draft.commitSha ?? t('implementationDrafts.notDelivered')}</InfoRow>
+                          <InfoRow label={t('implementationDrafts.branch')}>{draft.branchName ?? t('implementationDrafts.pending')}</InfoRow>
+                          <InfoRow label={t('implementationDrafts.generatedTarget', { target: reviewTargetName })}>
                             {draft.pullRequestUrl ? (
                               <a className="artifact-chip generated-pr-chip" href={draft.pullRequestUrl} target="_blank" rel="noreferrer">
                                 <GitPullRequest size={13} />
-                                Open {reviewTargetName}
+                                {t('implementationDrafts.openTarget', { target: reviewTargetName })}
                               </a>
                             ) : (
                               <MissingValue />
@@ -924,7 +924,7 @@ export function ItemDetailView({
                         <div className="review-draft-actions">
                           <button className="primary-button inline" onClick={() => void deliverImplementationDraft(draft.draftId)} disabled={isBusy || !canDeliverImplementationDraft(draft)}>
                             <GitPullRequest size={15} />
-                            Deliver {reviewTargetName}
+                            {t('implementationDrafts.deliverTarget', { target: reviewTargetName })}
                           </button>
                         </div>
                       </article>
@@ -939,13 +939,13 @@ export function ItemDetailView({
                 className="review-draft-section follow-up-draft-section"
                 tone="blue"
                 icon={<ClipboardList size={16} />}
-                title="Follow-up drafts"
-                description="Proposed follow-up work that can become local tasks."
+                title={t('followUpDrafts.title')}
+                description={t('followUpDrafts.description')}
                 action={<span className="count-badge">{selectedItem.followUpDrafts.length}</span>}
               >
                 <details className="audit-details section-disclosure" open={selectedItem.followUpDrafts.some((draft) => draft.status === 'draft')}>
                   <summary>
-                    <span>Follow-up details</span>
+                    <span>{t('followUpDrafts.followUpDetails')}</span>
                   </summary>
                   <div className="review-draft-list">
                     {selectedItem.followUpDrafts.map((draft) => (
@@ -960,9 +960,9 @@ export function ItemDetailView({
                         <MarkdownBlock value={draft.body} className="summary-markdown compact" />
                         {draft.rationale ? <p className="stage-empty-copy">{draft.rationale}</p> : null}
                         <InfoRowGroup>
-                          <InfoRow label="Assignee">{draft.assignee ?? 'Unassigned'}</InfoRow>
-                          <InfoRow label="Branch">{draft.branch ?? 'No branch'}</InfoRow>
-                          <InfoRow label="Created task">{draft.createdItemId ?? 'Not created'}</InfoRow>
+                          <InfoRow label={t('followUpDrafts.assignee')}>{draft.assignee ?? t('followUpDrafts.unassigned')}</InfoRow>
+                          <InfoRow label={t('followUpDrafts.branch')}>{draft.branch ?? t('followUpDrafts.noBranch')}</InfoRow>
+                          <InfoRow label={t('followUpDrafts.createdTask')}>{draft.createdItemId ?? t('followUpDrafts.notCreated')}</InfoRow>
                         </InfoRowGroup>
                         {draft.labels.length > 0 ? (
                           <div className="draft-warning-list">
@@ -972,15 +972,15 @@ export function ItemDetailView({
                         <div className="review-draft-actions">
                           <button className="secondary-button inline" onClick={() => void editFollowUpDraft(draft)} disabled={isBusy || draft.status !== 'draft'}>
                             <Pencil size={15} />
-                            Edit
+                            {t('followUpDrafts.edit')}
                           </button>
                           <button className="secondary-button inline" onClick={() => void discardFollowUpDraft(draft.draftId)} disabled={isBusy || draft.status !== 'draft'}>
                             <XCircle size={15} />
-                            Discard
+                            {t('followUpDrafts.discard')}
                           </button>
                           <button className="primary-button inline" onClick={() => void createLocalTaskFromFollowUpDraft(draft.draftId)} disabled={isBusy || draft.status !== 'draft'}>
                             <ClipboardList size={15} />
-                            Create task
+                            {t('followUpDrafts.createTask')}
                           </button>
                         </div>
                       </article>
@@ -995,8 +995,8 @@ export function ItemDetailView({
                 className="discussion-section"
                 tone="blue"
                 icon={<MessageSquare size={16} />}
-                title="Discussion"
-                description="Comments and next-round feedback for this review."
+                title={t('discussion.title')}
+                description={t('discussion.description')}
                 action={<span className="count-badge">{selectedItem.comments.length}</span>}
               >
                 <div className="discussion-thread">
@@ -1022,7 +1022,7 @@ export function ItemDetailView({
                   ) : (
                     <div className="stage-empty">
                       <MessageSquare size={24} strokeWidth={1.5} className="stage-empty-icon" aria-hidden="true" />
-                      <p className="stage-empty-copy">No comments have been added for this Task yet.</p>
+                      <p className="stage-empty-copy">{t('discussion.empty')}</p>
                     </div>
                   )}
                   <div className="discussion-composer">
@@ -1030,16 +1030,16 @@ export function ItemDetailView({
                       id="discussion-composer"
                       value={feedbackDraft}
                       onChange={(event) => setFeedbackDraft(event.target.value)}
-                      placeholder="Add an internal note, next-round feedback, or an agent question"
+                      placeholder={t('discussion.placeholder')}
                       rows={4}
                     />
                     <div className="command-row">
                       {askAgentReason ? <span className="discussion-action-hint">{askAgentReason}</span> : null}
                       <button className="primary-button inline" onClick={addComment} disabled={isBusy || !feedbackDraft.trim()}>
                         <Send size={16} />
-                        Add comment
+                        {t('discussion.addComment')}
                       </button>
-                      <Tooltip content={askAgentReason ?? 'Ask agent'}>
+                      <Tooltip content={askAgentReason ?? t('askAgent.tooltip')}>
                         <span className="discussion-tooltip-trigger">
                           <button
                             className="secondary-button inline"
@@ -1051,7 +1051,7 @@ export function ItemDetailView({
                             aria-disabled={!canAskAgent}
                           >
                             <Bot size={16} />
-                            Ask agent
+                            {t('discussion.askAgent')}
                           </button>
                         </span>
                       </Tooltip>
@@ -1066,27 +1066,27 @@ export function ItemDetailView({
                 className="decision-action-section"
                 tone="amber"
                 icon={<ShieldCheck size={16} />}
-                title="Close this review"
-                description="Record the operator outcome for this item."
+                title={t('decision.title')}
+                description={t('decision.description')}
               >
                 <ProductTextarea
                   value={decisionNote}
                   onChange={(event) => setDecisionNote(event.target.value)}
-                  placeholder="Optional note; required when requesting changes"
+                  placeholder={t('decision.placeholder')}
                   rows={4}
                 />
                 <div className="decision-button-row">
                   <button onClick={() => setDecision('request-changes')} disabled={!selectedCanDecide || !decisionNote.trim()} className="request-decision">
                     <MessageSquare size={16} />
-                    Request changes
+                    {t('decision.requestChanges')}
                   </button>
                   <button onClick={() => setDecision('approve')} disabled={!selectedCanDecide} className="approve-decision">
                     <CheckCircle2 size={16} />
-                    Approve
+                    {t('decision.approve')}
                   </button>
                   <button onClick={() => setDecision('reject')} disabled={!selectedCanDecide} className="reject-decision">
                     <XCircle size={16} />
-                    Reject
+                    {t('decision.reject')}
                   </button>
                 </div>
                 {error ? <p className="action-error">{error}</p> : null}
@@ -1098,8 +1098,8 @@ export function ItemDetailView({
                 className="decision-history-section"
                 tone="amber"
                 icon={<ShieldCheck size={16} />}
-                title="Decision history"
-                description="Operator decisions recorded for this Task."
+                title={t('decisionHistory.title')}
+                description={t('decisionHistory.description')}
                 action={<span className="count-badge">{selectedItem.decisions.length}</span>}
               >
                 {selectedItem.decisions.length > 0 ? (
@@ -1120,7 +1120,7 @@ export function ItemDetailView({
                 ) : (
                   <div className="stage-empty">
                     <ShieldCheck size={24} strokeWidth={1.5} className="stage-empty-icon" aria-hidden="true" />
-                    <p className="stage-empty-copy">No operator decision has been recorded yet.</p>
+                    <p className="stage-empty-copy">{t('decisionHistory.empty')}</p>
                   </div>
                 )}
               </SectionBlock>
@@ -1131,14 +1131,14 @@ export function ItemDetailView({
                 className="brief-section closed-stage-section"
                 tone="slate"
                 icon={stateIcon(selectedItem.state)}
-                title={stateLabels[selectedItem.state]}
+                title={stateLabel(selectedItem.state)}
                 description={stateCopy(selectedItem.state)}
               >
                 <InfoRowGroup>
-                  <InfoRow label="Current state">{stateLabels[selectedItem.state]}</InfoRow>
-                  <InfoRow label="Round">Round {selectedItem.round}</InfoRow>
-                  <InfoRow label="Latest run">{selectedRun ? runStatusLabel(selectedRun.status) : 'No run recorded'}</InfoRow>
-                  <InfoRow label="Check">{checkLabel(selectedItem.check)}</InfoRow>
+                  <InfoRow label={t('closed.currentState')}>{stateLabel(selectedItem.state)}</InfoRow>
+                  <InfoRow label={t('closed.round')}>{t('closed.roundValue', { round: selectedItem.round })}</InfoRow>
+                  <InfoRow label={t('closed.latestRun')}>{selectedRun ? runStatusLabel(selectedRun.status) : t('closed.noRunRecorded')}</InfoRow>
+                  <InfoRow label={t('closed.check')}>{checkLabel(selectedItem.check)}</InfoRow>
                 </InfoRowGroup>
                 {selectedItem.summary ? (
                   <div className="agent-brief closed-summary">
@@ -1160,12 +1160,12 @@ export function ItemDetailView({
               className="latest-activity-section"
               tone="slate"
               icon={<Activity size={16} />}
-              title="Latest activity"
-              description="Round history with source and operator events."
+              title={t('latestActivity.title')}
+              description={t('latestActivity.description')}
               action={
                 <button className="quiet-button" onClick={toggleAllTechnicalEvents}>
                   <SlidersHorizontal size={15} />
-                  Technical
+                  {t('latestActivity.technical')}
                 </button>
               }
             >
@@ -1182,15 +1182,15 @@ export function ItemDetailView({
                     <summary className="round-group-head">
                       <span>
                         <UserRound size={15} />
-                        Round {group.round.roundNumber}
+                        {t('latestActivity.round', { round: group.round.roundNumber })}
                       </span>
                       <strong>{roundStatusLabel(group.round.status)}</strong>
                     </summary>
                     <div className="round-facts">
-                      {latestGroupRun ? <span>{runStatusLabel(latestGroupRun.status)} run</span> : null}
+                      {latestGroupRun ? <span>{t('latestActivity.run', { status: runStatusLabel(latestGroupRun.status) })}</span> : null}
                       {latestDecision ? <span>{decisionHistoryLabel(latestDecision.decision)}</span> : null}
-                      <span>{group.comments.length} feedback</span>
-                      {technicalEvents.length > 0 ? <span>{technicalEvents.length} technical</span> : null}
+                      <span>{t('latestActivity.feedback', { count: group.comments.length })}</span>
+                      {technicalEvents.length > 0 ? <span>{t('latestActivity.technicalCount', { count: technicalEvents.length })}</span> : null}
                     </div>
                     {group.round.summary ? (
                       <div className="round-summary-preview">
@@ -1202,7 +1202,7 @@ export function ItemDetailView({
                         <details className="technical-disclosure">
                           <summary>
                             <Code2 size={15} />
-                            Raw round summary
+                            {t('latestActivity.rawRoundSummary')}
                           </summary>
                           <MarkdownBlock value={group.round.summary} className="event-markdown" compact />
                         </details>
@@ -1213,7 +1213,7 @@ export function ItemDetailView({
                         {group.runs.map((run) => (
                           <div className="round-run" key={run.runId}>
                             <span>
-                              Attempt {run.attempt} · {runnerKindLabel(run.runnerKind)}
+                              {t('latestActivity.attempt', { attempt: run.attempt, kind: runnerKindLabel(run.runnerKind) })}
                             </span>
                             <strong className={`status-chip ${run.status}`}>{runStatusLabel(run.status)}</strong>
                           </div>
@@ -1225,7 +1225,7 @@ export function ItemDetailView({
                         <div className="event-icon comment"><MessageSquare size={15} /></div>
                         <div className="timeline-card">
                           <div className="event-title">
-                            <strong>Operator feedback</strong>
+                            <strong>{t('latestActivity.operatorFeedback')}</strong>
                             <span>{comment.authorName} · {timeLabel(comment.createdAt)}</span>
                           </div>
                           <MarkdownBlock value={comment.body} className="event-markdown" compact />
@@ -1270,10 +1270,10 @@ export function ItemDetailView({
                     {technicalEvents.length > 0 ? (
                       <div className="technical-events">
                         <div className="technical-events-head">
-                          <span>{technicalEvents.length} technical events</span>
+                          <span>{t('latestActivity.technicalEvents', { count: technicalEvents.length })}</span>
                           <button className="quiet-button" onClick={() => toggleTechnicalEvents(group.round.roundId)}>
                             {showTechnicalEvents ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-                            {showTechnicalEvents ? 'Hide' : 'Show'}
+                            {showTechnicalEvents ? t('latestActivity.hide') : t('latestActivity.show')}
                           </button>
                         </div>
                         {showTechnicalEvents ? (
@@ -1286,7 +1286,7 @@ export function ItemDetailView({
                                   <small>{technicalPreview(event.body)}</small>
                                   {event.body.trim() ? (
                                     <details className="technical-event-details">
-                                      <summary>Full detail</summary>
+                                      <summary>{t('latestActivity.fullDetail')}</summary>
                                       <MarkdownBlock value={event.body} className="event-markdown" compact />
                                     </details>
                                   ) : null}
@@ -1312,12 +1312,12 @@ export function ItemDetailView({
                 className="brief-section"
                 tone="slate"
                 icon={<Clock3 size={16} />}
-                title="Loading item details"
-                description="Fetching the complete Task record."
+                title={t('loading.title')}
+                description={t('loading.description')}
               >
                 <InfoRowGroup>
-                  <InfoRow label="Task">{selectedItem.title}</InfoRow>
-                  <InfoRow label="Status">Loading full brief and source metadata</InfoRow>
+                  <InfoRow label={t('loading.task')}>{selectedItem.title}</InfoRow>
+                  <InfoRow label={t('loading.status')}>{t('loading.statusValue')}</InfoRow>
                 </InfoRowGroup>
               </SectionBlock>
             )}
@@ -1326,13 +1326,13 @@ export function ItemDetailView({
           {reviewInspectorOpen ? (
           <aside
             className="review-pane review-drawer"
-            aria-label="Review controls"
+            aria-label={t('aria.reviewControls')}
           >
             <div
               className="sidecar-resize-handle"
               role="separator"
               aria-orientation="vertical"
-              aria-label="Resize review controls"
+              aria-label={t('aria.resizeReviewControls')}
               onPointerDown={startSidecarResize}
               onPointerMove={moveSidecarResize}
               onPointerUp={stopSidecarResize}
@@ -1340,30 +1340,30 @@ export function ItemDetailView({
             <header className="inspector-head">
               <span>
                 <PanelRightOpen size={15} />
-                Review
+                {t('inspector.title')}
               </span>
               <div className="inspector-actions">
-                <ActionIcon className="icon-button small" label="Close inspector" onClick={() => setReviewInspectorOpen(false)}>
+                <ActionIcon className="icon-button small" label={t('inspector.close')} onClick={() => setReviewInspectorOpen(false)}>
                   <XCircle size={15} />
                 </ActionIcon>
               </div>
             </header>
             <ProductSection
               className="action-section current-state-section"
-              title={stateLabels[selectedItem.state]}
+              title={stateLabel(selectedItem.state)}
               action={stateIcon(selectedItem.state)}
             >
               <p className="state-summary">{stateCopy(selectedItem.state)}</p>
               {selectedRun ? (
                 <div className="run-progress">
                   <div className="run-progress-head">
-                    <span>Attempt {selectedRun.attempt} · {runnerKindLabel(selectedRun.runnerKind)}</span>
+                    <span>{t('inspector.attempt', { attempt: selectedRun.attempt, kind: runnerKindLabel(selectedRun.runnerKind) })}</span>
                     <strong>{runStatusLabel(selectedRun.status)}</strong>
                   </div>
-                  <div className="progress-track" aria-label="Run progress">
+                  <div className="progress-track" aria-label={t('aria.runProgress')}>
                     <span style={{ width: `${selectedRun.progressPercent}%` }} />
                   </div>
-                  <p>{selectedRun.statusMessage ?? selectedRun.errorMessage ?? selectedRun.summary ?? 'Waiting for runner update.'}</p>
+                  <p>{selectedRun.statusMessage ?? selectedRun.errorMessage ?? selectedRun.summary ?? t('inspector.waiting')}</p>
                 </div>
               ) : null}
             </ProductSection>
@@ -1372,18 +1372,18 @@ export function ItemDetailView({
               <details className="technical-disclosure run-technical">
                 <summary>
                   <Code2 size={15} />
-                  Technical run details
+                  {t('inspector.technicalRunDetails')}
                 </summary>
                 {(selectedRun.threadId || selectedRun.turnId) ? (
                   <div className="run-ids">
                     {selectedRun.threadId ? (
                       <Tooltip content={selectedRun.threadId}>
-                        <span>thread {shortThreadId(selectedRun.threadId)}</span>
+                        <span>{t('inspector.thread', { id: shortThreadId(selectedRun.threadId) })}</span>
                       </Tooltip>
                     ) : null}
                     {selectedRun.turnId ? (
                       <Tooltip content={selectedRun.turnId}>
-                        <span>turn {shortId(selectedRun.turnId)}</span>
+                        <span>{t('inspector.turn', { id: shortId(selectedRun.turnId) })}</span>
                       </Tooltip>
                     ) : null}
                   </div>
@@ -1393,7 +1393,7 @@ export function ItemDetailView({
                     {selectedRun.baseWorkspacePath ? (
                       <Tooltip content={selectedRun.baseWorkspacePath}>
                         <span>
-                          <b>Workspace</b>
+                          <b>{t('inspector.workspace')}</b>
                           <em>{selectedRun.baseWorkspacePath}</em>
                         </span>
                       </Tooltip>
@@ -1401,7 +1401,7 @@ export function ItemDetailView({
                     {selectedRun.appServerEndpoint ? (
                       <Tooltip content={selectedRun.appServerEndpoint}>
                         <span>
-                          <b>AppServer</b>
+                          <b>{t('inspector.appServer')}</b>
                           <em>{selectedRun.appServerEndpoint}</em>
                         </span>
                       </Tooltip>
@@ -1411,13 +1411,13 @@ export function ItemDetailView({
                 {(selectedRun.worktreeStatus !== 'notRequired' || selectedRun.retryCount > 0) ? (
                   <div className="run-metadata">
                     <span>
-                      <b>Worktree</b>
+                      <b>{t('inspector.worktree')}</b>
                       <em>{worktreeStatusLabel(selectedRun.worktreeStatus)}</em>
                     </span>
                     {selectedRun.worktreePath ? (
                       <Tooltip content={selectedRun.worktreePath}>
                         <span>
-                          <b>Path</b>
+                          <b>{t('inspector.path')}</b>
                           <em>{selectedRun.worktreePath}</em>
                         </span>
                       </Tooltip>
@@ -1425,7 +1425,7 @@ export function ItemDetailView({
                     {selectedRun.worktreeBranch ? (
                       <Tooltip content={selectedRun.worktreeBranch}>
                         <span>
-                          <b>Branch</b>
+                          <b>{t('inspector.branch')}</b>
                           <em>{selectedRun.worktreeBranch}</em>
                         </span>
                       </Tooltip>
@@ -1433,21 +1433,21 @@ export function ItemDetailView({
                     {selectedRun.baseSha || selectedRun.baseRef ? (
                       <Tooltip content={selectedRun.baseSha ?? selectedRun.baseRef ?? ''}>
                         <span>
-                          <b>Base</b>
+                          <b>{t('inspector.base')}</b>
                           <em>{shortId(selectedRun.baseSha ?? selectedRun.baseRef ?? '')}</em>
                         </span>
                       </Tooltip>
                     ) : null}
                     {selectedRun.retryCount > 0 || selectedRun.nextRetryAt ? (
                       <span>
-                        <b>Retry</b>
+                        <b>{t('inspector.retry')}</b>
                         <em>{selectedRun.nextRetryAt ? `${selectedRun.retryCount} · ${timeLabel(selectedRun.nextRetryAt)}` : selectedRun.retryCount}</em>
                       </span>
                     ) : null}
                     {selectedRun.worktreeCleanupAfterAt ? (
                       <Tooltip content={selectedRun.worktreeCleanupAfterAt}>
                         <span>
-                          <b>Cleanup</b>
+                          <b>{t('inspector.cleanup')}</b>
                           <em>{timeLabel(selectedRun.worktreeCleanupAfterAt)}</em>
                         </span>
                       </Tooltip>
@@ -1462,7 +1462,7 @@ export function ItemDetailView({
       ) : (
         <section className="empty-pane">
           <CircleDot size={20} />
-          <span>{error ?? 'No review items available.'}</span>
+          <span>{error ?? t('aria.noReviewItems')}</span>
         </section>
       )}
     </>

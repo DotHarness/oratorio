@@ -1,4 +1,6 @@
 import type { DragOutcome, TaskStatus } from './types'
+import i18n from '../i18n'
+import { taskStatusLabel } from './format'
 
 export function resolveDrag(from: TaskStatus, to: TaskStatus): DragOutcome {
   if (from === to) {
@@ -6,7 +8,7 @@ export function resolveDrag(from: TaskStatus, to: TaskStatus): DragOutcome {
   }
 
   if (from === 'done') {
-    return { kind: 'invalid', message: 'Done tasks cannot be reopened by dragging.' }
+    return { kind: 'invalid', message: i18n.t('board:drag.doneNotReopen') }
   }
 
   if (from === 'todo' && to === 'in_progress') {
@@ -21,15 +23,15 @@ export function resolveDrag(from: TaskStatus, to: TaskStatus): DragOutcome {
     return { kind: 'request-changes', requiresComposer: true }
   }
 
-  return { kind: 'invalid', message: `Cannot move from ${from} to ${to}.` }
+  return { kind: 'invalid', message: i18n.t('board:drag.cannotMove', { from: taskStatusLabel(from), to: taskStatusLabel(to) }) }
 }
 
 export function dragOutcomeLabel(kind: DragOutcome['kind'], shortId: string) {
-  if (kind === 'dispatch') return `Dispatching ${shortId}.`
-  if (kind === 'approve') return `Approved ${shortId}.`
-  if (kind === 'reject') return `Rejected ${shortId}.`
-  if (kind === 'archive') return `Archived ${shortId}.`
-  if (kind === 'reopen') return `Reopened ${shortId}.`
-  if (kind === 'request-changes') return `Requesting changes for ${shortId}.`
-  return `Moved ${shortId}.`
+  if (kind === 'dispatch') return i18n.t('board:drag.dispatch', { name: shortId })
+  if (kind === 'approve') return i18n.t('board:drag.approve', { name: shortId })
+  if (kind === 'reject') return i18n.t('board:drag.reject', { name: shortId })
+  if (kind === 'archive') return i18n.t('board:drag.archive', { name: shortId })
+  if (kind === 'reopen') return i18n.t('board:drag.reopen', { name: shortId })
+  if (kind === 'request-changes') return i18n.t('board:drag.requestChanges', { name: shortId })
+  return i18n.t('board:drag.moved', { name: shortId })
 }

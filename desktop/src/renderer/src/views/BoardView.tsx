@@ -3,6 +3,8 @@ import type { DropResult, DraggableProvided } from '@hello-pangea/dnd'
 import { CircleDot, Download, FileText, Folder, GitPullRequest, Plus, RefreshCw, Search, Settings } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
+import { useTranslation } from 'react-i18next'
+import i18n from '../i18n'
 import { ActionIcon } from '../components/primitives/ActionIcon'
 import { Tooltip } from '../components/primitives/Tooltip'
 import { FilterDropdown, RepositoryFilterDropdown } from '../components/filters/RepositoryFilterDropdown'
@@ -24,8 +26,6 @@ import {
 } from '../lib/format'
 
 export type BoardViewMode = 'active' | 'all' | 'cancelled' | 'archived'
-
-const boardSearchHelpText = 'Advanced search supports s:github, source:github, l:frontend, and label:"good first issue".'
 
 type BoardViewProps = {
   viewMode: BoardViewMode
@@ -94,6 +94,10 @@ export function BoardView({
   openSettings,
   dragApiRef,
 }: BoardViewProps) {
+  const { t } = useTranslation()
+  const boardSearchHelpText = t('board:search.help')
+  const viewModeLabel = (mode: BoardViewMode) => t(`board:viewMode.${mode}`)
+  const closedViewDescription = (mode: BoardViewMode) => (mode === 'active' ? '' : t(`board:closedDescription.${mode}`))
   const [assigneeFilter, setAssigneeFilter] = useState('all')
   const closedListRef = useRef<HTMLDivElement | null>(null)
   const requestedClosedCursorRef = useRef<string | null>(null)
@@ -134,20 +138,20 @@ export function BoardView({
 
   const itemsByStatus = useMemo(
     () =>
-      new Map(activeTaskStatusColumns.map((column) => [
+      new Map(activeTaskStatusColumns().map((column) => [
         column.id,
         sortItemsForBoard(filteredItems.filter((item) => item.taskStatus === column.id)),
       ])),
     [filteredItems],
   )
-  const viewLabel = viewModeLabels[viewMode]
+  const viewLabel = viewModeLabel(viewMode)
   const githubSyncActive = isActiveGitHubSyncJob(githubSyncJob)
   const canPullGitHub = hasConfiguredGitLab ? !isSyncing && !githubSyncActive : githubStatus.available && githubStatus.configured && !isSyncing && !githubSyncActive
   const pullGitHubLabel = hasConfiguredGitLab
-    ? isSyncing ? 'Starting source sync' : githubSyncActive ? 'Syncing sources' : 'Sync sources'
-    : isSyncing ? 'Starting GitHub pull' : githubSyncActive ? 'Pulling GitHub' : 'Pull GitHub'
+    ? isSyncing ? t('board:sync.startingSource') : githubSyncActive ? t('board:sync.syncingSources') : t('board:sync.syncSources')
+    : isSyncing ? t('board:sync.startingGitHub') : githubSyncActive ? t('board:sync.pullingGitHub') : t('board:sync.pullGitHub')
   const pullGitHubTitle = hasConfiguredGitLab
-    ? 'Sync configured GitHub and GitLab sources'
+    ? t('board:sync.syncTitle')
     : githubStatus.configured ? pullGitHubLabel : githubStatus.message
 
   useEffect(() => {
@@ -186,7 +190,7 @@ export function BoardView({
   }, [filteredItems.length, maybeLoadMoreClosedItems])
 
   return (
-    <section className="board-view" aria-label="Task board">
+    <section className="board-view" aria-label={t('board:aria.taskBoard')}>
       <header className="board-header">
         <div className="board-title-lockup">
           <span className="brand-mark board-brand-mark">
@@ -212,16 +216,16 @@ export function BoardView({
             </svg>
           </span>
           <div>
-            <h1>Oratorio</h1>
+            <h1>{t('board:appName')}</h1>
           </div>
         </div>
       </header>
 
-      <div className="board-toolbar" aria-label="Board filters">
-        <div className="segmented-control board-view-switcher" aria-label="Board view">
+      <div className="board-toolbar" aria-label={t('board:aria.boardFilters')}>
+        <div className="segmented-control board-view-switcher" aria-label={t('board:aria.boardView')}>
           {boardViewModes.map((mode) => (
             <button key={mode} type="button" className={viewMode === mode ? 'selected' : ''} onClick={() => setViewMode(mode)}>
-              {viewModeLabels[mode]}
+              {viewModeLabel(mode)}
             </button>
           ))}
         </div>
@@ -231,8 +235,8 @@ export function BoardView({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search tasks"
-              aria-label="Search tasks"
+              placeholder={t('board:search.placeholder')}
+              aria-label={t('board:search.placeholder')}
               aria-describedby="board-search-help"
             />
             <span id="board-search-help" className="board-search-help">
@@ -241,18 +245,18 @@ export function BoardView({
           </div>
         </Tooltip>
         <RepositoryFilterDropdown value={repositoryFilter} repositories={repositories} onChange={setRepositoryFilter} />
-        <FilterDropdown label="Assignee" value={assigneeFilter} onChange={setAssigneeFilter} options={filterOptions('All assignees', assigneeOptions)} />
+        <FilterDropdown label={t('board:filters.assignee')} value={assigneeFilter} onChange={setAssigneeFilter} options={filterOptions(t('board:filters.allAssignees'), assigneeOptions)} />
         <div className="board-toolbar-actions">
-          <ActionIcon label="New local task" onClick={openCreateLocalTask}>
+          <ActionIcon label={t('board:actions.newLocalTask')} onClick={openCreateLocalTask}>
             <Plus size={16} />
           </ActionIcon>
           <ActionIcon label={pullGitHubLabel} title={pullGitHubTitle} onClick={() => void syncGitHubSource()} disabled={!canPullGitHub}>
             {isSyncing || githubSyncActive ? <RefreshCw size={16} className="spin-icon" /> : <Download size={16} />}
           </ActionIcon>
-          <ActionIcon label="Refresh" onClick={() => void (isActiveView ? refreshAll() : refreshClosedItems())}>
+          <ActionIcon label={t('board:actions.refresh')} onClick={() => void (isActiveView ? refreshAll() : refreshClosedItems())}>
             <RefreshCw size={16} />
           </ActionIcon>
-          <ActionIcon label="Settings" onClick={openSettings}>
+          <ActionIcon label={t('board:actions.settings')} onClick={openSettings}>
             <Settings size={16} />
           </ActionIcon>
         </div>
@@ -260,8 +264,8 @@ export function BoardView({
 
       {isActiveView ? (
         <DragDropContext onDragEnd={commander.handleDragEnd}>
-          <div className="board-columns" aria-label="Task status columns">
-            {activeTaskStatusColumns.map((column) => {
+          <div className="board-columns" aria-label={t('board:aria.statusColumns')}>
+            {activeTaskStatusColumns().map((column) => {
               const columnItems = itemsByStatus.get(column.id) ?? []
               return (
                 <section className="board-column" aria-label={column.label} key={column.id}>
@@ -279,7 +283,7 @@ export function BoardView({
                         {...provided.droppableProps}
                         className={`board-column-list${snapshot.isDraggingOver ? ' is-drag-over' : ''}`}
                       >
-                        {columnItems.length === 0 ? <p className="board-empty">No tasks here.</p> : null}
+                        {columnItems.length === 0 ? <p className="board-empty">{t('board:empty')}</p> : null}
                         {columnItems.map((item, index) => (
                           <Draggable key={item.id} draggableId={item.id} index={index} isDragDisabled={item.taskStatus === 'done'}>
                             {(dragProvided, dragSnapshot) => (
@@ -304,18 +308,18 @@ export function BoardView({
           </div>
         </DragDropContext>
       ) : (
-        <section className="closed-task-panel" aria-label={`${viewLabel} tasks`}>
+        <section className="closed-task-panel" aria-label={t('board:aria.closedTasks', { label: viewLabel })}>
           <header className="closed-task-header">
             <span>
               <strong>{viewLabel}</strong>
-              <small>{closedViewDescriptions[viewMode]}</small>
+              <small>{closedViewDescription(viewMode)}</small>
             </span>
             <span className="task-status-count">{filteredItems.length}</span>
           </header>
           <div className="closed-task-list" ref={closedListRef} onScroll={handleClosedListScroll} aria-busy={closedLoading}>
             {closedError ? <p className="board-empty error-text">{closedError}</p> : null}
-            {closedLoading && closedItems.length === 0 ? <p className="board-empty">Loading tasks...</p> : null}
-            {!closedLoading && filteredItems.length === 0 ? <p className="board-empty">No tasks here.</p> : null}
+            {closedLoading && closedItems.length === 0 ? <p className="board-empty">{t('board:loading')}</p> : null}
+            {!closedLoading && filteredItems.length === 0 ? <p className="board-empty">{t('board:empty')}</p> : null}
             {filteredItems.map((item) => (
               <TaskCard
                 key={item.id}
@@ -328,7 +332,7 @@ export function BoardView({
           </div>
           {closedLoading && closedItems.length > 0 ? (
             <div className="closed-task-footer" aria-live="polite">
-              <span className="closed-task-footer-status">Loading more tasks...</span>
+              <span className="closed-task-footer-status">{t('board:loadingMore')}</span>
             </div>
           ) : null}
         </section>
@@ -360,20 +364,6 @@ function isActiveGitHubSyncJob(job: GitHubSyncJob | null) {
 
 const boardViewModes: BoardViewMode[] = ['active', 'all', 'cancelled', 'archived']
 
-const viewModeLabels: Record<BoardViewMode, string> = {
-  active: 'Active',
-  all: 'All',
-  cancelled: 'Cancelled',
-  archived: 'Archived',
-}
-
-const closedViewDescriptions: Record<BoardViewMode, string> = {
-  active: '',
-  all: 'All tasks, newest updates first.',
-  cancelled: 'Rejected tasks.',
-  archived: 'Archived tasks.',
-}
-
 const chipIconProps = { size: 14, strokeWidth: 1.75 } as const
 
 function GithubGlyph() {
@@ -402,14 +392,14 @@ function sourceChipLabel(item: WorkItem) {
   if (item.sourceKey === 'github' || item.sourceKey === 'gitlab') {
     return item.repository || item.sourceKey
   }
-  return 'Local'
+  return i18n.t('board:chip.local')
 }
 
 function sourceChipTooltip(item: WorkItem) {
   if (item.sourceKey === 'github' || item.sourceKey === 'gitlab') {
     return `${item.sourceKey === 'github' ? 'GitHub' : 'GitLab'} · ${item.repository || ''}`
   }
-  return 'Local task'
+  return i18n.t('board:chip.localTask')
 }
 
 function kindChipIcon(item: WorkItem) {
@@ -421,15 +411,15 @@ function kindChipIcon(item: WorkItem) {
 function kindChipLabel(item: WorkItem) {
   const number = item.number ?? ''
   const looksLikeNumber = /^#?\d+$/.test(number)
-  if (item.type === 'pr') return looksLikeNumber ? (number.startsWith('#') ? number : `#${number}`) : 'PR'
-  if (item.type === 'issue') return looksLikeNumber ? (number.startsWith('#') ? number : `#${number}`) : 'Issue'
-  return 'Task'
+  if (item.type === 'pr') return looksLikeNumber ? (number.startsWith('#') ? number : `#${number}`) : i18n.t('board:chip.pr')
+  if (item.type === 'issue') return looksLikeNumber ? (number.startsWith('#') ? number : `#${number}`) : i18n.t('board:chip.issue')
+  return i18n.t('board:chip.task')
 }
 
 function kindChipTooltip(item: WorkItem) {
-  if (item.type === 'pr') return 'Pull request'
-  if (item.type === 'issue') return 'Issue'
-  return 'Local task'
+  if (item.type === 'pr') return i18n.t('board:chip.pullRequest')
+  if (item.type === 'issue') return i18n.t('board:chip.issue')
+  return i18n.t('board:chip.localTask')
 }
 
 function cardAccentTone(item: WorkItem): 'awaiting' | 'failed' | 'running' | null {
@@ -511,7 +501,7 @@ function TaskCard({
           <span className={`state-dot ${stateClassName(item.state)}`} />
         </div>
         <span className="task-card-preview">{descriptionPreview}</span>
-        <span className="item-source-meta">{sourceMetaLabel(item)} · updated {item.updated}</span>
+        <span className="item-source-meta">{sourceMetaLabel(item)} · {i18n.t('board:card.updated', { value: item.updated })}</span>
         <div className="task-card-footer">
           {sourceLifecycleBadge(item)}
           {cardStateBadge(item)}

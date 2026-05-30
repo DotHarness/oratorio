@@ -1,4 +1,4 @@
-import { taskStatusColumns } from './format'
+import { taskStatusOrder } from './format'
 import type { BoardEvent, ItemState, TaskStatus, WorkItem } from './types'
 
 export function composeSortOrder(columnIndex: number, position: number) {
@@ -6,7 +6,7 @@ export function composeSortOrder(columnIndex: number, position: number) {
 }
 
 export function columnIndexForStatus(status: TaskStatus) {
-  return Math.max(0, taskStatusColumns.findIndex((column) => column.id === status))
+  return Math.max(0, taskStatusOrder.indexOf(status))
 }
 
 export function sortItemsForBoard(items: WorkItem[]) {

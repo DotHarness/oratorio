@@ -1,4 +1,5 @@
 import { useEffect, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { DrawerHeader } from '../components/drawer/DrawerHeader'
 import type { WorkItem } from '../lib/types'
 
@@ -41,6 +42,7 @@ export function TaskDrawer({
   onCopyId,
   statusContent,
 }: TaskDrawerProps) {
+  const { t } = useTranslation('drawer')
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
@@ -53,12 +55,12 @@ export function TaskDrawer({
   }, [onClose])
 
   return (
-    <aside className="task-drawer" aria-label={item ? `Task drawer for ${item.shortId ?? item.title}` : 'Task drawer'}>
+    <aside className="task-drawer" aria-label={item ? t('drawerForName', { name: item.shortId ?? item.title }) : t('panelAria')}>
       <div
         className="task-drawer-resize-handle"
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize task drawer"
+        aria-label={t('resizeDrawer')}
         onPointerDown={onResizeStart}
         onPointerMove={onResizeMove}
         onPointerUp={onResizeEnd}
@@ -79,7 +81,7 @@ export function TaskDrawer({
         onCopyId={onCopyId}
       />
       <section
-        aria-label="Task status"
+        aria-label={t('statusPanel')}
         className="task-drawer-panel"
       >
         {statusContent}

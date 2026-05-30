@@ -1,0 +1,490 @@
+{
+  "pageTitle": "设置",
+  "refresh": "刷新设置",
+  "refreshing": "正在刷新设置",
+  "windowBehavior": {
+    "label": "窗口行为",
+    "description": "选择关闭按钮的行为。"
+  },
+  "sections": {
+    "general": { "label": "通用", "description": "本地偏好" },
+    "sources": { "label": "来源", "description": "提供方同步与状态" },
+    "projects": { "label": "项目", "description": "项目工作区路由" },
+    "credentials": { "label": "凭据", "description": "来源认证状态" },
+    "agents": { "label": "智能体", "description": "AppServer 连接" },
+    "worktree": { "label": "工作树", "description": "派发与清理" },
+    "review": { "label": "评审", "description": "PR/MR 评审策略" }
+  },
+  "appearance": {
+    "title": "外观",
+    "description": "本控制台的浏览器本地偏好。"
+  },
+  "theme": {
+    "label": "主题",
+    "description": "存储于本浏览器并立即应用。",
+    "dark": "深色",
+    "light": "浅色"
+  },
+  "language": {
+    "label": "语言",
+    "description": "存储于本浏览器并立即应用。"
+  },
+  "desktop": {
+    "title": "桌面",
+    "description": "本设备的窗口与托盘偏好。"
+  },
+  "common": {
+    "on": "开",
+    "off": "关",
+    "add": "添加",
+    "manage": "管理",
+    "retry": "重试",
+    "configure": "配置",
+    "remove": "移除 {{name}}",
+    "show": "显示{{label}}",
+    "hide": "隐藏{{label}}",
+    "readOnly": "服务器配置为只读。",
+    "overlay": "覆盖文件：{{path}}",
+    "configured": "已配置",
+    "configuredPlaceholder": "已配置",
+    "empty": "空",
+    "none": "无"
+  },
+  "notices": {
+    "serverConfigUnavailable": "无法获取服务器配置。",
+    "workspaceInventoryUnavailable": "无法获取工作区清单。",
+    "serverConfigSaveFailed": "服务器配置保存失败。",
+    "githubInstallationDetectionFailed": "GitHub 安装检测失败。",
+    "selectWorkspaceFailed": "无法选择工作区文件夹。",
+    "scheduleSaveFailed": "无法保存定时同步设置。"
+  },
+  "sectionCopy": {
+    "sources": "查看来源提供方的状态、能力、同步进度及最近的失败记录。",
+    "projects": "将每个 GitHub 仓库或 GitLab 项目映射到其应运行的 DotCraft 工作区。",
+    "credentials": "在不暴露明文的前提下管理来源身份与密钥状态。",
+    "agents": "配置 DotCraft 桥接健康状况、AppServer 发现及智能体防护策略。",
+    "worktree": "调整托管工作树、调度、重试、清理及实现派发。",
+    "review": "配置来源项目级别的 PR/MR 评审触发与草稿发布。",
+    "default": "管理 Oratorio 控制台的浏览器本地偏好。"
+  },
+  "sources": {
+    "groupTitle": "来源提供方",
+    "providerCount": "已配置 {{configured}}/{{total}} 个提供方",
+    "noProviders": "未配置来源提供方。",
+    "card": {
+      "capabilities": "{{provider}} 能力",
+      "read": "读取",
+      "write": "写入",
+      "webhook": "Webhook",
+      "capabilityReady": "{{label}}就绪",
+      "capabilityUnavailable": "{{label}}不可用",
+      "writesReady": "写入就绪",
+      "writesOff": "写入已关闭",
+      "writesUnavailable": "写入不可用",
+      "stateConfigured": "已配置",
+      "stateReady": "就绪",
+      "stateNeedsSetup": "需要设置",
+      "noEndpoint": "未配置端点。",
+      "configuredProjects": "已配置 {{count}} 个{{term}}",
+      "lastSync": "上次同步 {{time}}",
+      "noSyncYet": "尚未同步",
+      "headShaReReview": "{{term}} 在可用时使用 head-SHA 重新评审",
+      "configure": "配置",
+      "routeProjects": "路由项目",
+      "syncFailed": "同步失败项",
+      "fullRepair": "完整修复",
+      "starting": "启动中",
+      "syncing": "同步中",
+      "syncNow": "立即同步",
+      "termProjects": "项目",
+      "termRepositories": "仓库",
+      "reviewMRs": "MR",
+      "reviewPRs": "PR"
+    },
+    "schedule": {
+      "ariaLabel": "{{provider}} 定时同步",
+      "scheduledSync": "定时同步",
+      "defaultDisabledReason": "启用定时同步前请先配置读取同步。",
+      "every": "每 {{interval}} · {{nextRun}}",
+      "offInterval": "关 · 间隔 {{interval}}",
+      "interval": "定时同步间隔",
+      "custom": "自定义",
+      "customInterval": "自定义定时同步间隔（分钟）",
+      "minutesAbbrev": "分钟",
+      "saving": "保存中",
+      "on": "开",
+      "off": "关"
+    },
+    "syncPanel": {
+      "scanProgress": "{{provider}} 同步进度",
+      "summary": "{{completed}} 个{{term}} · {{issues}} 个 issue · {{reviewTargets}} 个 {{reviewTerm}} · {{comments}} 条评论",
+      "noActiveSync": "无进行中的同步。",
+      "idle": "同步空闲",
+      "pendingRestart": "已保存的来源更改需要重启后“立即同步”才能使用。",
+      "rowCounts": "{{issues}} 个 issue · {{reviewTargets}} 个 {{reviewTerm}} · {{comments}} 条评论"
+    },
+    "status": {
+      "queued": "同步排队中",
+      "running": "同步进行中",
+      "succeeded": "同步完成",
+      "partialFailed": "同步部分失败",
+      "failed": "同步失败"
+    },
+    "phase": {
+      "failed": "失败",
+      "queued": "排队中",
+      "fetching": "正在获取 {{name}}",
+      "importing": "已发现 {{issues}} 个 issue 和 {{reviewTargets}} 个评审目标",
+      "done": "完成",
+      "doneAt": "完成于 {{time}}",
+      "completedAt": "{{phase}} · 完成于 {{time}}"
+    }
+  },
+  "projects": {
+    "groupTitle": "项目路由",
+    "sourceProjects": "来源项目",
+    "sourceProjectsDescription": "将 GitHub 仓库和 GitLab 项目映射到 DotCraft 工作区。",
+    "routeStatusProjects": "{{count}} 个项目",
+    "routeStatusNoProjects": "无项目",
+    "routeStatusNoProviders": "无提供方",
+    "emptyNoProjects": "未配置来源项目。",
+    "emptyNoProviders": "未配置来源提供方。",
+    "sourceProvider": "来源提供方",
+    "gitlabPlaceholder": "group/project 或 group/subgroup/project",
+    "githubPlaceholder": "owner/name",
+    "workspacePlaceholder": "DotCraft 工作区路径",
+    "add": "添加",
+    "card": {
+      "newProject": "新建 {{provider}} 项目",
+      "canonicalHint": "设置项目路径后将显示规范化来源 id。",
+      "notProbed": "未探测",
+      "removeProject": "移除项目",
+      "removeNamed": "移除 {{name}}",
+      "removeFallback": "项目",
+      "provider": "提供方",
+      "providerLabel": "项目提供方",
+      "gitlabProject": "GitLab 项目",
+      "githubRepository": "GitHub 仓库",
+      "dotcraftWorkspace": "DotCraft 工作区",
+      "workspaceAbsolute": "工作区绝对路径",
+      "gitlabProfile": "{{name}} 的 GitLab 配置",
+      "tokenKind": "令牌类型",
+      "tokenKindPlaceholder": "accessToken",
+      "gitlabToken": "GitLab 令牌",
+      "webhookSecret": "Webhook 密钥",
+      "signingToken": "签名令牌"
+    },
+    "gitLabStatus": {
+      "missingToken": "缺少令牌",
+      "profileIssue": "配置异常",
+      "profileReady": "配置就绪",
+      "noWebhook": "无 webhook"
+    },
+    "installations": {
+      "ariaLabel": "GitHub 安装配置",
+      "title": "GitHub 安装配置",
+      "description": "同一 GitHub 所有者下的仓库共享配置。",
+      "detectTooltip": "检测缺失的安装",
+      "detectAria": "检测 GitHub 安装",
+      "meta": "{{instance}} · {{count}} 个{{repositoryTerm}}",
+      "repositorySingular": "仓库",
+      "repositoryPlural": "仓库",
+      "installationId": "安装 ID",
+      "statusError": "错误",
+      "statusMissing": "缺少配置",
+      "statusDetected": "已检测",
+      "statusManual": "手动"
+    },
+    "workspacePicker": {
+      "choose": "选择工作区文件夹",
+      "available": "选择工作区文件夹",
+      "unavailable": "文件夹选择器在桌面应用中可用"
+    }
+  },
+  "credentials": {
+    "github": {
+      "title": "GitHub 凭据",
+      "description": "密钥仅提交一次，且不会回显。",
+      "endpoint": "端点",
+      "endpointDescription": "GitHub API 基础 URL。",
+      "appId": "App ID",
+      "appIdDescription": "GitHub App 标识符。",
+      "authentication": "认证",
+      "authenticationDescription": "已解析的凭据形态；值已脱敏。",
+      "writes": "GitHub 写入",
+      "writesDescription": "Issue 评论、PR 评审、检查运行及 Auto PR 投递。",
+      "token": "令牌",
+      "privateKey": "私钥",
+      "privateKeyPath": "私钥路径",
+      "webhookSecret": "Webhook 密钥"
+    },
+    "gitlab": {
+      "title": "GitLab",
+      "description": "基于令牌的导入、评审发布及合并请求投递。",
+      "readSync": "GitLab 读取同步",
+      "readSyncDescription": "控制 GitLab issue 与 MR 导入。",
+      "writes": "GitLab 写入",
+      "writesDescription": "Issue 备注、MR 备注、讨论、提交状态及 MR 投递。",
+      "endpoint": "端点",
+      "endpointDefault": "GitLab 实例 URL。",
+      "endpointHostChange": "更改主机将在保存时清除 GitLab 项目配置；重启后需要新建配置。",
+      "authentication": "认证",
+      "authenticationDescription": "已解析的令牌存在状态；值已脱敏。",
+      "writeCredentials": "写入凭据",
+      "writeCredentialsDescription": "GitLab 写入以所配置的令牌身份进行。",
+      "webhookVerification": "Webhook 校验",
+      "webhookVerificationDescription": "优先使用签名令牌；仍支持密钥令牌。",
+      "localBypass": "本地 webhook 绕过",
+      "localBypassDescription": "仅用于本地开发接收端。"
+    },
+    "secret": {
+      "newValue": "新值将被自动加密。",
+      "configured": "已配置。输入新值以替换。",
+      "empty": "空。输入一个值以进行配置。",
+      "value": "{{label}}值",
+      "configuredPlaceholder": "已配置",
+      "emptyPlaceholder": "空"
+    },
+    "authLabel": {
+      "githubAppToken": "GitHub App + 令牌",
+      "githubApp": "GitHub App",
+      "staticToken": "静态令牌",
+      "projectProfiles": "项目配置",
+      "token": "令牌",
+      "partial": "部分",
+      "none": "无",
+      "configured": "已配置"
+    },
+    "webhookMode": {
+      "signingToken": "签名令牌",
+      "secretToken": "密钥令牌",
+      "localBypass": "本地绕过",
+      "none": "无"
+    },
+    "gitlabWriteLabel": {
+      "partial": "部分",
+      "configured": "已配置",
+      "missingToken": "缺少令牌"
+    }
+  },
+  "agents": {
+    "bridge": {
+      "title": "DotCraft 桥接",
+      "defaultMessage": "DotCraft 桥接状态。",
+      "startServer": "启动服务器",
+      "starting": "启动中...",
+      "health": "健康状况",
+      "healthDescription": "当前 AppServer 可达性。",
+      "endpoint": "端点",
+      "noEndpoint": "未配置端点。",
+      "approvalPolicy": "审批策略",
+      "approvalPolicyDescription": "用于 AppServer 运行的提示守护策略。",
+      "runTimeout": "运行超时",
+      "runTimeoutDescription": "AppServer 运行的最大时长。",
+      "hubDiscovery": "Hub 发现",
+      "hubDiscoveryDescription": "Oratorio 是否可通过 Hub 发现 AppServer 端点。",
+      "enabled": "已启用",
+      "disabled": "已禁用"
+    },
+    "connection": {
+      "title": "智能体连接",
+      "restartDescription": "更改将在 Oratorio 服务器重启后生效。",
+      "appServerUrl": "AppServer URL",
+      "appServerUrlDescription": "在 Hub 发现不可用时使用的绝对 ws 或 wss 端点。",
+      "hubDiscovery": "Hub 发现",
+      "hubDiscoveryDescription": "允许 Oratorio 通过 DotCraft Hub 发现 AppServer 端点。",
+      "hubLockPath": "Hub 锁路径",
+      "hubLockPathDescription": "DotCraft Hub 工作区锁数据的可选绝对路径。",
+      "approvalPolicy": "审批策略",
+      "approvalPolicyDescription": "用于新建 DotCraft 线程的提示守护策略。",
+      "runTimeout": "运行超时",
+      "runTimeoutDescription": "AppServer 运行的最大时长。"
+    },
+    "approvalPolicyOptions": {
+      "default": "默认",
+      "interrupt": "中断",
+      "autoApprove": "自动批准"
+    },
+    "health": {
+      "connected": "已连接",
+      "configured": "已配置",
+      "unavailable": "不可用"
+    }
+  },
+  "worktree": {
+    "group": {
+      "title": "工作树与调度",
+      "restartDescription": "更改将在重启后影响新的调度与工作树清理决策。"
+    },
+    "managedWorktrees": "托管工作树",
+    "managedWorktreesDescription": "在 Oratorio 托管的工作树中准备 DotCraft 运行。",
+    "worktreeRoot": "工作树根目录",
+    "worktreeRootDescription": "绝对根路径，或留空以使用各工作区默认值。",
+    "branchPrefix": "分支前缀",
+    "branchPrefixDescription": "生成的工作树分支的命名空间。",
+    "concurrency": "并发",
+    "concurrencyDescription": "全局、单仓库及单来源的活动运行上限。",
+    "retries": "重试",
+    "retriesDescription": "尝试次数以及初始与最大退避。",
+    "stallTimeout": "停滞超时",
+    "stallTimeoutDescription": "静默的活动运行在被视为停滞前可持续的时长。",
+    "retention": "保留",
+    "retentionDescription": "成功与失败的工作树保留时长。",
+    "cleanupWorker": "清理 worker",
+    "cleanupWorkerDescription": "启用清理并设置 worker 间隔。",
+    "concurrencyLabels": {
+      "global": "全局并发",
+      "perRepository": "单仓库并发",
+      "perSource": "单来源并发"
+    },
+    "retry": {
+      "attempts": "尝试次数",
+      "attemptsLabel": "重试尝试次数",
+      "initial": "初始",
+      "initialBackoff": "初始退避",
+      "maximum": "最大",
+      "maximumBackoff": "最大退避"
+    },
+    "retentionControl": {
+      "success": "成功",
+      "successLabel": "成功工作树保留",
+      "failed": "失败",
+      "failedLabel": "失败工作树保留"
+    },
+    "cleanupControl": {
+      "interval": "清理间隔"
+    },
+    "stepperLabels": {
+      "stallTimeout": "停滞超时",
+      "cleanupInterval": "清理间隔",
+      "runTimeout": "运行超时"
+    },
+    "automation": {
+      "title": "自动化策略",
+      "description": "实现自动派发与投递默认值。",
+      "autoDispatch": "实现自动派发",
+      "autoDispatchWithGitlab": "在允许/阻止标签允许时启动符合条件的 GitHub/GitLab issue 及本地任务。",
+      "autoDispatchDefault": "在允许/阻止标签允许时启动符合条件的 GitHub issue 及本地任务。",
+      "allowLabels": "自动派发允许标签",
+      "allowLabelsDescription": "为空表示每个未被阻止的符合条件项均可运行。",
+      "addAllowLabel": "添加允许标签",
+      "labelInput": "{{label}}输入框",
+      "allUnblockedItems": "所有未阻止项",
+      "blockLabels": "自动派发阻止标签",
+      "blockLabelsDescription": "任意匹配的标签都会阻止实现自动派发。",
+      "addBlockLabel": "添加阻止标签",
+      "noBlockLabels": "无阻止标签",
+      "implementationTurns": "实现轮次",
+      "implementationTurnsDescription": "实现运行在没有草稿的情况下结束前的最大续接轮次。",
+      "delivery": "实现投递",
+      "deliveryWithGitlab": "自动派发实现项的默认投递策略。自动投递会从源项目创建 GitHub PR 或 GitLab MR。",
+      "deliveryDefault": "自动派发实现项的默认投递策略。",
+      "deliveryLabelManual": "手动投递",
+      "deliveryLabelAutoPr": "Auto PR",
+      "deliveryLabelAutoPrMr": "Auto PR/MR"
+    }
+  },
+  "review": {
+    "group": {
+      "title": "自动评审",
+      "descriptionWithGitlab": "项目级别的 PR/MR 评审触发与草稿发布策略。",
+      "descriptionDefault": "仓库级别的 PR 评审触发与草稿发布策略。"
+    },
+    "projectAllowlist": "项目允许列表",
+    "repositoryAllowlist": "仓库允许列表",
+    "autoReviewWithGitlab": "自动为已启用的项目排队只读 PR/MR 评审。",
+    "autoReviewDefault": "自动为已启用的仓库排队只读 PR 评审。",
+    "reviewSupportsWithGitlab": "GitHub PR 和 GitLab MR 支持 head-SHA 重新评审。",
+    "reviewSupportsDefault": "GitHub PR 支持 head-SHA 重新评审。",
+    "publishAllowlist": "发布允许列表",
+    "publishWithGitlab": "通过提供方专属路由为选定项目发布有效的评审草稿。",
+    "publishDefault": "仅将有效的评审草稿作为 GitHub COMMENT 评审发布。",
+    "emptyWithGitlab": "未包含任何项目。",
+    "emptyDefault": "未包含任何仓库。",
+    "allowlistCard": {
+      "includedSingular": "已包含 {{count}} 个仓库",
+      "includedPlural": "已包含 {{count}} 个仓库",
+      "manage": "管理",
+      "removeTooltip": "移除 {{name}}",
+      "removeAria": "移除 {{name}}"
+    },
+    "modal": {
+      "autoReviewTitle": "选择来源项目",
+      "publishTitle": "选择发布项目",
+      "autoReviewDescription": "选择来源项目以启用自动 {{term}} 评审。",
+      "publishDescription": "选择其评审草稿可通过 {{route}} 发布的来源项目。",
+      "close": "关闭",
+      "searchPlaceholder": "搜索来源项目...",
+      "searchAria": "搜索来源项目",
+      "noMatch": "没有匹配搜索的来源项目。",
+      "noConfigured": "未配置来源项目。",
+      "cancel": "取消",
+      "apply": "应用选择（已选 {{count}} 个）"
+    },
+    "term": {
+      "prmr": "PR/MR",
+      "pr": "PR",
+      "providerRoutes": "提供方评审路由",
+      "githubComment": "GitHub COMMENT 评审"
+    }
+  },
+  "autosave": {
+    "saveFailed": "保存失败",
+    "retry": "重试",
+    "saving": "保存中...",
+    "saved": "已保存"
+  },
+  "duration": {
+    "sec": "秒",
+    "min": "分钟",
+    "hr": "小时",
+    "days": "天",
+    "amount": "{{label}}数值",
+    "unit": "{{label}}单位"
+  },
+  "control": {
+    "number": "数字",
+    "increase": "增加{{label}}",
+    "decrease": "减少{{label}}"
+  },
+  "scheduleFormat": {
+    "hours_one": "{{count}} 小时",
+    "hours_other": "{{count}} 小时",
+    "minutes_one": "{{count}} 分钟",
+    "minutes_other": "{{count}} 分钟",
+    "seconds_one": "{{count}} 秒",
+    "seconds_other": "{{count}} 秒",
+    "notScheduled": "下次运行未排程",
+    "nextRaw": "下次 {{value}}",
+    "dueNow": "现在到期",
+    "nextInSec_one": "{{count}} 秒后",
+    "nextInSec_other": "{{count}} 秒后",
+    "nextInMin_one": "{{count}} 分钟后",
+    "nextInMin_other": "{{count}} 分钟后",
+    "nextInHr_one": "{{count}} 小时后",
+    "nextInHr_other": "{{count}} 小时后"
+  },
+  "durationFormat": {
+    "hr": "{{value}} 小时",
+    "min": "{{value}} 分钟",
+    "sec": "{{value}} 秒"
+  },
+  "relativeTime": {
+    "justNow": "刚刚",
+    "minAgo": "{{value}} 分钟前",
+    "hrAgo": "{{value}} 小时前"
+  },
+  "providerReasons": {
+    "githubWritesDisabled": "GitHub 写入已禁用。",
+    "webhookInDiagnostics": "配置后可在诊断中查看 Webhook 状态。",
+    "gitlabReadDisabled": "GitLab 读取同步已禁用。",
+    "gitlabReadRequiresTokens": "GitLab 读取同步需要项目配置令牌。",
+    "gitlabNoProjects": "未配置 GitLab 项目。",
+    "gitlabProviderDisabled": "GitLab 提供方已禁用。",
+    "gitlabWritesDisabled": "GitLab 写入已禁用。",
+    "gitlabWritesRequireTokens": "GitLab 写入需要项目配置令牌。",
+    "gitlabWebhookUnconfigured": "GitLab webhook 校验未配置。",
+    "gitlabProjectTokenMissing": "缺少 GitLab 项目配置令牌。",
+    "gitlabProjectWebhookUnconfigured": "GitLab 项目 webhook 校验未配置。"
+  }
+}

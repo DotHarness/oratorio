@@ -1,0 +1,247 @@
+{
+  "suggestion": {
+    "title": "建议替换",
+    "diffAria": "建议替换的差异预览"
+  },
+  "commentOnly": {
+    "label": "仅评论：{{reason}}",
+    "needsHumanDecision": "需要人工决策",
+    "requiresLargerChange": "需要更大范围的更改",
+    "cannotAnchorSafely": "无法安全锚定",
+    "investigateOnly": "仅调查",
+    "leftSideOrDeletion": "左侧或删除"
+  },
+  "discussionPurpose": {
+    "question": "问题",
+    "agentReply": "智能体回复",
+    "systemNote": "系统备注"
+  },
+  "target": {
+    "pr": "PR",
+    "mr": "MR"
+  },
+  "sourceProject": {
+    "project": "项目",
+    "repository": "仓库"
+  },
+  "askAgent": {
+    "queued": "智能体问题已排队。",
+    "answering": "智能体正在回答。",
+    "tooltip": "询问智能体"
+  },
+  "aria": {
+    "selectedItemDetail": "所选条目详情",
+    "sourceLabels": "来源标签",
+    "loadingSourceComments": "正在加载来源评论",
+    "reviewControls": "评审控件",
+    "resizeReviewControls": "调整评审控件大小",
+    "runProgress": "运行进度",
+    "noReviewItems": "暂无可评审条目。"
+  },
+  "header": {
+    "openSourceTask": "打开来源任务",
+    "moreActions": "更多操作",
+    "editLocalTask": "编辑本地任务",
+    "reopenLocalTask": "重新打开本地任务",
+    "archiveLocalTask": "归档本地任务",
+    "openSource": "打开来源",
+    "refreshItem": "刷新条目",
+    "reopenItem": "重新打开条目",
+    "archiveItem": "归档条目",
+    "copyItemId": "复制条目 ID",
+    "round": "第 {{round}} 回合",
+    "synced": "已同步 {{time}}",
+    "draft": "草稿",
+    "checkTooltip": "oratorio/review：{{check}}"
+  },
+  "reReview": {
+    "title": "评审最新提交",
+    "button": "重新评审 {{target}}"
+  },
+  "dispatch": {
+    "startImplementation": "开始实现",
+    "startReview": "开始 {{target}} 评审",
+    "dispatchAnalysis": "派发分析",
+    "createImplementationDraft": "创建一份实现草稿。",
+    "retryLatestRun": "重试最近一次运行。",
+    "readyForAnalysis": "已就绪，可进行分析。",
+    "implement": "实现",
+    "autoTarget": "自动 {{target}}",
+    "reviewOnly": "仅评审",
+    "retryRun": "重试运行",
+    "dispatchReview": "派发 {{target}} 评审",
+    "dispatchRound": "派发回合"
+  },
+  "brief": {
+    "title": "简要说明",
+    "localDescription": "本地任务描述。",
+    "sourceDescription": "由来源正文派生的面向操作员的摘要。",
+    "summary": "摘要",
+    "keyDetails": "关键细节",
+    "whyItMatters": "重要原因",
+    "desiredOutcome": "期望结果",
+    "rawSourceBody": "原始来源正文"
+  },
+  "source": {
+    "title": "来源",
+    "description": "来自源系统的精简元数据。",
+    "identifier": "标识符",
+    "sourceUpdated": "来源更新时间",
+    "lastSourceSync": "上次来源同步",
+    "snapshot": "快照",
+    "headSha": "Head SHA"
+  },
+  "sourceActivity": {
+    "title": "来源动态",
+    "description": "从已连接来源导入的变更。",
+    "showMore": "显示另外 {{count}} 条来源事件"
+  },
+  "sourceComments": {
+    "title": "来源评论",
+    "loadingDescription": "正在从 {{provider}} 加载评论与评审。",
+    "failedDescription": "无法加载 {{provider}} 来源详情。",
+    "description": "从源系统导入的评论。",
+    "retry": "重试",
+    "failedFallback": "{{provider}} 来源详情同步失败。",
+    "openSourceComment": "打开来源评论"
+  },
+  "agentResult": {
+    "title": "智能体结果",
+    "description": "运行器输出的最新分析结果。",
+    "agent": "智能体",
+    "noAgentYet": "尚无智能体",
+    "attempt": "尝试",
+    "status": "状态",
+    "pending": "待处理",
+    "rawAgentMarkdown": "原始智能体 Markdown"
+  },
+  "sourceWrites": {
+    "title": "{{source}} 写入",
+    "description": "为来源反馈与评审结果创建的可审计写入。",
+    "writeAudit": "写入审计",
+    "attempt": "第 {{count}} 次尝试",
+    "openSourceArtifact": "打开来源工件",
+    "retryDelivery": "重试交付",
+    "retry": "重试"
+  },
+  "reviewDrafts": {
+    "title": "评审草稿",
+    "description": "等待操作员处理或审计的结构化 {{target}} 评审草稿。",
+    "draftDetails": "草稿详情",
+    "publish": "发布",
+    "headlineFindings": "{{major}} 个主要 · {{minor}} 个次要 · {{suggestions}} · {{commentOnly}}",
+    "codeSuggestion_one": "{{count}} 条代码建议",
+    "codeSuggestion_other": "{{count}} 条代码建议",
+    "commentOnlyFinding_one": "{{count}} 条仅评论发现",
+    "commentOnlyFinding_other": "{{count}} 条仅评论发现",
+    "stats": "{{accepted}} 个已接受 · {{warning}} 个警告",
+    "statsResolved": "{{accepted}} 个已接受 · {{warning}} 个警告 · {{resolved}} 个已解决",
+    "resolved": "已解决 · {{kind}}",
+    "resolvedWithBy": "已解决 · {{kind}} · {{by}}",
+    "resolvedFixed": "已修复",
+    "resolvedDismissed": "已忽略",
+    "reopen": "重新打开",
+    "markFixed": "标记为已修复",
+    "markDismissed": "标记为已忽略",
+    "edit": "编辑",
+    "discard": "丢弃"
+  },
+  "implementationDrafts": {
+    "title": "实现草稿",
+    "description": "来自智能体运行的实现交付建议负载。",
+    "deliveryDetails": "交付详情",
+    "autoTarget": "自动 {{target}}",
+    "changedFiles_one": "{{count}} 个变更文件",
+    "changedFiles_other": "{{count}} 个变更文件",
+    "commit": "提交",
+    "notDelivered": "尚未交付",
+    "branch": "分支",
+    "pending": "待处理",
+    "generatedTarget": "生成的 {{target}}",
+    "openTarget": "打开 {{target}}",
+    "deliverTarget": "交付 {{target}}"
+  },
+  "followUpDrafts": {
+    "title": "后续草稿",
+    "description": "可转化为本地任务的后续工作建议。",
+    "followUpDetails": "后续详情",
+    "assignee": "负责人",
+    "unassigned": "未分配",
+    "branch": "分支",
+    "noBranch": "无分支",
+    "createdTask": "已创建任务",
+    "notCreated": "尚未创建",
+    "edit": "编辑",
+    "discard": "丢弃",
+    "createTask": "创建任务"
+  },
+  "discussion": {
+    "title": "讨论",
+    "description": "本次评审的评论与下一回合反馈。",
+    "empty": "尚未为此任务添加任何评论。",
+    "placeholder": "添加内部备注、下一回合反馈或向智能体提问",
+    "addComment": "添加评论",
+    "askAgent": "询问智能体"
+  },
+  "decision": {
+    "title": "结束本次评审",
+    "description": "记录该条目的操作员处理结果。",
+    "placeholder": "可选备注；请求更改时必填",
+    "requestChanges": "请求更改",
+    "approve": "批准",
+    "reject": "拒绝"
+  },
+  "decisionHistory": {
+    "title": "决策历史",
+    "description": "为此任务记录的操作员决策。",
+    "empty": "尚未记录任何操作员决策。"
+  },
+  "closed": {
+    "currentState": "当前状态",
+    "round": "回合",
+    "roundValue": "第 {{round}} 回合",
+    "latestRun": "最近运行",
+    "noRunRecorded": "无运行记录",
+    "check": "检查"
+  },
+  "latestActivity": {
+    "title": "最新动态",
+    "description": "包含来源与操作员事件的回合历史。",
+    "technical": "技术",
+    "round": "第 {{round}} 回合",
+    "run": "{{status}} 运行",
+    "feedback": "{{count}} 条反馈",
+    "technicalCount": "{{count}} 条技术",
+    "rawRoundSummary": "原始回合摘要",
+    "attempt": "第 {{attempt}} 次尝试 · {{kind}}",
+    "operatorFeedback": "操作员反馈",
+    "technicalEvents": "{{count}} 条技术事件",
+    "hide": "隐藏",
+    "show": "显示",
+    "fullDetail": "完整详情"
+  },
+  "loading": {
+    "title": "正在加载条目详情",
+    "description": "正在获取完整的任务记录。",
+    "task": "任务",
+    "status": "状态",
+    "statusValue": "正在加载完整简要说明与来源元数据"
+  },
+  "inspector": {
+    "title": "评审",
+    "close": "关闭检查器",
+    "attempt": "第 {{attempt}} 次尝试 · {{kind}}",
+    "waiting": "正在等待运行器更新。",
+    "technicalRunDetails": "技术运行详情",
+    "thread": "线程 {{id}}",
+    "turn": "回合 {{id}}",
+    "workspace": "工作区",
+    "appServer": "AppServer",
+    "worktree": "工作树",
+    "path": "路径",
+    "branch": "分支",
+    "base": "基线",
+    "retry": "重试",
+    "cleanup": "清理"
+  }
+}

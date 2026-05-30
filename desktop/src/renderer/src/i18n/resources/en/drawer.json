@@ -1,0 +1,19 @@
+{
+  "panelAria": "Task drawer",
+  "drawerForName": "Task drawer for {{name}}",
+  "resizeDrawer": "Resize task drawer",
+  "statusPanel": "Task status",
+  "kicker": "Task drawer",
+  "loading": "Loading task...",
+  "closeDrawer": "Close task drawer",
+  "localShort": "local",
+  "moreActions": "More task actions",
+  "menu": {
+    "openDetail": "Open detail page",
+    "openSource": "Open source",
+    "editLocal": "Edit local task",
+    "reopen": "Reopen task",
+    "archive": "Archive task",
+    "copyId": "Copy task id"
+  }
+}

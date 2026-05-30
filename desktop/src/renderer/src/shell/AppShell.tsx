@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, PointerEvent as ReactPointerEvent, SetStateAction } from 'react'
 import { HashRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router'
+import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
   ChevronRight,
@@ -10,6 +11,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import '../App.css'
+import i18n from '../i18n'
 import { apiGet, apiPatch, apiPost, apiPut, getServerBaseUrl, setServerBaseUrl as setApiServerBaseUrl } from '../api'
 import {
   detailMatchesSelection,
@@ -123,8 +125,8 @@ const activeTaskStateQuery = 'discovered,dispatching,running,failed,awaitingRevi
 const closedTaskPageSize = 50
 const DEFAULT_RUN_TIMEOUT_SECONDS = 30 * 60
 const INITIAL_LAUNCH_REVEAL_MS = 360
-const INITIAL_LAUNCH_STARTING_MESSAGE = 'Starting Oratorio...'
-const INITIAL_LAUNCH_PREPARING_MESSAGE = 'Preparing Oratorio board...'
+const initialLaunchStartingMessage = () => i18n.t('common:shell.launch.starting')
+const initialLaunchPreparingMessage = () => i18n.t('common:shell.launch.preparing')
 const DEFAULT_APP_BINDING_STATUS: DotCraftAppBindingStatusResponse = {
   appId: 'com.dotharness.oratorio',
   available: false,
@@ -187,8 +189,8 @@ type AppBindingApprovalResult = {
   state: string
   bindingId?: string | null
 }
-const GITHUB_WRITES_DISABLED_REASON = 'GitHub writes are disabled. Enable GitHub writes in Settings before publishing review drafts.'
-const GITHUB_APP_AUTH_REQUIRED_REASON = 'GitHub App authentication is required for writes. Configure GitHub App credentials in Settings before publishing review drafts.'
+const githubWritesDisabledReason = () => i18n.t('common:shell.githubWritesDisabledReason')
+const githubAppAuthRequiredReason = () => i18n.t('common:shell.githubAppAuthRequiredReason')
 
 function taskListPath(params: Record<string, string | number | boolean | null | undefined>) {
   const query = new URLSearchParams()
@@ -239,6 +241,7 @@ export function AppShell() {
 }
 
 function OratorioApp() {
+  const { t } = useTranslation()
   const location = useLocation()
   const navigate = useNavigate()
   const [items, setItems] = useState<WorkItem[]>([])
@@ -295,7 +298,7 @@ function OratorioApp() {
   const [isBusy, setIsBusy] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [initialLaunchPhase, setInitialLaunchPhase] = useState<InitialLaunchPhase>('loading')
-  const [initialLaunchMessage, setInitialLaunchMessage] = useState(INITIAL_LAUNCH_STARTING_MESSAGE)
+  const [initialLaunchMessage, setInitialLaunchMessage] = useState(initialLaunchStartingMessage)
   const [error, setError] = useState<string | null>(null)
   const [uiNotice, setUiNotice] = useState<UiNotice | null>(null)
   const [appBindingDialog, setAppBindingDialog] = useState<AppBindingDialogState | null>(null)
@@ -487,9 +490,9 @@ function OratorioApp() {
   const selectedCanDecide = Boolean(selectedItem && !isBusy && !selectedRunIsActive && selectedItem.state !== 'archived')
   const selectedReReviewInfo = pullRequestReReviewInfo(selectedItem)
   const reviewDraftPublishDisabledReason = selectedItem?.sourceKey === 'github' && githubStatus.available && !githubStatus.writesEnabled
-    ? GITHUB_WRITES_DISABLED_REASON
+    ? githubWritesDisabledReason()
     : selectedItem?.sourceKey === 'github' && githubStatus.available && githubStatus.writesEnabled && !githubStatus.writeConfigured
-      ? GITHUB_APP_AUTH_REQUIRED_REASON
+      ? githubAppAuthRequiredReason()
       : null
   const selectedActiveDiscussionTurn = selectedItem?.discussionTurns?.find(isActiveDiscussionTurn) ?? null
   const selectedHasCompatibleDiscussionThread = Boolean(selectedItem?.runs.some((run) =>
@@ -499,15 +502,15 @@ function OratorioApp() {
     Boolean(run.appServerEndpoint),
   ))
   const askAgentDisabledReason = !selectedItem
-    ? 'Select a Task first.'
+    ? t('common:shell.messages.selectTaskFirst')
     : selectedRunIsActive
-      ? 'Ask agent is available after the active run finishes.'
+      ? t('common:shell.messages.askAgentAfterRun')
       : selectedItem.state === 'archived'
-        ? 'Archived Tasks cannot ask the agent.'
+        ? t('common:shell.messages.askAgentArchived')
         : selectedActiveDiscussionTurn
-          ? 'Agent is already answering a question.'
+          ? t('common:shell.messages.askAgentAlreadyAnswering')
           : !selectedHasCompatibleDiscussionThread
-            ? 'Ask agent is available after a completed DotCraft run.'
+            ? t('common:shell.messages.askAgentAfterCompletedRun')
             : null
   const selectedHasSourceMetadata = Boolean(
     selectedDetailItem?.sourceUpdated || selectedDetailItem?.lastSourceSync || selectedDetailItem?.sourceSnapshot || selectedDetailItem?.headSha,
@@ -789,14 +792,14 @@ function OratorioApp() {
     if (status.state === 'error' && initialLaunchPhase !== 'ready') {
       setInitialLaunchMessage(
         status.errorMessage
-          ? `Oratorio could not start: ${status.errorMessage}`
-          : 'Oratorio could not start.',
+          ? t('common:shell.couldNotStart', { message: status.errorMessage })
+          : t('common:shell.couldNotStartGeneric'),
       )
       return
     }
 
     if (!initialRefreshStartedRef.current && initialLaunchPhase !== 'ready') {
-      setInitialLaunchMessage(INITIAL_LAUNCH_STARTING_MESSAGE)
+      setInitialLaunchMessage(initialLaunchStartingMessage())
     }
   }, [initialLaunchPhase])
 
@@ -906,7 +909,7 @@ function OratorioApp() {
     void (async () => {
       await waitForInitialBoardPaint()
       if (!cancelled) {
-        setInitialLaunchMessage(INITIAL_LAUNCH_PREPARING_MESSAGE)
+        setInitialLaunchMessage(initialLaunchPreparingMessage())
       }
 
       await refreshAll()
@@ -1091,9 +1094,9 @@ function OratorioApp() {
       state: 'connected',
       accountLabel: current.accountLabel ?? 'Oratorio',
       connectedAt: current.connectedAt ?? new Date().toISOString(),
-      message: 'DotCraft is connected to Oratorio.',
+      message: t('common:shell.messages.dotCraftConnectedToOratorio'),
     }))
-  }, [])
+  }, [t])
 
   const inspectAppBindingHandoff = useCallback(async (url: string) => {
     const bindingHandoff = isDotCraftBindingHandoff(url)
@@ -1108,9 +1111,9 @@ function OratorioApp() {
           await apiPost<AppBindingApprovalResult>('/dotcraft/app-binding/approve', { url })
           await refreshAppBindingStatus()
           markDotCraftAppBindingConnected()
-          showNotice('DotCraft tools enabled for this thread.', 'success')
+          showNotice(t('common:shell.notices.dotCraftToolsEnabled'), 'success')
         } catch (error) {
-          showNotice(`DotCraft binding failed: ${errorMessage(error)}`, 'error')
+          showNotice(t('common:shell.notices.dotCraftBindingFailed', { message: errorMessage(error) }), 'error')
         }
         return
       }
@@ -1121,9 +1124,9 @@ function OratorioApp() {
       } else {
         setAppBindingDialog({ status: 'error', url, message: errorMessage(error) })
       }
-      showNotice(`DotCraft request failed: ${errorMessage(error)}`, 'error')
+      showNotice(t('common:shell.notices.dotCraftRequestFailed', { message: errorMessage(error) }), 'error')
     }
-  }, [markDotCraftAppBindingConnected, refreshAppBindingStatus, showNotice])
+  }, [markDotCraftAppBindingConnected, refreshAppBindingStatus, showNotice, t])
 
   const drainPendingAppBindingHandoffs = useCallback(async () => {
     if (!canUseBackend || drainingAppBindingHandoffsRef.current) {
@@ -1188,15 +1191,15 @@ function OratorioApp() {
       markDotCraftAppBindingConnected()
       showNotice(
         result.operation === 'connect'
-          ? 'DotCraft connected to Oratorio.'
-          : 'DotCraft thread binding is active.',
+          ? t('common:shell.notices.dotCraftConnected')
+          : t('common:shell.notices.dotCraftThreadBindingActive'),
         'success',
       )
     } catch (error) {
       setAppBindingDialog({ status: 'ready', url, inspection })
-      showNotice(`DotCraft approval failed: ${errorMessage(error)}`, 'error')
+      showNotice(t('common:shell.notices.dotCraftApprovalFailed', { message: errorMessage(error) }), 'error')
     }
-  }, [appBindingDialog, markDotCraftAppBindingConnected, refreshAppBindingStatus, showNotice])
+  }, [appBindingDialog, markDotCraftAppBindingConnected, refreshAppBindingStatus, showNotice, t])
 
   useEffect(() => {
     const status = githubSyncJob?.status ?? null
@@ -1210,11 +1213,11 @@ function OratorioApp() {
     const repositoryRuns = githubSyncJob?.repositories ?? []
     const failedRuns = repositoryRuns.filter((run) => run.status === 'failed')
     if (status === 'succeeded') {
-      showNotice(`GitHub sync finished: ${formatRepositoryNames(repositoryRuns)}.`)
+      showNotice(t('common:shell.notices.githubSyncFinished', { names: formatRepositoryNames(repositoryRuns) }))
     } else {
-      showNotice(`GitHub sync finished with failures: ${formatRepositoryNames(failedRuns, 'failed repositories')}.`, 'error')
+      showNotice(t('common:shell.notices.githubSyncFinishedWithFailures', { names: formatRepositoryNames(failedRuns, t('common:shell.syncFallback.failedRepositories')) }), 'error')
     }
-  }, [githubSyncJob, refreshAll, showNotice])
+  }, [githubSyncJob, refreshAll, showNotice, t])
 
   useEffect(() => {
     const previousStatuses = sourceSyncStatusesRef.current
@@ -1240,9 +1243,9 @@ function OratorioApp() {
       const failedRuns = projectRuns.filter((run) => run.status === 'failed')
       const providerName = providerLabel(provider)
       if (status === 'succeeded') {
-        showNotice(`${providerName} sync finished: ${formatSourceProjectNames(projectRuns)}.`)
+        showNotice(t('common:shell.notices.sourceSyncFinished', { provider: providerName, names: formatSourceProjectNames(projectRuns) }))
       } else {
-        showNotice(`${providerName} sync finished with failures: ${formatSourceProjectNames(failedRuns, 'failed projects')}.`, 'error')
+        showNotice(t('common:shell.notices.sourceSyncFinishedWithFailures', { provider: providerName, names: formatSourceProjectNames(failedRuns, t('common:shell.syncFallback.failedProjects')) }), 'error')
       }
     }
 
@@ -1250,7 +1253,7 @@ function OratorioApp() {
     if (shouldRefresh) {
       void refreshAll({ background: true })
     }
-  }, [sourceSyncJobs, refreshAll, showNotice])
+  }, [sourceSyncJobs, refreshAll, showNotice, t])
 
   useEffect(() => {
     if (taskFormMode !== 'create' || taskForm.repository || rememberedLocalTaskProjectAppliedRef.current) {
@@ -1411,7 +1414,7 @@ function OratorioApp() {
   async function submitLocalTaskForm() {
     const title = taskForm.title.trim()
     if (!title) {
-      setTaskFormError('Title is required.')
+      setTaskFormError(t('common:shell.messages.titleRequired'))
       return
     }
 
@@ -1441,10 +1444,10 @@ function OratorioApp() {
       await refreshCurrentListView()
       closeLocalTaskForm()
       if (taskFormMode === 'edit') {
-        showNotice('Local task updated.')
+        showNotice(t('common:shell.notices.localTaskUpdated'))
       } else {
-        showNotice(`New task "${nextItem.title}" created. Click to view details.`, 'success', {
-          actionLabel: 'View details',
+        showNotice(t('common:shell.notices.taskCreated', { title: nextItem.title }), 'success', {
+          actionLabel: t('common:shell.notices.viewDetails'),
           onAction: () => openCreatedTaskNotice(nextItem),
         })
       }
@@ -1470,7 +1473,7 @@ function OratorioApp() {
       setSelectedId(nextItem.id)
       await refreshItems()
       await refreshCurrentListView()
-      showNotice('Item archived.')
+      showNotice(t('common:shell.notices.itemArchived'))
     } catch (reason) {
       setError(errorMessage(reason))
     } finally {
@@ -1488,14 +1491,14 @@ function OratorioApp() {
       setItems((current) => replaceMatchingItemWithDetail(current, nextItem))
       const retriedWrite = nextItem.sourceWrites.find((write) => write.writeId === writeId)
       if (retriedWrite?.status === 'failed') {
-        const message = sourceWriteFailureNotice('Source write retry failed', retriedWrite)
+        const message = sourceWriteFailureNotice(t('common:shell.failureNotices.sourceWriteRetryFailed'), retriedWrite)
         setError(message)
         showNotice(message, 'error')
         await refreshGitHubStatus()
       } else if (retriedWrite?.status === 'succeeded') {
-        showNotice('Source write retry succeeded.')
+        showNotice(t('common:shell.notices.sourceWriteRetrySucceeded'))
       } else {
-        showNotice('Source write retry queued.')
+        showNotice(t('common:shell.notices.sourceWriteRetryQueued'))
       }
     } catch (reason) {
       const message = errorMessage(reason)
@@ -1531,7 +1534,7 @@ function OratorioApp() {
       await refreshDetail(selectedItem)
       await refreshItems()
       await refreshCurrentListView()
-      showNotice('Item refreshed.', 'info')
+      showNotice(t('common:shell.notices.itemRefreshed'), 'info')
     } catch (reason) {
       setError(errorMessage(reason))
     } finally {
@@ -1541,8 +1544,8 @@ function OratorioApp() {
 
   function reopenSelectedItem() {
     setActionMenuItemId(null)
-    void mutateSelected('/reopen', { body: 'Reopened from archive in Oratorio.' }).then((ok) => {
-      if (ok) showNotice('Item reopened.')
+    void mutateSelected('/reopen', { body: t('common:shell.dispatchNotes.reopen') }).then((ok) => {
+      if (ok) showNotice(t('common:shell.notices.itemReopened'))
     })
   }
 
@@ -1555,9 +1558,9 @@ function OratorioApp() {
     setActionMenuItemId(null)
     try {
       await navigator.clipboard.writeText(value)
-      showNotice('Item identifier copied.')
+      showNotice(t('common:shell.notices.itemIdentifierCopied'))
     } catch {
-      setError('Could not copy the item identifier from this browser context.')
+      setError(t('common:shell.messages.couldNotCopyIdentifier'))
     }
   }
 
@@ -1693,14 +1696,14 @@ function OratorioApp() {
       const draft = nextItem.reviewDrafts.find((candidate) => candidate.draftId === draftId)
       if (draft?.status === 'publishFailed') {
         const write = findReviewDraftPublishWrite(nextItem, draftId)
-        const message = sourceWriteFailureNotice('Review draft publish failed', write)
+        const message = sourceWriteFailureNotice(t('common:shell.failureNotices.reviewDraftPublishFailed'), write)
         setError(message)
         showNotice(message, 'error')
         await refreshGitHubStatus()
         return
       }
 
-      showNotice('Review draft published.')
+      showNotice(t('common:shell.notices.reviewDraftPublished'))
     } catch (reason) {
       const message = errorMessage(reason)
       setError(message)
@@ -1718,7 +1721,7 @@ function OratorioApp() {
       const nextItem = detailToWorkItem(detail)
       setSelectedDetail(nextItem)
       setItems((current) => replaceMatchingItemWithDetail(current, nextItem))
-      showNotice('Review draft discarded.')
+      showNotice(t('common:shell.notices.reviewDraftDiscarded'))
     } catch (reason) {
       setError(errorMessage(reason))
     } finally {
@@ -1736,7 +1739,7 @@ function OratorioApp() {
       const nextItem = detailToWorkItem(detail)
       setSelectedDetail(nextItem)
       setItems((current) => replaceMatchingItemWithDetail(current, nextItem))
-      showNotice('Review finding resolved.')
+      showNotice(t('common:shell.notices.reviewFindingResolved'))
     } catch (reason) {
       const message = errorMessage(reason)
       setError(message)
@@ -1756,7 +1759,7 @@ function OratorioApp() {
       const nextItem = detailToWorkItem(detail)
       setSelectedDetail(nextItem)
       setItems((current) => replaceMatchingItemWithDetail(current, nextItem))
-      showNotice('Review finding reopened.')
+      showNotice(t('common:shell.notices.reviewFindingReopened'))
     } catch (reason) {
       const message = errorMessage(reason)
       setError(message)
@@ -1774,7 +1777,7 @@ function OratorioApp() {
       const nextItem = detailToWorkItem(detail)
       setSelectedDetail(nextItem)
       setItems((current) => replaceMatchingItemWithDetail(current, nextItem))
-      showNotice('Implementation draft delivered.')
+      showNotice(t('common:shell.notices.implementationDraftDelivered'))
     } catch (reason) {
       const message = errorMessage(reason)
       setError(message)
@@ -1792,7 +1795,7 @@ function OratorioApp() {
       const nextItem = detailToWorkItem(detail)
       setSelectedDetail(nextItem)
       setItems((current) => replaceMatchingItemWithDetail(current, nextItem))
-      showNotice('Follow-up draft discarded.')
+      showNotice(t('common:shell.notices.followUpDraftDiscarded'))
     } catch (reason) {
       setError(errorMessage(reason))
     } finally {
@@ -1809,7 +1812,7 @@ function OratorioApp() {
       setSelectedDetail(nextItem)
       setItems((current) => replaceMatchingItemWithDetail(current, nextItem))
       await refreshItems()
-      showNotice('Local task created from follow-up.')
+      showNotice(t('common:shell.notices.localTaskFromFollowUp'))
     } catch (reason) {
       setError(errorMessage(reason))
     } finally {
@@ -1818,12 +1821,12 @@ function OratorioApp() {
   }
 
   async function editFollowUpDraft(draft: FollowUpDraft) {
-    const nextTitle = window.prompt('Follow-up title', draft.title)
+    const nextTitle = window.prompt(t('common:shell.prompts.followUpTitle'), draft.title)
     if (nextTitle === null || !nextTitle.trim()) {
       return
     }
 
-    const nextBody = window.prompt('Follow-up body', draft.body)
+    const nextBody = window.prompt(t('common:shell.prompts.followUpBody'), draft.body)
     if (nextBody === null || !nextBody.trim()) {
       return
     }
@@ -1843,7 +1846,7 @@ function OratorioApp() {
       const nextItem = detailToWorkItem(detail)
       setSelectedDetail(nextItem)
       setItems((current) => replaceMatchingItemWithDetail(current, nextItem))
-      showNotice('Follow-up draft updated.')
+      showNotice(t('common:shell.notices.followUpDraftUpdated'))
     } catch (reason) {
       setError(errorMessage(reason))
     } finally {
@@ -1852,7 +1855,7 @@ function OratorioApp() {
   }
 
   async function editReviewDraftSummary(draft: ReviewDraft) {
-    const nextSummary = window.prompt('Review summary', draft.summaryBody)
+    const nextSummary = window.prompt(t('common:shell.prompts.reviewSummary'), draft.summaryBody)
     if (nextSummary === null || nextSummary.trim() === draft.summaryBody.trim() || !nextSummary.trim()) {
       return
     }
@@ -1867,7 +1870,7 @@ function OratorioApp() {
       const nextItem = detailToWorkItem(detail)
       setSelectedDetail(nextItem)
       setItems((current) => replaceMatchingItemWithDetail(current, nextItem))
-      showNotice('Review draft summary updated.')
+      showNotice(t('common:shell.notices.reviewDraftSummaryUpdated'))
     } catch (reason) {
       setError(errorMessage(reason))
     } finally {
@@ -1887,7 +1890,7 @@ function OratorioApp() {
     }).then((ok) => {
       if (ok) {
         setFeedbackDraft('')
-        showNotice('Feedback added.')
+        showNotice(t('common:shell.notices.feedbackAdded'))
       }
     })
   }
@@ -1903,22 +1906,22 @@ function OratorioApp() {
           mode: 'mock',
           mockOutcome,
           mockDurationSeconds: 8,
-          note: 'Operator dispatched a validation round from the local console.',
+          note: t('common:shell.dispatchNotes.mock'),
         })
         if (ok && selectedItem) {
           setReviewStageByItem((current) => ({ ...current, [selectedItem.id]: 'analysis' }))
-          showNotice('Mock round dispatched.')
+          showNotice(t('common:shell.notices.mockRoundDispatched'))
         }
         return
       }
 
       const ok = await mutateSelected('/dispatch', {
         mode: 'appServer',
-        note: 'Operator dispatched a read-only DotCraft analysis round from the local console.',
+        note: t('common:shell.dispatchNotes.review'),
       })
       if (ok && selectedItem) {
         setReviewStageByItem((current) => ({ ...current, [selectedItem.id]: 'analysis' }))
-        showNotice('DotCraft round dispatched.')
+        showNotice(t('common:shell.notices.dotCraftRoundDispatched'))
       }
     })()
   }
@@ -1936,7 +1939,7 @@ function OratorioApp() {
       const ok = await mutateSelected('/rereview', {})
       if (ok) {
         setReviewStageByItem((current) => ({ ...current, [selectedItem.id]: 'analysis' }))
-        showNotice(`${selectedItem.sourceKey === 'gitlab' ? 'MR' : 'PR'} re-review dispatched.`)
+        showNotice(t('common:shell.notices.reReviewDispatched', { kind: selectedItem.sourceKey === 'gitlab' ? 'MR' : 'PR' }))
       }
     })()
   }
@@ -1954,7 +1957,7 @@ function OratorioApp() {
     }).then((ok) => {
       if (ok) {
         setFeedbackDraft('')
-        showNotice('Question sent to agent.')
+        showNotice(t('common:shell.notices.questionSentToAgent'))
       }
     })
   }
@@ -1970,12 +1973,12 @@ function OratorioApp() {
         workMode: 'implementation',
         deliveryPolicy,
         note: deliveryPolicy === 'autoPr'
-          ? 'Operator dispatched an implementation round with automatic PR/MR delivery.'
-          : 'Operator dispatched an implementation round with manual PR/MR delivery.',
+          ? t('common:shell.dispatchNotes.implementationAuto')
+          : t('common:shell.dispatchNotes.implementationManual'),
       })
       if (ok && selectedItem) {
         setReviewStageByItem((current) => ({ ...current, [selectedItem.id]: 'analysis' }))
-        showNotice(deliveryPolicy === 'autoPr' ? 'Auto PR/MR implementation dispatched.' : 'Implementation round dispatched.')
+        showNotice(deliveryPolicy === 'autoPr' ? t('common:shell.notices.autoPrImplementationDispatched') : t('common:shell.notices.implementationRoundDispatched'))
       }
     })()
   }
@@ -1987,7 +1990,7 @@ function OratorioApp() {
       const job = await apiPost<GitHubSyncJob>('/sources/github/sync-jobs', { mode })
       setGithubSyncJob(job)
       await refreshAll()
-      showNotice(mode === 'full' ? 'GitHub full repair sync started.' : 'GitHub sync started.')
+      showNotice(mode === 'full' ? t('common:shell.notices.githubFullRepairSyncStarted') : t('common:shell.notices.githubSyncStarted'))
     } catch (reason) {
       setError(errorMessage(reason))
       await refreshGitHubStatus()
@@ -2006,7 +2009,7 @@ function OratorioApp() {
     try {
       const job = await apiPost<GitHubSyncJob>('/sources/github/sync-jobs', { mode: 'incremental', repositories })
       setGithubSyncJob(job)
-      showNotice('GitHub retry sync started.')
+      showNotice(t('common:shell.notices.githubRetrySyncStarted'))
     } catch (reason) {
       setError(errorMessage(reason))
       await refreshGitHubStatus()
@@ -2033,7 +2036,9 @@ function OratorioApp() {
       const job = await apiPost<SourceSyncJob>(`/sources/${encodeURIComponent(provider)}/sync-jobs`, { mode, projects })
       setSourceSyncJobs((current) => ({ ...current, [provider]: job }))
       await refreshAll()
-      showNotice(`${providerLabel(provider)} ${mode === 'full' ? 'full repair ' : ''}sync started.`)
+      showNotice(mode === 'full'
+        ? t('common:shell.notices.sourceFullRepairSyncStarted', { provider: providerLabel(provider) })
+        : t('common:shell.notices.sourceSyncStarted', { provider: providerLabel(provider) }))
     } catch (reason) {
       const message = errorMessage(reason)
       setError(message)
@@ -2083,7 +2088,7 @@ function OratorioApp() {
       await apiPost<DotCraftStatusResponse>('/dotcraft/appserver/start', {})
       await refreshDotCraftStatus()
       await refreshAppBindingStatus()
-      showNotice('DotCraft AppServer is starting.')
+      showNotice(t('common:shell.notices.appServerStarting'))
     } catch (reason) {
       const message = errorMessage(reason)
       setError(message)
@@ -2186,10 +2191,10 @@ function OratorioApp() {
     const body =
       decision === 'request-changes'
         ? noteBody
-        : noteBody || `${decisionLabel(decision)} in Oratorio.`
+        : noteBody || t('common:shell.dispatchNotes.decisionInOratorio', { label: decisionLabel(decision) })
     if (decision === 'request-changes' && !body) {
-      setError('Request changes needs a decision note.')
-      showNotice('Request changes needs a decision note.', 'error')
+      setError(t('common:shell.messages.requestChangesNeedsNote'))
+      showNotice(t('common:shell.notices.requestChangesNeedsNote'), 'error')
       return
     }
 
@@ -2199,7 +2204,7 @@ function OratorioApp() {
       }
 
       setDecisionNote('')
-      showNotice(`${decisionLabel(decision)} recorded.`)
+      showNotice(t('common:shell.notices.decisionRecorded', { label: decisionLabel(decision) }))
     })
   }
 
@@ -2294,17 +2299,17 @@ function OratorioApp() {
       </div>
       <CelebrationBurst key={taskCreateCelebrationKey} origin={taskCreateCelebrationOrigin} />
       {isSettingsRoute ? (
-        <aside className="unified-sidebar settings-sidebar-mode" aria-label="Settings navigation">
+        <aside className="unified-sidebar settings-sidebar-mode" aria-label={t('common:shell.settingsNavigation')}>
           <div className="sidebar-mode-header">
-            <ActionIcon className="icon-button sidebar-back-button" label="Back to workbench" title="Back to workbench" onClick={returnFromSettings}>
+            <ActionIcon className="icon-button sidebar-back-button" label={t('common:shell.backToWorkbench')} title={t('common:shell.backToWorkbench')} onClick={returnFromSettings}>
               <ArrowLeft size={16} />
             </ActionIcon>
             <span>
-              <strong>Settings</strong>
-              <small>Oratorio</small>
+              <strong>{t('common:shell.settings')}</strong>
+              <small>{t('board:appName')}</small>
             </span>
           </div>
-          <section className="settings-nav" aria-label="Settings sections">
+          <section className="settings-nav" aria-label={t('common:shell.settingsSections')}>
             <nav>
               {settingsSections.map((item) => {
                 const Icon = item.icon
@@ -2312,8 +2317,8 @@ function OratorioApp() {
                   <NavLink key={item.id} to={`/settings/${item.id}`} className={() => `settings-nav-row${settingsActiveSection === item.id ? ' active' : ''}`}>
                     <Icon size={16} />
                     <span>
-                      <strong>{item.label}</strong>
-                      <small>{item.description}</small>
+                      <strong>{t(`settings:sections.${item.id}.label`)}</strong>
+                      <small>{t(`settings:sections.${item.id}.description`)}</small>
                     </span>
                     <ChevronRight size={14} />
                   </NavLink>
@@ -2325,7 +2330,7 @@ function OratorioApp() {
             className="sidebar-resize-handle"
             role="separator"
             aria-orientation="vertical"
-            aria-label="Resize sidebar"
+            aria-label={t('common:shell.resizeSidebar')}
             onPointerDown={startSidebarResize}
             onPointerMove={moveSidebarResize}
             onPointerUp={stopSidebarResize}
@@ -2334,7 +2339,7 @@ function OratorioApp() {
       ) : null}
 
       {isSettingsRoute ? (
-        <section className={`settings-main-panel${showPendingServerRestart ? ' has-server-restart' : ''}`} aria-label="Settings workspace">
+        <section className={`settings-main-panel${showPendingServerRestart ? ' has-server-restart' : ''}`} aria-label={t('common:shell.settingsWorkspace')}>
           {pendingServerRestart ? (
             <PendingServerRestartBanner
               restart={pendingServerRestart}
@@ -2545,17 +2550,18 @@ function PendingServerRestartBanner({
   onRestart: () => void
   onDismiss: () => void
 }) {
-  const fieldLabel = restart.fields.length ? restart.fields.slice(0, 3).join(', ') : 'configuration'
-  const restartLabel = restartState === 'restarting' ? 'Restarting' : restartState === 'failed' ? 'Retry restart' : 'Restart server'
+  const { t } = useTranslation()
+  const fieldLabel = restart.fields.length ? restart.fields.slice(0, 3).join(', ') : t('common:shell.restartBanner.fallbackField')
+  const restartLabel = restartState === 'restarting' ? t('common:shell.restartBanner.restarting') : restartState === 'failed' ? t('common:shell.restartBanner.retryRestart') : t('common:shell.restartBanner.restartServer')
   return (
-    <div className="settings-server-restart-banner" role="status" aria-live="polite" aria-label="Restart required">
+    <div className="settings-server-restart-banner" role="status" aria-live="polite" aria-label={t('common:shell.restartBanner.ariaLabel')}>
       <span className="settings-server-restart-copy">
-        <strong>Restart required</strong>
-        <small>{canRestart ? `Saved changes to ${fieldLabel} need an Oratorio server restart.` : `Saved changes to ${fieldLabel} need a manual Oratorio server restart.`}</small>
+        <strong>{t('common:shell.restartBanner.title')}</strong>
+        <small>{canRestart ? t('common:shell.restartBanner.copyCanRestart', { field: fieldLabel }) : t('common:shell.restartBanner.copyManual', { field: fieldLabel })}</small>
       </span>
       <span className="settings-server-restart-actions">
         <button className="secondary-button inline compact-row-action settings-action-button" type="button" onClick={onDismiss} disabled={restartState === 'restarting'}>
-          Ignore
+          {t('common:shell.restartBanner.ignore')}
         </button>
         {canRestart ? (
           <button className="primary-button inline compact-row-action settings-action-button" type="button" onClick={onRestart} disabled={restartState === 'restarting'}>
@@ -2576,16 +2582,17 @@ function InitialLaunchOverlay({
   appIconSrc: string
   message: string
 }) {
+  const { t } = useTranslation()
   return (
     <div
       className={`initial-launch-overlay initial-launch-overlay--${phase}`}
       role="status"
       aria-live="polite"
-      aria-label="Oratorio launch status"
+      aria-label={t('common:shell.launchStatus')}
     >
       <section className="initial-launch-content">
         <img className="initial-launch-logo" src={appIconSrc} alt="" draggable={false} />
-        <h1 className="initial-launch-heading">Oratorio</h1>
+        <h1 className="initial-launch-heading">{t('board:appName')}</h1>
         <p className="initial-launch-status tool-running-gradient-text">{message}</p>
       </section>
     </div>
@@ -2603,20 +2610,21 @@ function AppBindingConsentDialog({
   onApprove: () => void
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const busy = state.status === 'loading' || state.status === 'approving'
   const inspection = state.status === 'ready' || state.status === 'approving' ? state.inspection : null
   const connection = inspection?.connection ?? null
   const binding = inspection?.binding ?? null
   const isBind = inspection?.operation === 'bind' && Boolean(binding)
-  const title = isBind ? 'Bind DotCraft thread' : 'Connect DotCraft'
-  const appName = connection?.displayName ?? binding?.displayName ?? 'Oratorio'
-  const developerName = connection?.developerName ?? binding?.developerName ?? 'DotCraft'
+  const title = isBind ? t('common:shell.appBinding.bindTitle') : t('common:shell.appBinding.connectTitle')
+  const appName = connection?.displayName ?? binding?.displayName ?? t('common:shell.appBinding.fallbackAppName')
+  const developerName = connection?.developerName ?? binding?.developerName ?? t('common:shell.appBinding.fallbackDeveloper')
   const expiresAt = formatAppBindingDate(connection?.expiresAt ?? binding?.expiresAt)
-  const primaryLabel = inspection?.operation === 'connect' ? 'Connect' : 'Approve'
+  const primaryLabel = inspection?.operation === 'connect' ? t('common:shell.appBinding.connect') : t('common:shell.appBinding.approve')
   const scopeRows = binding
     ? binding.scopeCatalog.length > 0
       ? binding.scopeCatalog
-      : binding.requestedScopes.map((scope) => ({ id: scope, displayName: scope, description: 'Requested by DotCraft.', risk: 'read' }))
+      : binding.requestedScopes.map((scope) => ({ id: scope, displayName: scope, description: t('common:shell.appBinding.requestedByDotCraft'), risk: 'read' }))
     : []
 
   return (
@@ -2633,43 +2641,43 @@ function AppBindingConsentDialog({
             <img src={dotcraftIconSrc} alt="" draggable={false} />
           </span>
           <div className="app-binding-title-block">
-            <p className="app-binding-kicker">DotCraft Connected App</p>
+            <p className="app-binding-kicker">{t('common:shell.appBinding.connectedApp')}</p>
             <h2 id="app-binding-title">{title}</h2>
-            <p id="app-binding-description">Review the app handoff before Oratorio accepts it.</p>
+            <p id="app-binding-description">{t('common:shell.appBinding.reviewHandoff')}</p>
           </div>
         </header>
 
         {state.status === 'loading' ? (
-          <div className="app-binding-loading" role="status">Loading DotCraft request...</div>
+          <div className="app-binding-loading" role="status">{t('common:shell.appBinding.loading')}</div>
         ) : state.status === 'error' ? (
           <div className="app-binding-error" role="alert">{state.message}</div>
         ) : isBind && binding ? (
           <div className="app-binding-content">
             <p className="app-binding-body">
-              Allow DotCraft to use {appName} tools in
+              {t('common:shell.appBinding.bindBodyPrefix', { appName })}
               {' '}
               <strong>{binding.threadTitle || binding.threadId}</strong>?
             </p>
             <div className="app-binding-summary" role="list">
               <div role="listitem">
-                <span>Thread</span>
+                <span>{t('common:shell.appBinding.thread')}</span>
                 <strong>{binding.threadTitle || binding.threadId}</strong>
                 <small>{binding.threadId}</small>
               </div>
               <div role="listitem">
-                <span>App identity</span>
+                <span>{t('common:shell.appBinding.appIdentity')}</span>
                 <strong>{appName}</strong>
                 <small>{developerName}</small>
               </div>
               <div role="listitem">
-                <span>Request expires</span>
+                <span>{t('common:shell.appBinding.requestExpires')}</span>
                 <strong>{expiresAt}</strong>
-                <small>One-time approval window</small>
+                <small>{t('common:shell.appBinding.oneTimeApproval')}</small>
               </div>
             </div>
             <div className="app-binding-grid">
               <section className="app-binding-card">
-                <h3>Scopes</h3>
+                <h3>{t('common:shell.appBinding.scopes')}</h3>
                 <ul>
                   {scopeRows.map((scope) => (
                     <li key={scope.id}>
@@ -2681,7 +2689,7 @@ function AppBindingConsentDialog({
                 </ul>
               </section>
               <section className="app-binding-card">
-                <h3>Tools</h3>
+                <h3>{t('common:shell.appBinding.tools')}</h3>
                 <ul>
                   {binding.toolCatalog.map((tool) => (
                     <li key={tool.name}>
@@ -2695,51 +2703,51 @@ function AppBindingConsentDialog({
             </div>
             <div className="app-binding-risk">
               <TriangleAlert size={15} />
-              <span>Only this DotCraft thread receives the listed tools. Deferred write tools still ask DotCraft for approval.</span>
+              <span>{t('common:shell.appBinding.bindRisk')}</span>
             </div>
           </div>
         ) : (
           <div className="app-binding-content">
             <p className="app-binding-body">
-              Allow DotCraft workspace
+              {t('common:shell.appBinding.connectBodyPrefix')}
               {' '}
-              <strong>{connection?.workspaceLabel ?? 'this workspace'}</strong>
+              <strong>{connection?.workspaceLabel ?? t('common:shell.appBinding.fallbackWorkspaceInline')}</strong>
               {' '}
-              to connect to {appName}?
+              {t('common:shell.appBinding.connectBodySuffix', { appName })}
             </p>
             <div className="app-binding-summary" role="list">
               <div role="listitem">
-                <span>Workspace</span>
-                <strong>{connection?.workspaceLabel ?? 'DotCraft workspace'}</strong>
-                <small>{connection?.userLabel ?? 'DotCraft account'}</small>
+                <span>{t('common:shell.appBinding.workspace')}</span>
+                <strong>{connection?.workspaceLabel ?? t('common:shell.appBinding.fallbackWorkspace')}</strong>
+                <small>{connection?.userLabel ?? t('common:shell.appBinding.fallbackAccount')}</small>
               </div>
               <div role="listitem">
-                <span>App identity</span>
+                <span>{t('common:shell.appBinding.appIdentity')}</span>
                 <strong>{appName}</strong>
                 <small>{developerName}</small>
               </div>
               <div role="listitem">
-                <span>Request expires</span>
+                <span>{t('common:shell.appBinding.requestExpires')}</span>
                 <strong>{expiresAt}</strong>
-                <small>One-time connection window</small>
+                <small>{t('common:shell.appBinding.oneTimeConnection')}</small>
               </div>
             </div>
             <div className="app-binding-risk">
               <Info size={15} />
-              <span>Thread access remains separate. Write and queue actions still use DotCraft approvals.</span>
+              <span>{t('common:shell.appBinding.connectRisk')}</span>
             </div>
           </div>
         )}
 
         <footer className="modal-actions app-binding-actions">
-          <button className="secondary-button" type="button" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="secondary-button" type="button" onClick={onClose} disabled={busy}>{t('common:cancel')}</button>
           <button
             className="primary-button"
             type="button"
             onClick={onApprove}
             disabled={state.status !== 'ready'}
           >
-            {state.status === 'approving' ? 'Approving...' : primaryLabel}
+            {state.status === 'approving' ? t('common:shell.appBinding.approving') : primaryLabel}
           </button>
         </footer>
       </section>
@@ -2749,7 +2757,7 @@ function AppBindingConsentDialog({
 
 function formatAppBindingDate(value: string | null | undefined): string {
   if (!value) {
-    return 'Soon'
+    return i18n.t('common:shell.appBinding.dateSoon')
   }
 
   const date = new Date(value)
@@ -2964,7 +2972,7 @@ function providerLabel(provider: string) {
   return provider
 }
 
-function formatRepositoryNames(runs: GitHubSyncRepositoryRun[], fallback = 'repositories') {
+function formatRepositoryNames(runs: GitHubSyncRepositoryRun[], fallback = i18n.t('common:shell.syncFallback.repositories')) {
   const names = runs.map((run) => run.repository).filter(Boolean)
   if (names.length === 0) {
     return fallback
@@ -2974,10 +2982,10 @@ function formatRepositoryNames(runs: GitHubSyncRepositoryRun[], fallback = 'repo
     return names.join(', ')
   }
 
-  return `${names.slice(0, 3).join(', ')} +${names.length - 3} more`
+  return i18n.t('common:shell.syncFallback.moreSuffix', { names: names.slice(0, 3).join(', '), count: names.length - 3 })
 }
 
-function formatSourceProjectNames(runs: SourceSyncProjectRun[], fallback = 'projects') {
+function formatSourceProjectNames(runs: SourceSyncProjectRun[], fallback = i18n.t('common:shell.syncFallback.projects')) {
   const names = runs.map((run) => run.displayName || run.projectPath || run.sourceProjectKey).filter(Boolean)
   if (names.length === 0) {
     return fallback
@@ -2987,7 +2995,7 @@ function formatSourceProjectNames(runs: SourceSyncProjectRun[], fallback = 'proj
     return names.join(', ')
   }
 
-  return `${names.slice(0, 3).join(', ')} +${names.length - 3} more`
+  return i18n.t('common:shell.syncFallback.moreSuffix', { names: names.slice(0, 3).join(', '), count: names.length - 3 })
 }
 
 function findReviewDraftPublishWrite(item: WorkItem, draftId: string): WorkItem['sourceWrites'][number] | undefined {
@@ -3002,7 +3010,7 @@ function findReviewDraftPublishWrite(item: WorkItem, draftId: string): WorkItem[
 function sourceWriteFailureNotice(prefix: string, write?: WorkItem['sourceWrites'][number] | null) {
   const provider = write?.repository?.startsWith('gitlab:') || write?.kind.startsWith('mergeRequest') || write?.kind === 'commitStatus'
     ? 'GitLab'
-    : 'source'
-  const detail = write?.errorMessage?.trim() || write?.errorCode?.trim() || `Review the ${provider} write audit for details.`
+    : i18n.t('common:shell.failureNotices.sourceProvider')
+  const detail = write?.errorMessage?.trim() || write?.errorCode?.trim() || i18n.t('common:shell.failureNotices.reviewWriteAudit', { provider })
   return `${prefix}: ${detail}`
 }

@@ -17,6 +17,7 @@ import {
   ZoomOut,
   type LucideIcon,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Tooltip } from '../components/primitives/Tooltip'
 import type { DotCraftAppBindingStatusResponse } from '../lib/types'
 
@@ -90,14 +91,8 @@ type DesktopTitlebarProps = {
   dotcraftIconSrc?: string
 }
 
-const serverStateLabels: Record<OratorioServerState, string> = {
-  stopped: 'Stopped',
-  starting: 'Starting',
-  running: 'Running',
-  error: 'Error',
-}
-
 export function DesktopTitlebar({ dotCraftAppBindingStatus = null, dotcraftIconSrc }: DesktopTitlebarProps = {}) {
+  const { t } = useTranslation('common')
   const desktop = window.oratorioDesktop
   const menuRootRef = useRef<HTMLDivElement | null>(null)
   const [windowState, setWindowState] = useState<OratorioWindowState>(initialWindowState)
@@ -163,11 +158,13 @@ export function DesktopTitlebar({ dotCraftAppBindingStatus = null, dotcraftIconS
   }
 
   const serverState = serverStatus?.state ?? 'stopped'
-  const serverLabel = serverStateLabels[serverState]
-  const serverTitle = serverStatus?.errorMessage ? `${serverLabel}: ${serverStatus.errorMessage}` : `Server ${serverLabel.toLowerCase()}`
-  const maximizeLabel = windowState.isMaximized ? 'Restore window' : 'Maximize window'
+  const serverLabel = t(`titlebar.serverState.${serverState}`)
+  const serverTitle = serverStatus?.errorMessage
+    ? t('titlebar.serverErrorTitle', { label: serverLabel, message: serverStatus.errorMessage })
+    : t('titlebar.serverTitle', { label: serverLabel.toLowerCase() })
+  const maximizeLabel = windowState.isMaximized ? t('titlebar.restoreWindow') : t('titlebar.maximizeWindow')
   const dotCraftTooltip = dotCraftAppBindingStatus?.connected
-    ? dotCraftConnectionTooltip(dotCraftAppBindingStatus)
+    ? dotCraftConnectionTooltip(dotCraftAppBindingStatus, t)
     : null
 
   function invoke(action: () => Promise<unknown> | void): void {
@@ -190,12 +187,12 @@ export function DesktopTitlebar({ dotCraftAppBindingStatus = null, dotcraftIconS
   }
 
   return (
-    <div className="desktop-titlebar" role="toolbar" aria-label="Desktop window controls">
+    <div className="desktop-titlebar" role="toolbar" aria-label={t('titlebar.windowControls')}>
       <div className="desktop-titlebar-nav">
-        <DesktopTitlebarButton label="Back" disabled={!windowState.canGoBack} onClick={() => invokeWindowState(() => desktop.goBack())}>
+        <DesktopTitlebarButton label={t('titlebar.back')} disabled={!windowState.canGoBack} onClick={() => invokeWindowState(() => desktop.goBack())}>
           <ArrowLeft size={15} />
         </DesktopTitlebarButton>
-        <DesktopTitlebarButton label="Forward" disabled={!windowState.canGoForward} onClick={() => invokeWindowState(() => desktop.goForward())}>
+        <DesktopTitlebarButton label={t('titlebar.forward')} disabled={!windowState.canGoForward} onClick={() => invokeWindowState(() => desktop.goForward())}>
           <ArrowRight size={15} />
         </DesktopTitlebarButton>
       </div>
@@ -228,16 +225,16 @@ export function DesktopTitlebar({ dotCraftAppBindingStatus = null, dotcraftIconS
               <span className={`desktop-status-dot ${serverState}`} aria-hidden="true" />
               <span>
                 <strong>{serverLabel}</strong>
-                <small>{serverStatus?.serverUrl ?? 'Local server'}</small>
+                <small>{serverStatus?.serverUrl ?? t('titlebar.localServer')}</small>
               </span>
             </div>
             {serverStatus?.errorMessage ? <p className="desktop-titlebar-menu-error">{serverStatus.errorMessage}</p> : null}
-            <DesktopTitlebarMenuItem icon={RotateCw} label="Restart server" onClick={() => invoke(() => desktop.restartServer())} />
+            <DesktopTitlebarMenuItem icon={RotateCw} label={t('titlebar.restartServer')} onClick={() => invoke(() => desktop.restartServer())} />
           </div>
         ) : null}
 
         <DesktopTitlebarButton
-          label="Desktop actions"
+          label={t('titlebar.desktopActions')}
           active={moreMenuOpen}
           ariaExpanded={moreMenuOpen}
           onClick={() => {
@@ -249,26 +246,26 @@ export function DesktopTitlebar({ dotCraftAppBindingStatus = null, dotcraftIconS
         </DesktopTitlebarButton>
         {moreMenuOpen ? (
           <div className="desktop-titlebar-menu desktop-titlebar-menu--more" role="menu">
-            <DesktopTitlebarMenuItem icon={RefreshCw} label="Reload" onClick={() => invoke(() => desktop.reload())} />
-            <DesktopTitlebarMenuItem icon={RotateCw} label="Force reload" onClick={() => invoke(() => desktop.forceReload())} />
-            <DesktopTitlebarMenuItem icon={Bug} label="Toggle DevTools" onClick={() => invoke(() => desktop.toggleDevTools())} />
+            <DesktopTitlebarMenuItem icon={RefreshCw} label={t('titlebar.reload')} onClick={() => invoke(() => desktop.reload())} />
+            <DesktopTitlebarMenuItem icon={RotateCw} label={t('titlebar.forceReload')} onClick={() => invoke(() => desktop.forceReload())} />
+            <DesktopTitlebarMenuItem icon={Bug} label={t('titlebar.toggleDevTools')} onClick={() => invoke(() => desktop.toggleDevTools())} />
             <DesktopTitlebarMenuSeparator />
-            <DesktopTitlebarMenuItem icon={ZoomIn} label="Zoom in" onClick={() => invoke(() => desktop.zoomIn())} />
-            <DesktopTitlebarMenuItem icon={ZoomOut} label="Zoom out" onClick={() => invoke(() => desktop.zoomOut())} />
-            <DesktopTitlebarMenuItem icon={Minimize2} label="Reset zoom" onClick={() => invoke(() => desktop.resetZoom())} />
+            <DesktopTitlebarMenuItem icon={ZoomIn} label={t('titlebar.zoomIn')} onClick={() => invoke(() => desktop.zoomIn())} />
+            <DesktopTitlebarMenuItem icon={ZoomOut} label={t('titlebar.zoomOut')} onClick={() => invoke(() => desktop.zoomOut())} />
+            <DesktopTitlebarMenuItem icon={Minimize2} label={t('titlebar.resetZoom')} onClick={() => invoke(() => desktop.resetZoom())} />
             <DesktopTitlebarMenuSeparator />
-            <DesktopTitlebarMenuItem icon={Fullscreen} label="Toggle full screen" onClick={() => invokeWindowState(() => desktop.toggleFullScreen())} />
+            <DesktopTitlebarMenuItem icon={Fullscreen} label={t('titlebar.toggleFullScreen')} onClick={() => invokeWindowState(() => desktop.toggleFullScreen())} />
           </div>
         ) : null}
 
         <div className="desktop-window-controls">
-          <DesktopTitlebarButton label="Minimize window" tooltipMode="native" onClick={() => invoke(() => desktop.minimizeWindow())}>
+          <DesktopTitlebarButton label={t('titlebar.minimizeWindow')} tooltipMode="native" onClick={() => invoke(() => desktop.minimizeWindow())}>
             <Minus size={15} />
           </DesktopTitlebarButton>
           <DesktopTitlebarButton label={maximizeLabel} tooltipMode="native" onClick={() => invokeWindowState(() => desktop.toggleMaximizeWindow())}>
             {windowState.isMaximized ? <Minimize2 size={14} /> : <Square size={13} />}
           </DesktopTitlebarButton>
-          <DesktopTitlebarButton label="Close window" className="desktop-window-close" tooltipMode="native" onClick={() => invoke(() => desktop.closeWindow())}>
+          <DesktopTitlebarButton label={t('titlebar.closeWindow')} className="desktop-window-close" tooltipMode="native" onClick={() => invoke(() => desktop.closeWindow())}>
             <X size={15} />
           </DesktopTitlebarButton>
         </div>
@@ -288,11 +285,11 @@ function DotCraftConnectionIndicator({ iconSrc, tooltip }: { iconSrc?: string; t
   )
 }
 
-function dotCraftConnectionTooltip(status: DotCraftAppBindingStatusResponse): string {
+function dotCraftConnectionTooltip(status: DotCraftAppBindingStatusResponse, t: (key: string, options?: Record<string, unknown>) => string): string {
   const details = [status.accountLabel, status.workspacePath].filter(Boolean)
   return details.length > 0
-    ? `Connected to DotCraft: ${details.join(' · ')}`
-    : 'Connected to DotCraft'
+    ? t('titlebar.connectedTo', { details: details.join(' · ') })
+    : t('titlebar.connected')
 }
 
 function DesktopTitlebarButton({

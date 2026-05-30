@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { WorkItem } from '../../lib/types'
 
 export type RequestChangesValue = {
@@ -19,6 +20,7 @@ export function RequestChangesModal({
   onCancel: () => void
   onSubmit: (value: RequestChangesValue) => void
 }) {
+  const { t } = useTranslation('review')
   const [body, setBody] = useState('')
   const [severity, setSeverity] = useState<RequestChangesValue['severity']>('yellow')
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -33,7 +35,7 @@ export function RequestChangesModal({
     <div className="modal-backdrop" role="presentation">
       <form
         className="request-changes-modal"
-        aria-label={`Request changes for ${item.shortId ?? item.title}`}
+        aria-label={t('requestChanges.ariaForm', { name: item.shortId ?? item.title })}
         onSubmit={(event) => {
           event.preventDefault()
           if (canSubmit) {
@@ -42,34 +44,34 @@ export function RequestChangesModal({
         }}
       >
         <header>
-          <p className="eyebrow">Request changes</p>
+          <p className="eyebrow">{t('requestChanges.title')}</p>
           <h2>{item.shortId ?? item.number}</h2>
           <p>{item.title}</p>
         </header>
         <label className="board-modal-field">
-          <span>Feedback</span>
+          <span>{t('requestChanges.feedback')}</span>
           <textarea
             ref={textareaRef}
             value={body}
             onChange={(event) => setBody(event.target.value)}
             rows={6}
-            placeholder="Describe what the agent should change before the next run."
+            placeholder={t('requestChanges.feedbackPlaceholder')}
           />
         </label>
         <label className="board-modal-field compact">
-          <span>Severity</span>
+          <span>{t('requestChanges.severity')}</span>
           <select value={severity} onChange={(event) => setSeverity(event.target.value as RequestChangesValue['severity'])}>
-            <option value="yellow">Needs changes</option>
-            <option value="red">Blocking</option>
+            <option value="yellow">{t('requestChanges.severityNeedsChanges')}</option>
+            <option value="red">{t('requestChanges.severityBlocking')}</option>
           </select>
         </label>
         {error ? <p className="form-error">{error}</p> : null}
         <footer>
           <button type="button" className="secondary-button inline" onClick={onCancel} disabled={busy}>
-            Cancel
+            {t('common:cancel')}
           </button>
           <button type="submit" className="primary-button inline" disabled={!canSubmit}>
-            {busy ? 'Sending...' : 'Send feedback'}
+            {busy ? t('requestChanges.sending') : t('requestChanges.sendFeedback')}
           </button>
         </footer>
       </form>

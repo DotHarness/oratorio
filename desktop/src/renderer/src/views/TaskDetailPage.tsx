@@ -1,4 +1,6 @@
 import { ArrowLeft, CircleDot, FileText, Folder, GitPullRequest } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import i18n from '../i18n'
 import { ActionIcon } from '../components/primitives/ActionIcon'
 import { taskStatusBadgeClass, taskStatusLabel } from '../lib/format'
 import type { ReviewStageId, WorkItem } from '../lib/types'
@@ -39,7 +41,7 @@ function sourceChipLabel(item: WorkItem) {
   if (item.sourceKey === 'github' || item.sourceKey === 'gitlab') {
     return item.sourceKey === 'github' ? 'GitHub' : 'GitLab'
   }
-  return 'Local'
+  return i18n.t('detail:chip.local')
 }
 
 function kindChipIcon(item: WorkItem) {
@@ -49,9 +51,9 @@ function kindChipIcon(item: WorkItem) {
 }
 
 function kindChipLabel(item: WorkItem) {
-  if (item.type === 'pr') return 'PR'
-  if (item.type === 'issue') return 'Issue'
-  return 'Task'
+  if (item.type === 'pr') return i18n.t('detail:chip.pr')
+  if (item.type === 'issue') return i18n.t('detail:chip.issue')
+  return i18n.t('detail:chip.task')
 }
 
 export function TaskDetailPage({
@@ -60,13 +62,14 @@ export function TaskDetailPage({
   activeStage,
   onBackToBoard,
 }: TaskDetailPageProps) {
+  const { t } = useTranslation('detail')
   return (
-    <section className="task-detail-page" aria-label={item ? `Task detail for ${item.shortId ?? item.title}` : 'Task detail'}>
+    <section className="task-detail-page" aria-label={item ? t('page.detailForName', { name: item.shortId ?? item.title }) : t('page.detail')}>
       <header className="task-detail-header">
-        <ActionIcon className="icon-button task-detail-back" label="Back to board" onClick={onBackToBoard}>
+        <ActionIcon className="icon-button task-detail-back" label={t('page.backToBoard')} onClick={onBackToBoard}>
           <ArrowLeft size={16} />
         </ActionIcon>
-        <nav className="task-detail-breadcrumb" aria-label="Task breadcrumb">
+        <nav className="task-detail-breadcrumb" aria-label={t('page.breadcrumb')}>
           {item ? (
             <>
               <span className={`card-chip card-chip--source card-chip--source-${item.sourceKey}`}>
@@ -80,10 +83,10 @@ export function TaskDetailPage({
               {item.repository ? <span className="task-detail-breadcrumb-repo">{item.repository}</span> : null}
               <span className="card-chip card-chip--id">{item.shortId ?? item.externalId ?? item.number}</span>
               <span className={`state-pill ${taskStatusBadgeClass(item.taskStatus)}`}>{taskStatusLabel(item.taskStatus)}</span>
-              <span className="task-detail-stage-label">Stage: {activeStage}</span>
+              <span className="task-detail-stage-label">{t('page.stageLabel', { stage: activeStage })}</span>
             </>
           ) : (
-            <span>Loading task</span>
+            <span>{t('page.loadingTask')}</span>
           )}
         </nav>
       </header>

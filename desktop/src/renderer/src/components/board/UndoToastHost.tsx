@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export type UndoToastEntry = {
   id: string
@@ -54,6 +55,7 @@ export function UndoToastHost({ toasts }: { toasts: UndoToastEntry[] }) {
 }
 
 function UndoToast({ toast, prefersReducedMotion }: { toast: UndoToastEntry; prefersReducedMotion: boolean }) {
+  const { t } = useTranslation('board')
   const remainingMs = useRemainingTime(toast)
   const progress = prefersReducedMotion ? 100 : Math.max(0, Math.min(100, (remainingMs / toast.durationMs) * 100))
 
@@ -61,7 +63,7 @@ function UndoToast({ toast, prefersReducedMotion }: { toast: UndoToastEntry; pre
     <div className="undo-toast" role="status">
       <span>{toast.label}</span>
       <button type="button" onClick={toast.onUndo}>
-        Undo
+        {t('undo')}
       </button>
       <span
         className={`undo-toast-progress${prefersReducedMotion ? ' reduced-motion' : ''}`}

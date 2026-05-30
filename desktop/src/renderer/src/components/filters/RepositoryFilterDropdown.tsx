@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { ListFilter } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { DropdownSelect } from '../primitives/DropdownSelect'
 
 type RepositoryFilterDropdownProps = {
@@ -16,12 +17,13 @@ type FilterDropdownProps = {
 }
 
 export function RepositoryFilterDropdown({ value, repositories, onChange }: RepositoryFilterDropdownProps) {
+  const { t } = useTranslation('board')
   const options = useMemo(
-    () => [{ value: 'all', label: 'All repositories' }, ...repositories.map((repository) => ({ value: repository, label: repository }))],
-    [repositories],
+    () => [{ value: 'all', label: t('filters.allRepositories') }, ...repositories.map((repository) => ({ value: repository, label: repository }))],
+    [repositories, t],
   )
 
-  return <FilterDropdown label="Repository filter" value={value} options={options} onChange={onChange} />
+  return <FilterDropdown label={t('filters.repositoryFilter')} value={value} options={options} onChange={onChange} />
 }
 
 export function FilterDropdown({ label, value, options, onChange }: FilterDropdownProps) {

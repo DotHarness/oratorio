@@ -28,3 +28,6 @@ server/appsettings.Local.json
 /.idea
 web/src/views/__tests__/__snapshots__/
 .dotnet-cli/
+
+# Stray root-level deps (e.g. from running tooling outside desktop/)
+node_modules/

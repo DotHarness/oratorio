@@ -614,8 +614,9 @@ describe('AppShell local task created notice', () => {
 
     const sourceProjectInput = await screen.findByLabelText('Source project')
     await waitFor(() => expect(sourceProjectInput).toHaveValue(gitlabProject))
-    const sourceProjectValues = Array.from(document.querySelectorAll<HTMLOptionElement>('#local-task-source-projects option'))
-      .map((option) => option.value)
+    fireEvent.focus(sourceProjectInput)
+    const sourceProjectValues = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]'))
+      .map((option) => option.getAttribute('data-value'))
     expect(sourceProjectValues).toContain('github:github.com/example-owner/oratorio')
     expect(sourceProjectValues).toContain(gitlabProject)
     expect(sourceProjectValues).not.toContain('example-owner/oratorio')

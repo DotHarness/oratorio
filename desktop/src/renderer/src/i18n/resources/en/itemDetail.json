@@ -1,0 +1,247 @@
+{
+  "suggestion": {
+    "title": "Suggested replacement",
+    "diffAria": "Suggested replacement diff preview"
+  },
+  "commentOnly": {
+    "label": "Comment-only: {{reason}}",
+    "needsHumanDecision": "Needs human decision",
+    "requiresLargerChange": "Requires larger change",
+    "cannotAnchorSafely": "Cannot anchor safely",
+    "investigateOnly": "Investigate only",
+    "leftSideOrDeletion": "Left-side or deletion"
+  },
+  "discussionPurpose": {
+    "question": "Question",
+    "agentReply": "Agent reply",
+    "systemNote": "System note"
+  },
+  "target": {
+    "pr": "PR",
+    "mr": "MR"
+  },
+  "sourceProject": {
+    "project": "Project",
+    "repository": "Repository"
+  },
+  "askAgent": {
+    "queued": "Agent question queued.",
+    "answering": "Agent is answering.",
+    "tooltip": "Ask agent"
+  },
+  "aria": {
+    "selectedItemDetail": "Selected item detail",
+    "sourceLabels": "Source labels",
+    "loadingSourceComments": "Loading source comments",
+    "reviewControls": "Review controls",
+    "resizeReviewControls": "Resize review controls",
+    "runProgress": "Run progress",
+    "noReviewItems": "No review items available."
+  },
+  "header": {
+    "openSourceTask": "Open source task",
+    "moreActions": "More actions",
+    "editLocalTask": "Edit local task",
+    "reopenLocalTask": "Reopen local task",
+    "archiveLocalTask": "Archive local task",
+    "openSource": "Open source",
+    "refreshItem": "Refresh item",
+    "reopenItem": "Reopen item",
+    "archiveItem": "Archive item",
+    "copyItemId": "Copy item id",
+    "round": "Round {{round}}",
+    "synced": "Synced {{time}}",
+    "draft": "Draft",
+    "checkTooltip": "oratorio/review: {{check}}"
+  },
+  "reReview": {
+    "title": "Review latest commit",
+    "button": "Re-review {{target}}"
+  },
+  "dispatch": {
+    "startImplementation": "Start implementation",
+    "startReview": "Start {{target}} review",
+    "dispatchAnalysis": "Dispatch analysis",
+    "createImplementationDraft": "Create an implementation draft.",
+    "retryLatestRun": "Retry the latest run.",
+    "readyForAnalysis": "Ready for analysis.",
+    "implement": "Implement",
+    "autoTarget": "Auto {{target}}",
+    "reviewOnly": "Review only",
+    "retryRun": "Retry run",
+    "dispatchReview": "Dispatch {{target}} review",
+    "dispatchRound": "Dispatch round"
+  },
+  "brief": {
+    "title": "Brief",
+    "localDescription": "Local task description.",
+    "sourceDescription": "Operator-facing summary derived from the source body.",
+    "summary": "Summary",
+    "keyDetails": "Key details",
+    "whyItMatters": "Why it matters",
+    "desiredOutcome": "Desired outcome",
+    "rawSourceBody": "Raw source body"
+  },
+  "source": {
+    "title": "Source",
+    "description": "Compact metadata from the originating system.",
+    "identifier": "Identifier",
+    "sourceUpdated": "Source updated",
+    "lastSourceSync": "Last source sync",
+    "snapshot": "Snapshot",
+    "headSha": "Head SHA"
+  },
+  "sourceActivity": {
+    "title": "Source activity",
+    "description": "Imported changes from the connected source.",
+    "showMore": "Show {{count}} more source events"
+  },
+  "sourceComments": {
+    "title": "Source comments",
+    "loadingDescription": "Loading comments and reviews from {{provider}}.",
+    "failedDescription": "{{provider}} source details could not be loaded.",
+    "description": "Comments imported from the originating system.",
+    "retry": "Retry",
+    "failedFallback": "{{provider}} source details failed to sync.",
+    "openSourceComment": "Open source comment"
+  },
+  "agentResult": {
+    "title": "Agent result",
+    "description": "Latest analysis output from the runner.",
+    "agent": "Agent",
+    "noAgentYet": "No agent yet",
+    "attempt": "Attempt",
+    "status": "Status",
+    "pending": "Pending",
+    "rawAgentMarkdown": "Raw agent markdown"
+  },
+  "sourceWrites": {
+    "title": "{{source}} writes",
+    "description": "Auditable writes created for source feedback and review outcomes.",
+    "writeAudit": "Write audit",
+    "attempt": "attempt {{count}}",
+    "openSourceArtifact": "Open source artifact",
+    "retryDelivery": "Retry delivery",
+    "retry": "Retry"
+  },
+  "reviewDrafts": {
+    "title": "Review drafts",
+    "description": "Structured {{target}} review drafts awaiting operator action or audit.",
+    "draftDetails": "Draft details",
+    "publish": "Publish",
+    "headlineFindings": "{{major}} major · {{minor}} minor · {{suggestions}} · {{commentOnly}}",
+    "codeSuggestion_one": "{{count}} code suggestion",
+    "codeSuggestion_other": "{{count}} code suggestions",
+    "commentOnlyFinding_one": "{{count}} comment-only finding",
+    "commentOnlyFinding_other": "{{count}} comment-only findings",
+    "stats": "{{accepted}} accepted · {{warning}} warning",
+    "statsResolved": "{{accepted}} accepted · {{warning}} warning · {{resolved}} resolved",
+    "resolved": "Resolved · {{kind}}",
+    "resolvedWithBy": "Resolved · {{kind}} · {{by}}",
+    "resolvedFixed": "Fixed",
+    "resolvedDismissed": "Dismissed",
+    "reopen": "Reopen",
+    "markFixed": "Mark fixed",
+    "markDismissed": "Mark dismissed",
+    "edit": "Edit",
+    "discard": "Discard"
+  },
+  "implementationDrafts": {
+    "title": "Implementation drafts",
+    "description": "Proposed implementation delivery payloads from agent runs.",
+    "deliveryDetails": "Delivery details",
+    "autoTarget": "Auto {{target}}",
+    "changedFiles_one": "{{count}} changed file",
+    "changedFiles_other": "{{count}} changed files",
+    "commit": "Commit",
+    "notDelivered": "Not delivered",
+    "branch": "Branch",
+    "pending": "Pending",
+    "generatedTarget": "Generated {{target}}",
+    "openTarget": "Open {{target}}",
+    "deliverTarget": "Deliver {{target}}"
+  },
+  "followUpDrafts": {
+    "title": "Follow-up drafts",
+    "description": "Proposed follow-up work that can become local tasks.",
+    "followUpDetails": "Follow-up details",
+    "assignee": "Assignee",
+    "unassigned": "Unassigned",
+    "branch": "Branch",
+    "noBranch": "No branch",
+    "createdTask": "Created task",
+    "notCreated": "Not created",
+    "edit": "Edit",
+    "discard": "Discard",
+    "createTask": "Create task"
+  },
+  "discussion": {
+    "title": "Discussion",
+    "description": "Comments and next-round feedback for this review.",
+    "empty": "No comments have been added for this Task yet.",
+    "placeholder": "Add an internal note, next-round feedback, or an agent question",
+    "addComment": "Add comment",
+    "askAgent": "Ask agent"
+  },
+  "decision": {
+    "title": "Close this review",
+    "description": "Record the operator outcome for this item.",
+    "placeholder": "Optional note; required when requesting changes",
+    "requestChanges": "Request changes",
+    "approve": "Approve",
+    "reject": "Reject"
+  },
+  "decisionHistory": {
+    "title": "Decision history",
+    "description": "Operator decisions recorded for this Task.",
+    "empty": "No operator decision has been recorded yet."
+  },
+  "closed": {
+    "currentState": "Current state",
+    "round": "Round",
+    "roundValue": "Round {{round}}",
+    "latestRun": "Latest run",
+    "noRunRecorded": "No run recorded",
+    "check": "Check"
+  },
+  "latestActivity": {
+    "title": "Latest activity",
+    "description": "Round history with source and operator events.",
+    "technical": "Technical",
+    "round": "Round {{round}}",
+    "run": "{{status}} run",
+    "feedback": "{{count}} feedback",
+    "technicalCount": "{{count}} technical",
+    "rawRoundSummary": "Raw round summary",
+    "attempt": "Attempt {{attempt}} · {{kind}}",
+    "operatorFeedback": "Operator feedback",
+    "technicalEvents": "{{count}} technical events",
+    "hide": "Hide",
+    "show": "Show",
+    "fullDetail": "Full detail"
+  },
+  "loading": {
+    "title": "Loading item details",
+    "description": "Fetching the complete Task record.",
+    "task": "Task",
+    "status": "Status",
+    "statusValue": "Loading full brief and source metadata"
+  },
+  "inspector": {
+    "title": "Review",
+    "close": "Close inspector",
+    "attempt": "Attempt {{attempt}} · {{kind}}",
+    "waiting": "Waiting for runner update.",
+    "technicalRunDetails": "Technical run details",
+    "thread": "thread {{id}}",
+    "turn": "turn {{id}}",
+    "workspace": "Workspace",
+    "appServer": "AppServer",
+    "worktree": "Worktree",
+    "path": "Path",
+    "branch": "Branch",
+    "base": "Base",
+    "retry": "Retry",
+    "cleanup": "Cleanup"
+  }
+}
