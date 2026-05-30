@@ -37,7 +37,7 @@ public static class AppServerDynamicToolCatalog
         new(
             Namespace: Namespace,
             Name: ResolveReviewFindingName,
-            Description: "Resolve a published Oratorio review finding once it is fixed or agreed to be a non-issue. Use resolutionKind 'fixed' when the current code addresses it, or 'dismissed' when it was agreed not to action. Only resolve findings you are confident about; otherwise leave them open. Oratorio records the resolution and, when enabled, resolves the matching GitHub/GitLab review thread.",
+            Description: "Resolve a published Oratorio review finding once it is fixed or agreed to be a non-issue. Use resolutionKind 'fixed' when the current code addresses it, or 'dismissed' when it was agreed not to action. Only resolve findings you are confident about; otherwise leave them open. Oratorio records the resolution and resolves the matching GitHub/GitLab review thread when source writes are configured.",
             InputSchema: JsonSerializer.SerializeToElement(new
             {
                 type = "object",

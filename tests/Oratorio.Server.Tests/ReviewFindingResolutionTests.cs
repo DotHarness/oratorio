@@ -4,9 +4,11 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Oratorio.Server.Api;
 using Oratorio.Server.Data;
 using Oratorio.Server.Domain;
+using Oratorio.Server.GitHub;
 using Oratorio.Server.Services;
 
 namespace Oratorio.Server.Tests;
@@ -107,6 +109,68 @@ public sealed class ReviewFindingResolutionTests
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Equal("reviewFindingNotResolvable", await ReadErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task Resolve_AlreadyResolvedFindingWithMissingRemoteWrite_QueuesRemoteResolve()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        await using var app = new TestOratorioApp(services =>
+        {
+            services.RemoveAll<IGitHubApiClient>();
+            services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+        });
+        var client = app.CreateClient();
+        var (draftId, commentId, _, _) = await SeedPublishedFindingAsync(app, client, "task:resolve-remote-backfill");
+        const string threadId = "thread-remote-backfill";
+
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
+            var draft = await db.ReviewDrafts.FirstAsync(x => x.DraftId == draftId);
+            var comment = await db.ReviewDraftComments.FirstAsync(x => x.DraftCommentId == commentId);
+            var now = DateTimeOffset.UtcNow;
+            var publishWrite = new OratorioSourceWriteLog
+            {
+                ItemId = draft.ItemId,
+                RoundId = draft.RoundId,
+                Source = "github",
+                Kind = SourceWriteKind.PullRequestReview,
+                Intent = "reviewDraftPublish",
+                Status = SourceWriteStatus.Succeeded,
+                Repository = "example-owner/oratorio",
+                Number = 42,
+                HeadSha = "head-sha",
+                RequestJson = "{}",
+                CreatedAt = now,
+                UpdatedAt = now,
+                CompletedAt = now
+            };
+
+            db.SourceWriteLogs.Add(publishWrite);
+            draft.SourceWriteId = publishWrite.WriteId;
+            comment.ResolutionState = ReviewFindingResolutionState.Resolved;
+            comment.ResolutionKind = ReviewFindingResolutionKind.Fixed;
+            comment.ResolvedByKind = AuthorKind.Agent;
+            comment.ResolutionNote = "Already fixed.";
+            comment.ResolvedAt = now;
+            comment.RemoteThreadId = threadId;
+            comment.RemoteResolveWriteId = null;
+            await db.SaveChangesAsync();
+        }
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/review-drafts/{draftId}/comments/{commentId}/resolve",
+            new ResolveReviewFindingOperatorRequest("fixed", "Already fixed."));
+
+        Assert.Contains(fakeGitHub.ReviewThreadResolutions, x => x.ThreadId == threadId && x.Resolved);
+
+        using var verifyScope = app.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<OratorioDbContext>();
+        var stored = await verifyDb.ReviewDraftComments.AsNoTracking().FirstAsync(x => x.DraftCommentId == commentId);
+        Assert.False(string.IsNullOrWhiteSpace(stored.RemoteResolveWriteId));
+        Assert.Equal(1, await verifyDb.SourceWriteLogs.CountAsync(x => x.Kind == SourceWriteKind.ResolveReviewThread && x.Intent == "reviewFindingResolve"));
     }
 
     private static async Task<(string DraftId, string CommentId, string ItemId, string RunId)> SeedPublishedFindingAsync(

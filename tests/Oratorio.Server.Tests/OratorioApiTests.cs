@@ -3757,8 +3757,7 @@ public sealed class OratorioApiTests
                 services.RemoveAll<IDotCraftAppServerClientFactory>();
                 services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
                 services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
-            },
-            new Dictionary<string, string?> { ["Oratorio:Automation:ResolveReviewThreadsEnabled"] = "true" });
+            });
         var client = app.CreateClient();
 
         await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });

@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Oratorio.Server.Api;
 using Oratorio.Server.Data;
 using Oratorio.Server.Domain;
@@ -13,14 +12,13 @@ namespace Oratorio.Server.Services;
 /// <summary>
 /// Resolves and reopens published review findings (design spec §5.7). Shared by the
 /// <c>ResolveReviewFinding</c> dynamic tool (review runs and discussion turns) and the
-/// operator resolve/reopen API. When source propagation is enabled and the finding maps to a
-/// known source review thread, it also enqueues and executes a <c>ResolveReviewThread</c> write.
+/// operator resolve/reopen API. When the finding maps to a known source review thread, it also
+/// enqueues and executes a <c>ResolveReviewThread</c> write through provider write controls.
 /// </summary>
 public sealed class ReviewFindingResolutionService(
     OratorioDbContext db,
     IClock clock,
     BoardEventHub boardEvents,
-    IOptionsMonitor<OratorioAutomationOptions> automationOptions,
     GitHubWriteService gitHubWrites,
     GitLabWriteService gitLabWrites)
 {
@@ -102,6 +100,16 @@ public sealed class ReviewFindingResolutionService(
             comment.ResolutionKind == kind &&
             string.Equals(comment.ResolutionNote, note, StringComparison.Ordinal))
         {
+            if (string.IsNullOrWhiteSpace(comment.RemoteResolveWriteId))
+            {
+                var remoteNow = clock.UtcNow;
+                if (await EnqueueRemoteResolveAsync(comment, resolved: true, remoteNow, ct))
+                {
+                    await db.SaveChangesAsync(ct);
+                    boardEvents.PublishTaskUpdated(comment.Draft!.Item!, remoteNow);
+                }
+            }
+
             return;
         }
 
@@ -127,27 +135,26 @@ public sealed class ReviewFindingResolutionService(
 
     /// <summary>
     /// Propagates resolution to the source review thread (design spec §5.7, Step C). No-op unless
-    /// source propagation is enabled and the finding has a captured remote thread id. Failures are
-    /// recorded as a failed source write and never alter the stored resolution state.
+    /// the finding has a captured remote thread id. Provider write settings decide whether the
+    /// queued source write succeeds or records a retryable failure.
     /// </summary>
-    private async Task EnqueueRemoteResolveAsync(OratorioReviewDraftComment comment, bool resolved, DateTimeOffset now, CancellationToken ct)
+    private async Task<bool> EnqueueRemoteResolveAsync(OratorioReviewDraftComment comment, bool resolved, DateTimeOffset now, CancellationToken ct)
     {
-        if (!automationOptions.CurrentValue.ResolveReviewThreadsEnabled ||
-            string.IsNullOrWhiteSpace(comment.RemoteThreadId))
+        if (string.IsNullOrWhiteSpace(comment.RemoteThreadId))
         {
-            return;
+            return false;
         }
 
         var draft = comment.Draft!;
         if (string.IsNullOrWhiteSpace(draft.SourceWriteId))
         {
-            return;
+            return false;
         }
 
         var publishWrite = await db.SourceWriteLogs.AsNoTracking().FirstOrDefaultAsync(x => x.WriteId == draft.SourceWriteId, ct);
         if (publishWrite is null || string.IsNullOrWhiteSpace(publishWrite.Repository) || publishWrite.Number is null)
         {
-            return;
+            return false;
         }
 
         var write = new OratorioSourceWriteLog
@@ -176,6 +183,8 @@ public sealed class ReviewFindingResolutionService(
         {
             await gitHubWrites.ExecuteAsync(write, ct);
         }
+
+        return true;
     }
 
     private async Task<OratorioReviewDraftComment> LoadResolvableByItemAsync(string itemId, string findingId, CancellationToken ct)

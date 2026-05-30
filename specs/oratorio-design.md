@@ -788,10 +788,10 @@ Prompt requirements:
   to avoid answering the question.
 
 Source propagation. Resolution propagates to the source review thread only when
-source propagation is enabled and Oratorio knows the finding's source thread
-identity. To map findings to threads, each accepted inline comment published
-under §5.3 carries a stable hidden marker referencing its `findingId`. During
-publish reconciliation Oratorio records `remoteThreadId` per finding:
+Oratorio knows the finding's source thread identity. To map findings to threads,
+each accepted inline comment published under §5.3 carries a stable hidden marker
+referencing its `findingId`. During publish reconciliation Oratorio records
+`remoteThreadId` per finding:
 
 - GitHub: each published `COMMENT` review inline comment maps to a pull request
   review thread; Oratorio records the GraphQL review-thread node id per finding;
@@ -817,8 +817,9 @@ Source resolution requirements:
   note that the source thread was not resolved;
 - a failed `resolveReviewThread` write retries only that write record per §4 and
   never alters the stored resolution state;
-- source propagation is globally gated by a setting; with it disabled, resolution
-  is internal-only.
+- propagation follows the same provider write controls as other source writes;
+  disabled writes or invalid credentials record a failed source write rather than
+  silently keeping the resolution internal-only.
 
 ---
 

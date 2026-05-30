@@ -611,7 +611,6 @@ public sealed class GitLabReadSyncTests
         var fakeGitLab = new FakeGitLabApiClient();
         var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitCleanReviewDraft);
         var settings = GitLabSettings(writesEnabled: true);
-        settings["Oratorio:Automation:ResolveReviewThreadsEnabled"] = "true";
         await using var app = GitLabApp(
             fakeGitLab,
             settings,

@@ -14,12 +14,6 @@ public sealed class OratorioAutomationOptions
     public bool AutoReviewPublishEnabled { get; set; }
     public string[] AutoReviewPublishRepositories { get; set; } = [];
 
-    /// <summary>
-    /// When enabled, resolving or reopening a published review finding propagates to the matching
-    /// GitHub/GitLab review thread (design spec §5.7, Step C). Disabled keeps resolution internal-only.
-    /// </summary>
-    public bool ResolveReviewThreadsEnabled { get; set; }
-
     public int EffectiveMaxImplementationTurns => Math.Clamp(MaxImplementationTurns, 1, 10);
 
     public bool CanAutoReviewRepository(string? repository) =>
