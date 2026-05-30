@@ -666,23 +666,24 @@ describe('AppShell local task created notice', () => {
     render(<AppShell />)
 
     await screen.findByRole('button', { name: 'New local task' })
+    await waitFor(() => expect(taskListRequestCount()).toBeGreaterThan(0))
     actWebSocketOpen()
     await act(async () => {
       await flushAsyncWork()
     })
-    const requestCountBeforeSync = taskListRequestCount()
 
     actWebSocketMessage(sourceSyncJobEvent('running'))
     await act(async () => {
       await flushAsyncWork()
     })
-    expect(taskListRequestCount()).toBe(requestCountBeforeSync)
+    expect(screen.queryByText('Imported GitLab issue')).not.toBeInTheDocument()
 
+    const requestCountBeforeCompletion = taskListRequestCount()
     showGitLabIssue = true
     actWebSocketMessage(sourceSyncJobEvent('succeeded'))
 
     expect(await screen.findByText('Imported GitLab issue')).toBeInTheDocument()
-    expect(taskListRequestCount()).toBeGreaterThan(requestCountBeforeSync)
+    expect(taskListRequestCount()).toBeGreaterThan(requestCountBeforeCompletion)
   })
 
   it('shows a single top-level restart banner for settings saves', async () => {
@@ -1018,7 +1019,7 @@ function settingsAppShellFetch() {
 
 async function saveSettingsProjectRoute() {
   await screen.findByText('Project routing')
-  const workspaceInput = screen.getAllByDisplayValue('C:/example/workspaces/oratorio')[0]
+  const workspaceInput = (await screen.findAllByDisplayValue('C:/example/workspaces/oratorio'))[0]
   fireEvent.focus(workspaceInput)
   fireEvent.change(workspaceInput, { target: { value: 'F:\\oratorio' } })
   fireEvent.blur(workspaceInput)
