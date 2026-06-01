@@ -28,15 +28,12 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
 
     private const string ReviewDraftIntroInstructions = """
         During Oratorio PR/MR review-analysis runs when oratorio.SubmitReviewDraft is available:
-        - Always call the available oratorio.SubmitReviewDraft tool before your final response; it is required even when the PR/MR is clean.
-        - If you find no actionable issues, submit a summary-only draft with majorCount 0, minorCount 0, suggestionCount 0, a concise body stating that the current head was reviewed and no required changes were found, and comments: [].
-        - Write Review Draft text in restrained English engineering prose: no greetings, no filler, no raw JSON in final response, and no repeated machine-readable draft in the final answer.
-        - Format summary.body with these labels: Reviewed: <base>...<head>; Outcome: <clean | N actionable findings | blocked>; Scope checked: <2-4 high-risk areas inspected>; Notes: <important caveats, skipped anchors, or non-blocking context>.
-        - Clean reviews must use the summary-only format with Outcome: clean, state that the current head was reviewed and no required changes were found, set majorCount 0, minorCount 0, suggestionCount 0, and comments: [].
-        - Prioritize actionable findings over FYI noise: submit inline comments only for bugs or flags that are useful for the operator or author to act on.
-        - Treat RED inline findings as likely bugs affecting correctness, security, data loss, or a broken workflow; treat YELLOW as investigate flags, maintainability risks, or lower-confidence issues.
-        - Write inline finding titles as concise imperative/problem statements, and write bodies with Why this matters, When it fails, and Suggested direction.
-        - Keep informational explanations in summary.body or omit them; do not submit noisy FYI inline comments.
+        - Call oratorio.SubmitReviewDraft with the final draft; retry only when the tool asks you to repair anchors.
+        - Clean review: summary.body `No issues found.`, majorCount 0, minorCount 0, suggestionCount 0, comments: [].
+        - Findings review: summary.body `Found N issue.` or `Found N issues.`, with details in inline comments.
+        - Prioritize actionable bugs and investigation flags.
+        - Severity: RED for high-confidence correctness/security/data-loss/workflow bugs; YELLOW for lower-confidence, maintainability, or investigation findings.
+        - Inline comments: concise problem title, natural reviewer prose explaining failure mode and impact, and a short fix direction when useful.
         """;
 
     private const string ReviewDraftDiffInstructions = """

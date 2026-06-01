@@ -1881,7 +1881,7 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
-    public async Task AppServerDispatch_CompletesRun_AndCapturesPromptContext()
+    public async Task AppServerDispatch_CompletesRun_AndCreatesThread()
     {
         var fakeGitHub = new FakeGitHubApiClient();
         var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft);
@@ -1932,29 +1932,7 @@ public sealed class OratorioApiTests
         Assert.Contains(reviewed.Timeline, x => x.Title == "Agent summary captured");
 
         Assert.NotNull(fakeAppServer.LastThreadStartRequest?.RuntimeAdditionalContext);
-        Assert.True(fakeAppServer.LastThreadStartRequest.RuntimeAdditionalContext.ContainsKey("oratorio.runContract"));
-        Assert.True(fakeAppServer.LastThreadStartRequest.RuntimeAdditionalContext.ContainsKey("oratorio.reviewDraft"));
-        Assert.True(fakeAppServer.LastThreadStartRequest.RuntimeAdditionalContext.ContainsKey("oratorio.followUpDraft"));
-        Assert.True(fakeAppServer.LastThreadStartRequest.RuntimeAdditionalContext.ContainsKey("oratorio.discussionTurn"));
-        var submitReviewTool = Assert.Single(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitReviewDraft");
-        var submitReviewSchema = submitReviewTool.InputSchema.GetRawText();
-        Assert.Contains("commentOnlyReason", submitReviewSchema);
-        Assert.Contains("suggestionReplacement", submitReviewSchema);
-        Assert.Contains("Commentable changed/context line", submitReviewSchema);
-        Assert.Contains("Accepted concrete code suggestions", submitReviewSchema);
-
-        using var context = await ReadPromptContextAsync(app, run.RunId);
-        var root = context.RootElement;
-        Assert.Equal("compact", root.GetProperty("promptMode").GetString());
-        Assert.Equal("oratorio-runtime-context-v1", root.GetProperty("runtimeContextVersion").GetString());
-        Assert.Equal("full", root.GetProperty("turnPromptMode").GetString());
-        Assert.Equal("example-owner/oratorio", root.GetProperty("workspace").GetProperty("repository").GetString());
-        Assert.Equal(run.WorktreePath, root.GetProperty("workspace").GetProperty("path").GetString());
-        Assert.Equal(run.BaseWorkspacePath, root.GetProperty("workspace").GetProperty("basePath").GetString());
-        Assert.Equal("abc123", root.GetProperty("sourceSnapshot").GetProperty("headSha").GetString());
-        Assert.Contains("oratorio.SubmitReviewDraft", root.GetProperty("requiredDynamicTools").GetRawText());
-        Assert.Contains("oratorio.SubmitDiscussionReply", root.GetProperty("requiredDynamicTools").GetRawText());
-        Assert.Contains("Please use a constant-time comparison helper.", root.GetProperty("importedComments").GetRawText());
+        Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitReviewDraft");
     }
 
     [Fact]
@@ -2061,7 +2039,7 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
-    public async Task AppServerRedispatchPrompt_IncludesPriorRequestChangesFeedback()
+    public async Task AppServerRedispatch_ReusesThreadAndRebindsTools()
     {
         var fakeGitHub = new FakeGitHubApiClient();
         var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft);
@@ -2105,41 +2083,17 @@ public sealed class OratorioApiTests
         Assert.Contains(resume.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitReviewDraft");
         Assert.Contains(resume.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitFollowUpDraft");
         Assert.NotNull(resume.RuntimeAdditionalContext);
-        Assert.True(resume.RuntimeAdditionalContext.ContainsKey("oratorio.reviewDraft"));
-        Assert.True(resume.RuntimeAdditionalContext.ContainsKey("oratorio.followUpDraft"));
 
         var secondRun = Assert.Single(
             (await client.GetFromJsonAsync<ItemDetailResponse>($"/api/v1/items/id/{pr.ItemId}", JsonOptions))!.Runs,
             x => x.RunnerKind == "appServer" && x.Attempt == 1 && x.RoundId != null && x.ThreadId == "thread-test-1" && x.Status == RunStatus.Succeeded && x.Summary?.Contains("DotCraft analysis complete") == true && x.TurnId == "turn-test-2");
-        using var context = await ReadPromptContextAsync(app, secondRun.RunId);
-
-        var root = context.RootElement;
-        Assert.Equal("compact", root.GetProperty("promptMode").GetString());
-        Assert.Equal("oratorio-runtime-context-v1", root.GetProperty("runtimeContextVersion").GetString());
-        Assert.Equal("incremental", root.GetProperty("turnPromptMode").GetString());
-        Assert.Equal(2, root.GetProperty("currentRound").GetProperty("roundNumber").GetInt32());
-        Assert.Equal("Follow up on requested changes.", root.GetProperty("currentRound").GetProperty("operatorNote").GetString());
-        Assert.Equal("example-owner/oratorio", root.GetProperty("workspace").GetProperty("repository").GetString());
-        Assert.Equal("feature/auth-refresh", root.GetProperty("workspace").GetProperty("branch").GetString());
-        Assert.Equal("abc123", root.GetProperty("workspace").GetProperty("headSha").GetString());
-        Assert.Equal("abc123", root.GetProperty("sourceSnapshot").GetProperty("headSha").GetString());
-        Assert.Contains("DotCraft analysis complete", root.GetProperty("priorSummaries").GetRawText());
-
-        var feedbackJson = root.GetProperty("feedbackForThisRound").GetRawText();
-        Assert.Contains("Please address the refresh-token race before another review.", feedbackJson);
-        Assert.DoesNotContain("Please use a constant-time comparison helper.", feedbackJson);
-        Assert.DoesNotContain("Consider extracting the token validation branch.", feedbackJson);
-
-        var round1 = Assert.Single(
-            root.GetProperty("roundHistory").EnumerateArray(),
-            round => round.GetProperty("roundNumber").GetInt32() == 1);
-        Assert.Equal("changesRequested", round1.GetProperty("status").GetString());
+        Assert.Equal("thread-test-1", secondRun.ThreadId);
         var detail = await client.GetFromJsonAsync<ItemDetailResponse>($"/api/v1/items/id/{pr.ItemId}", JsonOptions);
         Assert.Contains(detail!.Timeline, x => x.Title == "DotCraft thread reused" && x.Body?.Contains("thread-test-1", StringComparison.Ordinal) == true);
     }
 
     [Fact]
-    public async Task PullRequestReReview_QueuesNewRoundWithoutGitHubWrite_AndPromptsLatestHead()
+    public async Task PullRequestReReview_QueuesNewRoundWithoutGitHubWrite_AndUsesLatestHead()
     {
         var fakeGitHub = new FakeGitHubApiClient();
         var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft);
@@ -2166,7 +2120,6 @@ public sealed class OratorioApiTests
             $"/api/v1/items/id/{pr.ItemId}/dispatch",
             new DispatchRequest("appServer", "Initial read-only DotCraft pass.", null, null));
         await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.AwaitingReview);
-        _ = await fakeAppServer.ReadPromptAsync();
 
         clock.Advance(TimeSpan.FromMinutes(5));
         MoveDefaultPullRequestHead(fakeGitHub, "def456", clock.UtcNow);
@@ -2216,7 +2169,6 @@ public sealed class OratorioApiTests
             $"/api/v1/items/id/{pr.ItemId}/dispatch",
             new DispatchRequest("appServer", "Initial read-only DotCraft pass.", null, null));
         await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.AwaitingReview);
-        _ = await fakeAppServer.ReadPromptAsync();
 
         var approved = await PostAsync<ItemDetailResponse>(
             client,
@@ -2343,7 +2295,6 @@ public sealed class OratorioApiTests
             new DispatchRequest("appServer", "Initial read-only DotCraft pass.", null, null));
 
         await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.AwaitingReview);
-        _ = await fakeAppServer.ReadPromptAsync();
 
         await PostAsync<ItemDetailResponse>(
             client,
@@ -2403,7 +2354,7 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
-    public async Task AppServerDispatch_DoesNotReuseLegacyPromptContextThread()
+    public async Task AppServerDispatch_DoesNotReuseLegacyThreadContext()
     {
         var fakeGitHub = new FakeGitHubApiClient();
         var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft);
@@ -2428,8 +2379,7 @@ public sealed class OratorioApiTests
             new DispatchRequest("appServer", "Initial read-only DotCraft pass.", null, null));
         var first = await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.AwaitingReview);
         var firstRun = Assert.Single(first.Runs, x => x.RunnerKind == "appServer");
-        await MarkRunAsLegacyPromptContextAsync(app, firstRun.RunId);
-        _ = await fakeAppServer.ReadPromptAsync();
+        await MarkRunAsLegacyThreadContextAsync(app, firstRun.RunId);
 
         await PostAsync<ItemDetailResponse>(
             client,
@@ -2467,7 +2417,6 @@ public sealed class OratorioApiTests
             new DispatchRequest("appServer", "Initial DotCraft analysis.", null, null));
 
         var reviewed = await WaitForItemByIdAsync(client, task.Item.ItemId, x => x.Item.State == ItemState.AwaitingReview);
-        _ = await fakeAppServer.ReadPromptAsync();
         var baseRun = Assert.Single(reviewed.Runs, x => x.RunnerKind == "appServer");
         var originalState = reviewed.Item.State;
         var originalCurrentRunId = reviewed.Item.CurrentRunId;
@@ -2504,7 +2453,6 @@ public sealed class OratorioApiTests
         Assert.Equal("thread-test-1", resume.ThreadId);
         Assert.Contains(resume.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitDiscussionReply");
         Assert.NotNull(resume.RuntimeAdditionalContext);
-        Assert.True(resume.RuntimeAdditionalContext.ContainsKey("oratorio.discussionTurn"));
         Assert.NotNull(fakeAppServer.LastToolResult);
         Assert.True(fakeAppServer.LastToolResult!.Success);
     }
@@ -2545,7 +2493,6 @@ public sealed class OratorioApiTests
             $"/api/v1/items/id/{task.Item.ItemId}/dispatch",
             new DispatchRequest("appServer", "Initial DotCraft analysis.", null, null));
         var reviewed = await WaitForItemByIdAsync(client, task.Item.ItemId, x => x.Item.State == ItemState.AwaitingReview);
-        _ = await fakeAppServer.ReadPromptAsync();
 
         fakeAppServer.SupportsRuntimeAdditionalContext = false;
         await PostAsync<ItemDetailResponse>(
@@ -2582,7 +2529,6 @@ public sealed class OratorioApiTests
             $"/api/v1/items/id/{task.Item.ItemId}/dispatch",
             new DispatchRequest("appServer", "Initial DotCraft analysis.", null, null));
         var reviewed = await WaitForItemByIdAsync(client, task.Item.ItemId, x => x.Item.State == ItemState.AwaitingReview);
-        _ = await fakeAppServer.ReadPromptAsync();
 
         fakeAppServer.Outcome = FakeAppServerOutcome.Hold;
         await PostAsync<ItemDetailResponse>(
@@ -2622,7 +2568,6 @@ public sealed class OratorioApiTests
             $"/api/v1/items/id/{task.Item.ItemId}/dispatch",
             new DispatchRequest("appServer", "Initial DotCraft analysis.", null, null));
         var reviewed = await WaitForItemByIdAsync(client, task.Item.ItemId, x => x.Item.State == ItemState.AwaitingReview);
-        _ = await fakeAppServer.ReadPromptAsync();
 
         fakeAppServer.Outcome = FakeAppServerOutcome.SubmitDiscussionReply;
         await PostAsync<ItemDetailResponse>(
@@ -2642,55 +2587,6 @@ public sealed class OratorioApiTests
         Assert.NotNull(fakeAppServer.LastToolResult);
         Assert.False(fakeAppServer.LastToolResult!.Success);
         Assert.Equal("InvalidDiscussionTurnBinding", fakeAppServer.LastToolResult.ErrorCode);
-    }
-
-    [Fact]
-    public async Task AppServerRedispatchPrompt_ExcludesAgentDiscussionComments()
-    {
-        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.Success);
-        await using var app = new TestOratorioApp(services =>
-        {
-            services.RemoveAll<IDotCraftAppServerProcessManager>();
-            services.RemoveAll<IDotCraftAppServerClientFactory>();
-            services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
-            services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
-        });
-        var client = app.CreateClient();
-
-        var task = await CreateLocalTaskAsync(client, "Discussion should not become feedback", repository: "example-owner/oratorio");
-        await PostAsync<ItemDetailResponse>(
-            client,
-            $"/api/v1/items/id/{task.Item.ItemId}/dispatch",
-            new DispatchRequest("appServer", "Initial DotCraft analysis.", null, null));
-        var reviewed = await WaitForItemByIdAsync(client, task.Item.ItemId, x => x.Item.State == ItemState.AwaitingReview);
-        _ = await fakeAppServer.ReadPromptAsync();
-
-        fakeAppServer.Outcome = FakeAppServerOutcome.SubmitDiscussionReply;
-        await PostAsync<ItemDetailResponse>(
-            client,
-            $"/api/v1/items/id/{task.Item.ItemId}/discussion-turns",
-            new DiscussionTurnRequest("Do not treat this question as feedback.", reviewed.Item.CurrentRound, null));
-        await WaitForItemByIdAsync(client, task.Item.ItemId, x => x.DiscussionTurns.Any(turn => turn.Status == DiscussionTurnStatus.Succeeded));
-        _ = await fakeAppServer.ReadPromptAsync();
-
-        await PostAsync<ItemDetailResponse>(
-            client,
-            $"/api/v1/items/id/{task.Item.ItemId}/request-changes",
-            new DecisionRequest("Actual next-round feedback."));
-
-        fakeAppServer.Outcome = FakeAppServerOutcome.Success;
-        await PostAsync<ItemDetailResponse>(
-            client,
-            $"/api/v1/items/id/{task.Item.ItemId}/dispatch",
-            new DispatchRequest("appServer", "Follow up without discussion comments.", null, null));
-
-        var redispatched = await WaitForItemByIdAsync(client, task.Item.ItemId, x => x.Item.State == ItemState.AwaitingReview && x.Item.CurrentRound == 2);
-        var currentRound = Assert.Single(redispatched.Rounds, x => x.RoundNumber == 2);
-        var run = Assert.Single(
-            redispatched.Runs,
-            x => x.RunnerKind == "appServer" && x.Status == RunStatus.Succeeded && x.RoundId == currentRound.RoundId);
-        using var context = await ReadPromptContextAsync(app, run.RunId);
-        Assert.Equal("Actual next-round feedback.", context.RootElement.GetProperty("feedbackForThisRound")[0].GetProperty("body").GetString());
     }
 
     [Fact]
@@ -2771,11 +2667,7 @@ public sealed class OratorioApiTests
         Assert.Equal(0, draft.SuggestionCount);
         Assert.Equal(0, draft.AcceptedCount);
         Assert.Empty(draft.Comments);
-        Assert.Contains("Reviewed: base123...abc123", draft.SummaryBody);
-        Assert.Contains("Outcome: clean", draft.SummaryBody);
-        Assert.Contains("Scope checked:", draft.SummaryBody);
-        Assert.Contains("Notes:", draft.SummaryBody);
-        Assert.Contains("current head was reviewed and no required changes were found", draft.SummaryBody);
+        Assert.Equal("No issues found.", draft.SummaryBody);
         var check = Assert.Single(fakeGitHub.CheckRuns);
         Assert.Equal("completed", check.Status);
         Assert.Equal("neutral", check.Conclusion);
@@ -2784,6 +2676,13 @@ public sealed class OratorioApiTests
             write.Kind == SourceWriteKind.CheckRun &&
             write.Intent == "reviewGateComplete" &&
             write.Status == SourceWriteStatus.Succeeded);
+
+        var published = await PostAsync<ItemDetailResponse>(client, $"/api/v1/review-drafts/{draft.DraftId}/publish", new { });
+        Assert.Equal(ReviewDraftStatus.Published, Assert.Single(published.ReviewDrafts).Status);
+        var review = Assert.Single(fakeGitHub.PullRequestReviews);
+        Assert.Equal("COMMENT", review.Event);
+        Assert.Equal("No issues found.", review.Body);
+        Assert.Empty(review.Comments);
     }
 
     [Theory]
@@ -2893,7 +2792,6 @@ public sealed class OratorioApiTests
         var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
         await DispatchAutoReviewAsync(app);
         await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.AwaitingReview);
-        _ = await fakeAppServer.ReadPromptAsync();
 
         clock.Advance(TimeSpan.FromMinutes(5));
         MoveDefaultPullRequestHead(fakeGitHub, "def456", clock.UtcNow);
@@ -3277,6 +3175,9 @@ public sealed class OratorioApiTests
         Assert.Equal(0, fakeGitHub.FullDiffCallCount);
         Assert.Equal(2, draft.AcceptedCount);
         Assert.Equal(0, draft.WarningCount);
+        Assert.Equal(1, draft.MajorCount);
+        Assert.Equal(1, draft.MinorCount);
+        Assert.Equal("Found 2 issues.", draft.SummaryBody);
     }
 
     [Fact]
@@ -3360,6 +3261,9 @@ public sealed class OratorioApiTests
         Assert.Contains("src/Auth/RefreshTokenStore.cs", fakeLocalDiff.RequestedPaths);
         Assert.Equal(1, draft.AcceptedCount);
         Assert.Equal(2, draft.WarningCount);
+        Assert.Equal(0, draft.MajorCount);
+        Assert.Equal(1, draft.MinorCount);
+        Assert.Equal("Found 1 issue.", draft.SummaryBody);
         Assert.Contains(draft.Warnings, warning => warning.Contains("src/Auth/RefreshTokenStore.cs:88", StringComparison.Ordinal));
         Assert.Contains(draft.Warnings, warning => warning.Contains("reviewDraftSuggestionCountMismatch", StringComparison.Ordinal));
         Assert.Contains(draft.Comments, comment => comment.Status == ReviewDraftCommentStatus.Accepted && comment.Path == "src/Auth/JwtMiddleware.cs");
@@ -3399,7 +3303,6 @@ public sealed class OratorioApiTests
 
         Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitImplementationDraft");
         Assert.NotNull(fakeAppServer.LastThreadStartRequest?.RuntimeAdditionalContext);
-        Assert.True(fakeAppServer.LastThreadStartRequest.RuntimeAdditionalContext.ContainsKey("oratorio.implementationDraft"));
         Assert.Equal(RunPurpose.Implementation, Assert.Single(reviewed.Runs, x => x.RunnerKind == "appServer").Purpose);
         Assert.Equal(ImplementationDraftStatus.Delivered, draft.Status);
         Assert.Equal(DeliveryPolicy.AutoPr, draft.DeliveryPolicy);
@@ -3687,7 +3590,6 @@ public sealed class OratorioApiTests
         Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitReviewDraft");
         Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitFollowUpDraft");
         Assert.NotNull(fakeAppServer.LastThreadStartRequest?.RuntimeAdditionalContext);
-        Assert.True(fakeAppServer.LastThreadStartRequest.RuntimeAdditionalContext.ContainsKey("oratorio.followUpDraft"));
         Assert.Equal(FollowUpDraftStatus.Draft, draft.Status);
         Assert.Equal("Split out migration cleanup", draft.Title);
         Assert.Equal("example-owner/oratorio", draft.Repository);
@@ -3774,8 +3676,8 @@ public sealed class OratorioApiTests
         Assert.Contains(review.Comments, comment => comment.Path == "src/Auth/RefreshTokenStore.cs" && comment.Line == 88 && comment.Side == "RIGHT");
         Assert.DoesNotContain(review.Comments, comment => comment.Path == "missing/File.cs");
         Assert.DoesNotContain(review.Comments, comment => comment.Side == "LEFT");
-        Assert.Contains(review.Comments, comment => comment.Body.Contains("```suggestion", StringComparison.Ordinal) && comment.Body.Contains("return editedToken;", StringComparison.Ordinal));
-        Assert.Contains(review.Comments, comment => comment.Path == "src/Auth/JwtMiddleware.cs" && !comment.Body.Contains("```suggestion", StringComparison.Ordinal));
+        Assert.Contains(review.Comments, comment => comment.Body.StartsWith("**🔴 Missing refresh guard**", StringComparison.Ordinal) && comment.Body.Contains("```suggestion", StringComparison.Ordinal) && comment.Body.Contains("return editedToken;", StringComparison.Ordinal));
+        Assert.Contains(review.Comments, comment => comment.Body.StartsWith("**🟡 Validate middleware setup**", StringComparison.Ordinal) && comment.Path == "src/Auth/JwtMiddleware.cs" && !comment.Body.Contains("```suggestion", StringComparison.Ordinal));
         Assert.Contains(published.SourceWrites, write => write.Kind == SourceWriteKind.PullRequestReview && write.Intent == "reviewDraftPublish" && write.Status == SourceWriteStatus.Succeeded);
 
         var publishAgain = await client.PostAsJsonAsync($"/api/v1/review-drafts/{draft.DraftId}/publish", new { }, JsonOptions);
@@ -3876,6 +3778,7 @@ public sealed class OratorioApiTests
         Assert.Equal(ItemState.AwaitingReview, reviewed.Item.State);
         var review = Assert.Single(fakeGitHub.PullRequestReviews);
         Assert.Equal("COMMENT", review.Event);
+        Assert.Equal("Found 2 issues.", review.Body);
         Assert.Equal("abc123", review.CommitId);
         Assert.Equal(2, review.Comments.Count);
         var check = Assert.Single(fakeGitHub.CheckRuns);
@@ -4065,7 +3968,7 @@ public sealed class OratorioApiTests
         var review = Assert.Single(fakeGitHub.PullRequestReviews);
         Assert.Equal("COMMENT", review.Event);
         Assert.Equal(2, review.Comments.Count);
-        Assert.Contains(review.Comments, comment => comment.Body.Contains("```suggestion", StringComparison.Ordinal) && comment.Body.Contains("return retryToken;", StringComparison.Ordinal));
+        Assert.Contains(review.Comments, comment => comment.Body.StartsWith("**🔴 Missing refresh guard**", StringComparison.Ordinal) && comment.Body.Contains("```suggestion", StringComparison.Ordinal) && comment.Body.Contains("return retryToken;", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -4462,29 +4365,6 @@ public sealed class OratorioApiTests
         throw new TimeoutException($"Timed out waiting for {itemId}. Latest state: {latest?.Item.State}");
     }
 
-    private static JsonDocument ExtractPromptContext(string prompt)
-    {
-        const string marker = "```json";
-        var start = prompt.IndexOf(marker, StringComparison.Ordinal);
-        Assert.True(start >= 0, "Prompt should contain a fenced JSON context.");
-        start += marker.Length;
-        var end = prompt.IndexOf("```", start, StringComparison.Ordinal);
-        Assert.True(end > start, "Prompt JSON fence should be closed.");
-        return JsonDocument.Parse(prompt[start..end]);
-    }
-
-    private static async Task<JsonDocument> ReadPromptContextAsync(TestOratorioApp app, string runId)
-    {
-        using var scope = app.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
-        var json = await db.Runs.AsNoTracking()
-            .Where(x => x.RunId == runId)
-            .Select(x => x.PromptContextJson)
-            .FirstAsync();
-        Assert.False(string.IsNullOrWhiteSpace(json));
-        return JsonDocument.Parse(json!);
-    }
-
     private static async Task DispatchAutoReviewAsync(TestOratorioApp app)
     {
         using var scope = app.Services.CreateScope();
@@ -4538,7 +4418,7 @@ public sealed class OratorioApiTests
         };
     }
 
-    private static async Task MarkRunAsLegacyPromptContextAsync(TestOratorioApp app, string runId)
+    private static async Task MarkRunAsLegacyThreadContextAsync(TestOratorioApp app, string runId)
     {
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
@@ -5292,8 +5172,6 @@ internal sealed record GitDeliveryPush(SourceProjectKey Project, string BranchNa
 internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) : IDotCraftAppServerClientFactory
 {
     public FakeAppServerOutcome Outcome { get; set; } = outcome;
-    public TaskCompletionSource<string> PromptCaptured { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-    private readonly Channel<string> _prompts = Channel.CreateUnbounded<string>();
     public AppServerThreadStartRequest? LastThreadStartRequest { get; private set; }
     public List<AppServerThreadStartRequest> ThreadStartRequests { get; } = [];
     public List<AppServerThreadResumeRequest> ThreadResumeRequests { get; } = [];
@@ -5319,8 +5197,6 @@ internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) :
         ConnectCount++;
         return Task.FromResult<IDotCraftAppServerClient>(new FakeAppServerClient(
             Outcome,
-            PromptCaptured,
-            _prompts,
             request =>
             {
                 LastThreadStartRequest = request;
@@ -5351,15 +5227,10 @@ internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) :
                 ToolResults.Add(result);
             }));
     }
-
-    public async Task<string> ReadPromptAsync() =>
-        await _prompts.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(3));
 }
 
 internal sealed class FakeAppServerClient(
     FakeAppServerOutcome outcome,
-    TaskCompletionSource<string> promptCaptured,
-    Channel<string> prompts,
     Func<AppServerThreadStartRequest, string> startThread,
     Action<AppServerThreadResumeRequest> resumeThread,
     Func<string, string> startTurn,
@@ -5406,8 +5277,6 @@ internal sealed class FakeAppServerClient(
     public Task<string?> StartTurnAsync(string threadId, string prompt, CancellationToken ct)
     {
         var turnId = startTurn(threadId);
-        promptCaptured.TrySetResult(prompt);
-        prompts.Writer.TryWrite(prompt);
         _notifications.Writer.TryWrite(Notification("turn/started", new { threadId, turnId }));
         if (outcome == FakeAppServerOutcome.Success)
         {
@@ -5438,7 +5307,7 @@ internal sealed class FakeAppServerClient(
                                 majorCount = 1,
                                 minorCount = 0,
                                 suggestionCount = 0,
-                                body = "Review draft summary from DotCraft."
+                                body = "Verbose review summary from DotCraft."
                             },
                             comments = new object[]
                             {
@@ -5464,7 +5333,7 @@ internal sealed class FakeAppServerClient(
                                 majorCount = 1,
                                 minorCount = 0,
                                 suggestionCount = 0,
-                                body = "Review draft summary from DotCraft."
+                                body = "Verbose retry review summary from DotCraft."
                             },
                             comments = new object[]
                             {
@@ -5620,11 +5489,8 @@ internal sealed class FakeAppServerClient(
                                 _ => 1
                             },
                             body = outcome == FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft
-                                ? "Reviewed: base123...abc123\n"
-                                  + "Outcome: clean\n"
-                                  + "Scope checked: diff range, changed files, review anchors\n"
-                                  + "Notes: The current head was reviewed and no required changes were found."
-                                : "Review draft summary from DotCraft."
+                                ? "Verbose clean review summary from DotCraft."
+                                : "Verbose review summary from DotCraft."
                         },
                         comments
                     }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
@@ -5681,10 +5547,7 @@ internal sealed class FakeAppServerClient(
                             majorCount = 0,
                             minorCount = 0,
                             suggestionCount = 0,
-                            body = "Reviewed: base123...abc123\n"
-                                   + "Outcome: clean\n"
-                                   + "Scope checked: diff range, changed files, review anchors\n"
-                                   + "Notes: The current head was reviewed and no required changes were found."
+                            body = "Verbose clean review summary from DotCraft."
                         },
                         comments = Array.Empty<object>()
                     }, new JsonSerializerOptions(JsonSerializerDefaults.Web));

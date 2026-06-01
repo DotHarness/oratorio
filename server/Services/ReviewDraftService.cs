@@ -64,15 +64,17 @@ public sealed class ReviewDraftService(
             warnings.Add($"reviewDraftSuggestionCountMismatch: submitted suggestionCount {Math.Max(0, request.Summary.SuggestionCount)} was replaced with derived accepted code suggestion count {derivedSuggestionCount}.");
         }
 
+        var acceptedMajorCount = validation.Comments.Count(comment => comment.Status == ReviewDraftCommentStatus.Accepted && string.Equals(comment.Severity, "RED", StringComparison.Ordinal));
+        var acceptedMinorCount = validation.Comments.Count(comment => comment.Status == ReviewDraftCommentStatus.Accepted && !string.Equals(comment.Severity, "RED", StringComparison.Ordinal));
         var draft = new OratorioReviewDraft
         {
             ItemId = run.ItemId,
             RoundId = run.RoundId,
             RunId = run.RunId,
             Status = ReviewDraftStatus.Draft,
-            SummaryBody = request.Summary.Body!.Trim(),
-            MajorCount = Math.Max(0, request.Summary.MajorCount),
-            MinorCount = Math.Max(0, request.Summary.MinorCount),
+            SummaryBody = BuildCanonicalSummaryBody(validation.AcceptedCount),
+            MajorCount = acceptedMajorCount,
+            MinorCount = acceptedMinorCount,
             SuggestionCount = derivedSuggestionCount,
             WarningsJson = JsonSerializer.Serialize(warnings, JsonOptions),
             CreatedAt = now,
@@ -795,7 +797,7 @@ public sealed class ReviewDraftService(
     {
         var sections = new List<string>
         {
-            $"**{comment.Title.Trim()}**",
+            $"**{SeverityIcon(comment.Severity)} {comment.Title.Trim()}**",
             comment.Body.Trim()
         };
         if (!string.IsNullOrWhiteSpace(comment.SuggestionReplacement))
@@ -806,6 +808,17 @@ public sealed class ReviewDraftService(
         sections.Add(ReviewFindingMarker.Build(comment.DraftCommentId));
         return string.Join("\n\n", sections.Where(x => !string.IsNullOrWhiteSpace(x)));
     }
+
+    private static string BuildCanonicalSummaryBody(int acceptedCount) =>
+        acceptedCount switch
+        {
+            0 => "No issues found.",
+            1 => "Found 1 issue.",
+            _ => $"Found {acceptedCount} issues."
+        };
+
+    private static string SeverityIcon(string severity) =>
+        string.Equals(severity, "RED", StringComparison.Ordinal) ? "🔴" : "🟡";
 
     private static string SuggestionFenceStart(OratorioReviewDraftComment comment, bool gitLab)
     {

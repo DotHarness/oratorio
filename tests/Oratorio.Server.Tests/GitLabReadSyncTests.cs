@@ -220,7 +220,7 @@ public sealed class GitLabReadSyncTests
     }
 
     [Fact]
-    public async Task GitLabReviewRun_InstructsSubmitReviewDraftAndAllowsSummaryOnlyDraft()
+    public async Task GitLabReviewRun_AllowsSummaryOnlyDraft()
     {
         var fakeGitLab = new FakeGitLabApiClient();
         var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft);
@@ -257,7 +257,6 @@ public sealed class GitLabReadSyncTests
         Assert.Empty(draft.Comments);
         Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitReviewDraft");
         Assert.NotNull(fakeAppServer.LastThreadStartRequest?.RuntimeAdditionalContext);
-        Assert.True(fakeAppServer.LastThreadStartRequest.RuntimeAdditionalContext.ContainsKey("oratorio.reviewDraft"));
     }
 
     [Fact]
@@ -581,9 +580,10 @@ public sealed class GitLabReadSyncTests
         Assert.Contains(published.SourceWrites, write => write.Kind == SourceWriteKind.MergeRequestDiscussion && write.Intent == "reviewDraftPublish" && write.Status == SourceWriteStatus.Succeeded);
         var summaryNote = Assert.Single(fakeGitLab.MergeRequestNotesCreated);
         Assert.Equal(7, summaryNote.Iid);
-        Assert.Contains("Review draft summary", summaryNote.Body);
+        Assert.Equal("Found 2 issues.", summaryNote.Body);
         Assert.Equal(2, fakeGitLab.MergeRequestDiscussionsCreated.Count);
         Assert.Contains(fakeGitLab.MergeRequestDiscussionsCreated, discussion =>
+            discussion.Body.StartsWith("**🔴 Missing refresh guard**", StringComparison.Ordinal) &&
             discussion.Position.NewPath == "src/Auth/RefreshTokenStore.cs" &&
             discussion.Position.NewLine == 88 &&
             discussion.Position.OldLine is null &&
@@ -591,7 +591,7 @@ public sealed class GitLabReadSyncTests
             discussion.Body.Contains("```suggestion", StringComparison.Ordinal) &&
             !discussion.Body.Contains("```suggestion:", StringComparison.Ordinal));
         Assert.Contains(fakeGitLab.MergeRequestDiscussionsCreated, discussion =>
-            discussion.Body.Contains("Validate middleware setup", StringComparison.Ordinal) &&
+            discussion.Body.StartsWith("**🟡 Validate middleware setup**", StringComparison.Ordinal) &&
             discussion.Position.NewPath == "src/Auth/JwtMiddleware.cs" &&
             discussion.Position.NewLine == 22 &&
             !discussion.Body.Contains("```suggestion", StringComparison.Ordinal));
@@ -692,6 +692,7 @@ public sealed class GitLabReadSyncTests
         Assert.Equal(ReviewDraftStatus.Published, Assert.Single(published.ReviewDrafts).Status);
         var discussion = Assert.Single(fakeGitLab.MergeRequestDiscussionsCreated);
         Assert.Equal(88, discussion.Position.NewLine);
+        Assert.StartsWith("**🔴 Refresh order is reversed**", discussion.Body, StringComparison.Ordinal);
         Assert.Contains("```suggestion:-1+0", discussion.Body);
     }
 
@@ -730,7 +731,7 @@ public sealed class GitLabReadSyncTests
         Assert.Contains(published.SourceWrites, write => write.Kind == SourceWriteKind.MergeRequestNote && write.Intent == "reviewDraftPublish" && write.Status == SourceWriteStatus.Succeeded);
         var summaryNote = Assert.Single(fakeGitLab.MergeRequestNotesCreated);
         Assert.Equal(7, summaryNote.Iid);
-        Assert.Contains("current head was reviewed", summaryNote.Body);
+        Assert.Equal("No issues found.", summaryNote.Body);
         Assert.Empty(fakeGitLab.MergeRequestDiscussionsCreated);
     }
 

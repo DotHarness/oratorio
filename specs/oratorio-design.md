@@ -421,16 +421,20 @@ Review Draft copy requirements:
 - default review prose is restrained English engineering copy with no
   greetings, filler, raw JSON, or repeated machine-readable draft payload in
   the final response;
-- `summary.body` uses four fixed lines: `Reviewed: <base>...<head>`,
-  `Outcome: <clean | N actionable findings | blocked>`,
-  `Scope checked: <2-4 high-risk areas inspected>`, and
-  `Notes: <important caveats, skipped anchors, or non-blocking context>`;
-- clean reviews must clearly state that the current head was reviewed and no
-  required changes were found, use `Outcome: clean`, set `majorCount`,
-  `minorCount`, and `suggestionCount` to `0`, and submit `comments: []`;
+- clean reviews must use `summary.body` exactly `No issues found.`, set
+  `majorCount`, `minorCount`, and `suggestionCount` to `0`, and submit
+  `comments: []`;
+- reviews with accepted findings use a minimal summary body, `Found N issue.`
+  or `Found N issues.`; details belong in inline comments, not in the review
+  summary;
+- Oratorio canonicalizes agent-submitted `summary.body`, `majorCount`, and
+  `minorCount` from accepted comments when the draft is submitted; operator
+  edits made afterward are respected when publishing;
 - inline finding `title` values are concise imperative or problem statements;
-- inline finding `body` values use the shape `Why this matters`, `When it
-  fails`, and `Suggested direction`;
+- inline finding `body` values use natural reviewer prose that explains the
+  failure mode and why it matters, with a short suggested direction when useful;
+- published inline comment titles are prefixed with `🔴` for `RED` findings and
+  `🟡` for `YELLOW` findings; stored draft titles remain unprefixed;
 - `suggestionReplacement` is used only for exact, small, right-side code
   changes that can be safely published as native suggestions;
 - `commentOnlyReason` is used for investigation-only findings, larger
@@ -492,9 +496,8 @@ Draft lifecycle:
 Every GitHub pull request and GitLab merge request AppServer `reviewAnalysis`
 run must call `SubmitReviewDraft` before it can succeed. If the agent finds no
 actionable issues, it must submit a summary-only draft with `majorCount`,
-`minorCount`, and `suggestionCount` all `0`, a summary body that states the
-current head was reviewed and no required changes were found, and
-`comments: []`. A GitHub PR or GitLab MR review run that completes without any
+`minorCount`, and `suggestionCount` all `0`, summary body `No issues found.`,
+and `comments: []`. A GitHub PR or GitLab MR review run that completes without any
 Review Draft fails with the stable error code `reviewDraftRequired`; Oratorio
 must not synthesize the draft on the agent's behalf.
 
