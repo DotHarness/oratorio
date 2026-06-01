@@ -703,12 +703,15 @@ with stable errors. On success, Oratorio records one agent comment with purpose
 succeeded, and publishes a board update so the detail page refreshes.
 
 Discussion Turn prompts must be short and incremental. They should identify the
-Task, include the operator's question, mention the most recent run summary when
-available, and instruct the agent to answer only the question using
-`oratorio.SubmitDiscussionReply`. They must not restate full source snapshots,
-full round history, or imported source comment history. When the Task has open
-published review findings, the prompt may additionally list them per §5.7 so the
-agent can resolve a finding the discussion concludes is handled.
+Task, include the operator's question and `discussionTurnId`, mention the most
+recent run summary when available, and point the agent to the stable Oratorio
+discussion runtime context for reply submission and boundaries. They must not
+restate full source snapshots, full round history, imported source comment
+history, or stable tool-use rules.
+When the Task has open published review findings, the prompt may additionally
+list them per §5.7 so the agent can resolve a finding the discussion concludes
+is handled. Discussion Turns require both Dynamic Tool rebind and runtime
+additional context support.
 
 ### 5.7 Review Finding Resolution
 
@@ -836,6 +839,12 @@ Required AppServer interactions:
 - declare Oratorio-owned Runtime Dynamic Tools through `thread/start.dynamicTools`
   when a round requires thread-scoped callbacks such as PR review drafts,
   implementation drafts, follow-up drafts, or discussion replies;
+- declare Oratorio-owned, versioned, thread-stable runtime guidance through
+  `thread/start.additionalContext` and rebind the same guidance through
+  `thread/resume.additionalContext` for reused threads;
+- for accepted App Binding board-tool grants, attach the tools and upsert a
+  model-visible App Context Block that tells DotCraft to search/load Oratorio
+  board tools before answering board or task-management requests;
 - attach per-thread or plugin-bundled MCP tools through `mcpServers` only when a
   round uses external reusable services that are not submitting back into
   a specific Oratorio run;
@@ -863,13 +872,22 @@ such as:
 - `Source description`;
 - `New operator feedback`;
 - `Current task`;
-- `Constraints`;
 - `Available tools`.
 
 The agent-facing prompt must not include a full serialized `Context JSON:`
 section, full round history, full source snapshot payload, full imported comment
 history, or all prior summaries unless a specific product change intentionally
-changes the prompt contract.
+changes the prompt contract. Stable Oratorio run rules, source-write boundaries,
+Review Draft formatting rules, implementation draft submission rules, follow-up
+draft submission rules, and Discussion Turn tool-use rules belong in runtime
+additional context rather than in each turn's user request. Runtime additional
+context is thread-lifecycle context: it must be stable for the thread and must
+not include per-run or per-turn facts such as concrete discussion turn IDs,
+operator questions, open finding state, source head SHAs, or whether a specific
+review diff snapshot is currently available. If the AppServer does not advertise
+`runtimeAdditionalContext`, Oratorio-created runs must fail with
+`runtimeAdditionalContextUnsupported` instead of falling back to prompt
+injection.
 
 Thread reuse contract:
 
@@ -888,9 +906,12 @@ Thread reuse contract:
   must state the old and new head SHAs and ask the agent to re-review the latest
   head while focusing on new changes when useful.
 - Before starting a turn on a reused thread, Oratorio resumes the AppServer
-  thread with the current run's Dynamic Tools when the server advertises
-  Runtime Dynamic Tool rebind support. If the server cannot rebind tools,
-  Oratorio creates a fresh thread instead of reusing a stale callback binding.
+  thread with the current run's Dynamic Tools and the same versioned Oratorio
+  runtime additional context used for the thread lifecycle. If the server cannot
+  rebind tools, Oratorio creates a fresh thread instead of reusing a stale
+  callback binding. If the server cannot accept runtime additional context,
+  Oratorio fails the run. Threads whose stored prompt context has an older
+  runtime context version are not eligible for reuse.
 - Tool calls remain bound to the current run, round, connection, and thread.
   Stale or mismatched calls must fail with a stable error.
 - `oratorio.SubmitDiscussionReply` is declared on every new Oratorio-created

@@ -321,6 +321,12 @@ public sealed class OratorioAppBindingTests
         Assert.True(status.Connected);
         Assert.Equal("connected", status.State);
         Assert.Equal("Oratorio", status.AccountLabel);
+        var contextBlock = Assert.Single(fakeAppServer.AppBindingContextBlockUpsertRequests);
+        Assert.Equal(AppServerDynamicToolCatalog.BoardToolsContextBlockId, contextBlock.BlockId);
+        Assert.Equal("policy", contextBlock.Kind);
+        Assert.Equal("model", contextBlock.Visibility);
+        Assert.Contains(AppServerDynamicToolCatalog.ListBoardItemsName, contextBlock.Content);
+        Assert.Contains(AppServerDynamicToolCatalog.QueueReviewRoundName, contextBlock.Content);
     }
 
     private static AppServerDynamicToolCall Call(string threadId, string tool, object args) =>

@@ -248,7 +248,6 @@ public sealed class GitLabReadSyncTests
         var reviewed = await WaitForItemByIdAsync(client, mr.ItemId!, x => x.Item.State == ItemState.AwaitingReview && x.ReviewDrafts.Count == 1);
         var draft = Assert.Single(reviewed.ReviewDrafts);
         var run = Assert.Single(reviewed.Runs, x => x.RunnerKind == "appServer");
-        var prompt = await fakeAppServer.PromptCaptured.Task.WaitAsync(TimeSpan.FromSeconds(3));
 
         Assert.Equal(RunStatus.Succeeded, run.Status);
         Assert.Equal(0, draft.MajorCount);
@@ -257,15 +256,8 @@ public sealed class GitLabReadSyncTests
         Assert.Equal(0, draft.AcceptedCount);
         Assert.Empty(draft.Comments);
         Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitReviewDraft");
-        Assert.Contains("oratorio.SubmitReviewDraft", prompt);
-        Assert.Contains("Always call the available oratorio.SubmitReviewDraft tool before your final response", prompt);
-        Assert.Contains("submit a summary-only draft", prompt);
-        Assert.Contains("Review diff base: main / base-sha", prompt);
-        Assert.Contains("Review diff head: feature/gitlab-read / head-sha-1", prompt);
-        Assert.Contains("Review diff range: base-sha...head-sha-1", prompt);
-        Assert.Contains("For large PRs/MRs, inspect local git diff shards", prompt);
-        Assert.Contains("commentable changed/context line", prompt);
-        Assert.Contains("reviewDraftAnchorNotCommentable", prompt);
+        Assert.NotNull(fakeAppServer.LastThreadStartRequest?.RuntimeAdditionalContext);
+        Assert.True(fakeAppServer.LastThreadStartRequest.RuntimeAdditionalContext.ContainsKey("oratorio.reviewDraft"));
     }
 
     [Fact]

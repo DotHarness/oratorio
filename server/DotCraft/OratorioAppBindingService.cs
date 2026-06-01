@@ -248,6 +248,7 @@ public sealed class OratorioAppBindingService(
                     issuedAt = DateTimeOffset.UtcNow
                 }),
             ct);
+        await UpsertBoardToolsContextBlockAsync(client, binding, grantId, context.GrantedScopes, ct);
         RememberConnectedBinding(attached.Binding);
 
         logger.LogInformation(
@@ -263,6 +264,38 @@ public sealed class OratorioAppBindingService(
         _activeBindings[binding.BindingId] = client;
         _ = Task.Run(() => KeepBindingAliveAsync(binding.BindingId, client));
         return binding.BindingId;
+    }
+
+    private async Task UpsertBoardToolsContextBlockAsync(
+        IDotCraftAppServerClient client,
+        AppBindingWire binding,
+        string grantId,
+        IReadOnlySet<string> grantedScopes,
+        CancellationToken ct)
+    {
+        try
+        {
+            await client.UpsertAppBindingContextBlockAsync(
+                new AppBindingContextBlockUpsertRequest(
+                    BindingId: binding.BindingId,
+                    AppId: binding.AppId,
+                    GrantId: grantId,
+                    BlockId: AppServerDynamicToolCatalog.BoardToolsContextBlockId,
+                    Kind: "policy",
+                    Title: AppServerDynamicToolCatalog.BoardToolsContextBlockTitle,
+                    Content: AppServerDynamicToolCatalog.AppBoundManagerToolsContext(grantedScopes),
+                    Order: 100,
+                    Version: "1",
+                    Visibility: "model"),
+                ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                ex,
+                "Unable to upsert Oratorio App Binding context block for binding {BindingId}.",
+                binding.BindingId);
+        }
     }
 
     private async Task KeepBindingAliveAsync(string bindingId, IDotCraftAppServerClient client)

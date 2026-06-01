@@ -12,6 +12,7 @@ using SdkThreadStartRequest = DotCraft.Sdk.AppServer.DotCraftThreadStartRequest;
 using SdkToolApprovalDescriptor = DotCraft.Sdk.AppServer.ToolApprovalDescriptor;
 using SdkToolContentItem = DotCraft.Sdk.AppServer.ToolContentItem;
 using SdkTurnInputPart = DotCraft.Sdk.AppServer.TurnInputPart;
+using SdkRuntimeAdditionalContextEntry = DotCraft.Sdk.AppServer.RuntimeAdditionalContextEntry;
 
 namespace Oratorio.Server.DotCraft;
 
@@ -23,10 +24,15 @@ public interface IDotCraftAppServerClientFactory
 public interface IDotCraftAppServerClient : IAsyncDisposable
 {
     bool SupportsDynamicToolRebind { get; }
+    bool SupportsRuntimeAdditionalContext { get; }
     Task InitializeAsync(CancellationToken ct);
     void SetDynamicToolHandler(Func<AppServerDynamicToolCall, CancellationToken, Task<AppServerDynamicToolResult>> handler);
     Task<string> StartThreadAsync(AppServerThreadStartRequest request, CancellationToken ct);
-    Task ResumeThreadAsync(string threadId, IReadOnlyList<AppServerDynamicToolSpec>? dynamicTools, CancellationToken ct);
+    Task ResumeThreadAsync(
+        string threadId,
+        IReadOnlyList<AppServerDynamicToolSpec>? dynamicTools,
+        IReadOnlyDictionary<string, AppServerRuntimeAdditionalContextEntry>? runtimeAdditionalContext,
+        CancellationToken ct);
     Task SubscribeThreadAsync(string threadId, CancellationToken ct);
     Task<string?> StartTurnAsync(string threadId, string prompt, CancellationToken ct);
     Task<string?> StartTurnAsync(string threadId, IReadOnlyList<TurnInputPartDto> input, string? modelId, CancellationToken ct);
@@ -40,6 +46,7 @@ public interface IDotCraftAppServerClient : IAsyncDisposable
     Task<AppBindingRequestInfo> GetAppBindingRequestAsync(AppBindingRequestGetRequest request, CancellationToken ct);
     Task<AppBindingAcceptResponse> AcceptAppBindingAsync(AppBindingAcceptRequest request, CancellationToken ct);
     Task<AppBindingAttachToolsResponse> AttachAppBindingToolsAsync(AppBindingAttachToolsRequest request, CancellationToken ct);
+    Task<AppBindingContextBlockUpsertResponse> UpsertAppBindingContextBlockAsync(AppBindingContextBlockUpsertRequest request, CancellationToken ct);
     IAsyncEnumerable<AppServerNotification> ReadNotificationsAsync(CancellationToken ct);
 }
 
@@ -48,11 +55,17 @@ public sealed record AppServerThreadStartRequest(
     string WorkspacePath,
     string ApprovalPolicy,
     string AgentInstructions,
-    IReadOnlyList<AppServerDynamicToolSpec>? DynamicTools = null);
+    IReadOnlyList<AppServerDynamicToolSpec>? DynamicTools = null,
+    IReadOnlyDictionary<string, AppServerRuntimeAdditionalContextEntry>? RuntimeAdditionalContext = null);
 
 public sealed record AppServerThreadResumeRequest(
     string ThreadId,
-    IReadOnlyList<AppServerDynamicToolSpec>? DynamicTools = null);
+    IReadOnlyList<AppServerDynamicToolSpec>? DynamicTools = null,
+    IReadOnlyDictionary<string, AppServerRuntimeAdditionalContextEntry>? RuntimeAdditionalContext = null);
+
+public sealed record AppServerRuntimeAdditionalContextEntry(
+    string Value,
+    string Kind = "application");
 
 public sealed record AppServerDynamicToolSpec(
     string? Namespace,
@@ -182,6 +195,21 @@ public sealed record AppBindingAttachToolsResponse(
     int AcceptedToolCount,
     IReadOnlyList<string> Warnings);
 
+public sealed record AppBindingContextBlockUpsertRequest(
+    string BindingId,
+    string AppId,
+    string GrantId,
+    string BlockId,
+    string Kind,
+    string Title,
+    string Content,
+    int Order,
+    string Version,
+    DateTimeOffset? ExpiresAt = null,
+    string? Visibility = null);
+
+public sealed record AppBindingContextBlockUpsertResponse(JsonElement Block);
+
 public sealed record AppBindingWire(
     string BindingId,
     string ThreadId,
@@ -223,6 +251,8 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
 
     public bool SupportsDynamicToolRebind => client.Capabilities.DynamicToolRebind;
 
+    public bool SupportsRuntimeAdditionalContext => client.Capabilities.RuntimeAdditionalContext;
+
     public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
 
     public void SetDynamicToolHandler(Func<AppServerDynamicToolCall, CancellationToken, Task<AppServerDynamicToolResult>> handler)
@@ -250,14 +280,23 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
                 requireApprovalOutsideWorkspace = true,
                 agentInstructions = request.AgentInstructions
             },
-            ToSdkTools(request.DynamicTools)),
+            ToSdkTools(request.DynamicTools),
+            ToSdkAdditionalContext(request.RuntimeAdditionalContext)),
             ct);
         return thread.Id;
     }
 
-    public async Task ResumeThreadAsync(string threadId, IReadOnlyList<AppServerDynamicToolSpec>? dynamicTools, CancellationToken ct)
+    public async Task ResumeThreadAsync(
+        string threadId,
+        IReadOnlyList<AppServerDynamicToolSpec>? dynamicTools,
+        IReadOnlyDictionary<string, AppServerRuntimeAdditionalContextEntry>? runtimeAdditionalContext,
+        CancellationToken ct)
     {
-        await client.Threads.ResumeAsync(new SdkThreadResumeRequest(threadId, ToSdkTools(dynamicTools)), ct);
+        await client.Threads.ResumeAsync(new SdkThreadResumeRequest(
+            threadId,
+            ToSdkTools(dynamicTools),
+            ToSdkAdditionalContext(runtimeAdditionalContext)),
+            ct);
     }
 
     public Task SubscribeThreadAsync(string threadId, CancellationToken ct) =>
@@ -359,6 +398,14 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
             request with { Tools = request.Tools },
             ct);
 
+    public Task<AppBindingContextBlockUpsertResponse> UpsertAppBindingContextBlockAsync(
+        AppBindingContextBlockUpsertRequest request,
+        CancellationToken ct) =>
+        client.RequestAsync<AppBindingContextBlockUpsertResponse>(
+            "app/binding/context/upsert",
+            request,
+            ct);
+
     public async IAsyncEnumerable<AppServerNotification> ReadNotificationsAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
@@ -376,6 +423,13 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
 
     private static IReadOnlyList<SdkDynamicToolSpec>? ToSdkTools(IReadOnlyList<AppServerDynamicToolSpec>? tools) =>
         tools?.Select(ToSdkTool).ToArray();
+
+    private static IReadOnlyDictionary<string, SdkRuntimeAdditionalContextEntry>? ToSdkAdditionalContext(
+        IReadOnlyDictionary<string, AppServerRuntimeAdditionalContextEntry>? additionalContext) =>
+        additionalContext?.ToDictionary(
+            entry => entry.Key,
+            entry => new SdkRuntimeAdditionalContextEntry(entry.Value.Value, entry.Value.Kind),
+            StringComparer.Ordinal);
 
     private static SdkDynamicToolSpec ToSdkTool(AppServerDynamicToolSpec tool) =>
         new(

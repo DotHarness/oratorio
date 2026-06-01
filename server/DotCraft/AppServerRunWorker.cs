@@ -250,6 +250,17 @@ public sealed class AppServerRunWorker(
 
             await using var client = await clientFactory.ConnectAsync(endpoint.Url, timeout.Token);
             await client.InitializeAsync(timeout.Token);
+            if (!client.SupportsRuntimeAdditionalContext)
+            {
+                await FailRunAsync(
+                    runId,
+                    RunStatus.Failed,
+                    "runtimeAdditionalContextUnsupported",
+                    "The DotCraft AppServer does not support runtime additional context required by Oratorio.",
+                    allowRetry: false,
+                    CancellationToken.None);
+                return;
+            }
 
             var dynamicTools = await BuildDynamicToolsAsync(runId, timeout.Token);
             var requiredDynamicTools = AppServerDynamicToolCatalog.DynamicToolIds(dynamicTools);
@@ -272,17 +283,15 @@ public sealed class AppServerRunWorker(
                     WorkspacePath: executionWorkspacePath,
                     ApprovalPolicy: string.IsNullOrWhiteSpace(value.ApprovalPolicy) ? "interrupt" : value.ApprovalPolicy,
                     AgentInstructions: "You are connected through Oratorio. Follow the prompt exactly and use Oratorio dynamic tools when instructed.",
-                    DynamicTools: dynamicTools), timeout.Token);
+                    DynamicTools: dynamicTools,
+                    RuntimeAdditionalContext: prompt.RuntimeAdditionalContext), timeout.Token);
                 await MarkThreadCreatedAsync(runId, threadId, prompt.ContextJson, endpoint.Url, threadCreationReason, timeout.Token);
             }
             else
             {
                 threadId = reusableThread.ThreadId;
                 boundThreadId = threadId;
-                if (dynamicTools.Count > 0)
-                {
-                    await client.ResumeThreadAsync(threadId, dynamicTools, timeout.Token);
-                }
+                await client.ResumeThreadAsync(threadId, dynamicTools, prompt.RuntimeAdditionalContext, timeout.Token);
 
                 await MarkThreadReusedAsync(runId, reusableThread, prompt.ContextJson, endpoint.Url, timeout.Token);
             }
@@ -621,7 +630,7 @@ public sealed class AppServerRunWorker(
         return workspaceResolver.ResolveWorkspacePath(repository);
     }
 
-    private async Task<(string DisplayName, string ContextJson, string Prompt)> BuildPromptAsync(
+    private async Task<(string DisplayName, string ContextJson, string Prompt, IReadOnlyDictionary<string, AppServerRuntimeAdditionalContextEntry> RuntimeAdditionalContext)> BuildPromptAsync(
         string runId,
         string workspacePath,
         IReadOnlyList<string> requiredDynamicTools,
@@ -639,7 +648,7 @@ public sealed class AppServerRunWorker(
             .OrderByDescending(x => x.CreatedAt)
             .FirstOrDefaultAsync(ct);
         var prompt = await builder.BuildAsync(run, latestQueueEvent?.Body, workspacePath, requiredDynamicTools, incremental, ct);
-        return (run.Item?.Title ?? "Oratorio run", prompt.ContextJson, prompt.Prompt);
+        return (run.Item?.Title ?? "Oratorio run", prompt.ContextJson, prompt.Prompt, prompt.RuntimeAdditionalContext);
     }
 
     private async Task<AppServerThreadReuseCandidate?> FindCompatibleThreadAsync(
@@ -682,6 +691,13 @@ public sealed class AppServerRunWorker(
             var root = document.RootElement;
             if (!TryGetProperty(root, "promptMode", "PromptMode", out var promptMode) ||
                 !string.Equals(promptMode.GetString(), "compact", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            if (!TryGetProperty(root, "runtimeContextVersion", "RuntimeContextVersion", out var runtimeContextVersion) ||
+                runtimeContextVersion.ValueKind != JsonValueKind.String ||
+                !string.Equals(runtimeContextVersion.GetString(), AppServerPromptBuilder.RuntimeContextVersion, StringComparison.Ordinal))
             {
                 return false;
             }
@@ -1429,7 +1445,7 @@ public sealed class AppServerRunWorker(
         run.LastHeartbeatAt = now;
         await db.SaveChangesAsync(ct);
 
-        var prompt = "Continue the implementation round. Submit oratorio.SubmitImplementationDraft when the worktree changes and validation notes are ready. If you are blocked, submit a draft with the blocker in risks.";
+        var prompt = "Continue the implementation round using the Oratorio implementation runtime context. If you are blocked, record the blocker in the implementation draft risks.";
         var nextTurnId = await client.StartTurnAsync(threadId, prompt, ct);
         runCoordinator.UpdateRunStatus(runId, nextTurnId, "running");
         await MarkRunningAsync(runId, threadId, nextTurnId, ct);

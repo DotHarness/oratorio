@@ -1931,41 +1931,11 @@ public sealed class OratorioApiTests
         Assert.Contains(reviewed.Timeline, x => x.Title == "DotCraft thread created");
         Assert.Contains(reviewed.Timeline, x => x.Title == "Agent summary captured");
 
-        var prompt = await fakeAppServer.PromptCaptured.Task.WaitAsync(TimeSpan.FromSeconds(3));
-        Assert.DoesNotContain("Context JSON:", prompt);
-        Assert.DoesNotContain("```json", prompt);
-        Assert.Contains("Operator wants a read-only DotCraft pass.", prompt);
-        Assert.Contains("Add JWT middleware and refresh-token flow", prompt);
-        Assert.Contains("abc123", prompt);
-        Assert.Contains("Review target head SHA: abc123", prompt);
-        Assert.Contains("Review diff base: main / base123", prompt);
-        Assert.Contains("Review diff head: feature/auth-refresh / abc123", prompt);
-        Assert.Contains("Review diff range: base123...abc123", prompt);
-        Assert.Contains("Workspace checkout ref/SHA: abc123 / abc123", prompt);
-        Assert.Contains("Managed worktree checkout: abc123", prompt);
-        Assert.DoesNotContain("Run base ref/SHA", prompt);
-        Assert.DoesNotContain("Managed worktree base", prompt);
-        Assert.Contains("First inspect the Review diff range file list/stat", prompt);
-        Assert.Contains("Do not treat git show HEAD or HEAD^..HEAD as the complete PR/MR review range.", prompt);
-        Assert.Contains("For large PRs/MRs, inspect local git diff shards", prompt);
-        Assert.Contains("high-confidence inline findings", prompt);
-        Assert.Contains("commentable changed/context line", prompt);
-        Assert.Contains("fixable RIGHT-side inline finding", prompt);
-        Assert.Contains("restrained English engineering prose", prompt);
-        Assert.Contains("no raw JSON in final response", prompt);
-        Assert.Contains("Format summary.body with these labels: Reviewed: <base>...<head>; Outcome: <clean | N actionable findings | blocked>; Scope checked: <2-4 high-risk areas inspected>; Notes:", prompt);
-        Assert.Contains("Clean reviews must use the summary-only format with Outcome: clean", prompt);
-        Assert.Contains("current head was reviewed and no required changes were found", prompt);
-        Assert.Contains("Prioritize actionable findings over FYI noise", prompt);
-        Assert.Contains("RED inline findings as likely bugs", prompt);
-        Assert.Contains("YELLOW as investigate flags", prompt);
-        Assert.Contains("Why this matters, When it fails, and Suggested direction", prompt);
-        Assert.Contains("For non-suggestion findings, omit suggestionReplacement and provide commentOnlyReason", prompt);
-        Assert.Contains("do not submit noisy FYI inline comments", prompt);
-        Assert.Contains("reviewDraftAnchorNotCommentable", prompt);
-        Assert.Contains("do not count prose-only findings", prompt);
-        Assert.Contains("Base workspace:", prompt);
-        Assert.Contains("Do not write to GitHub", prompt);
+        Assert.NotNull(fakeAppServer.LastThreadStartRequest?.RuntimeAdditionalContext);
+        Assert.True(fakeAppServer.LastThreadStartRequest.RuntimeAdditionalContext.ContainsKey("oratorio.runContract"));
+        Assert.True(fakeAppServer.LastThreadStartRequest.RuntimeAdditionalContext.ContainsKey("oratorio.reviewDraft"));
+        Assert.True(fakeAppServer.LastThreadStartRequest.RuntimeAdditionalContext.ContainsKey("oratorio.followUpDraft"));
+        Assert.True(fakeAppServer.LastThreadStartRequest.RuntimeAdditionalContext.ContainsKey("oratorio.discussionTurn"));
         var submitReviewTool = Assert.Single(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitReviewDraft");
         var submitReviewSchema = submitReviewTool.InputSchema.GetRawText();
         Assert.Contains("commentOnlyReason", submitReviewSchema);
@@ -1976,6 +1946,7 @@ public sealed class OratorioApiTests
         using var context = await ReadPromptContextAsync(app, run.RunId);
         var root = context.RootElement;
         Assert.Equal("compact", root.GetProperty("promptMode").GetString());
+        Assert.Equal("oratorio-runtime-context-v1", root.GetProperty("runtimeContextVersion").GetString());
         Assert.Equal("full", root.GetProperty("turnPromptMode").GetString());
         Assert.Equal("example-owner/oratorio", root.GetProperty("workspace").GetProperty("repository").GetString());
         Assert.Equal(run.WorktreePath, root.GetProperty("workspace").GetProperty("path").GetString());
@@ -2115,7 +2086,6 @@ public sealed class OratorioApiTests
             new DispatchRequest("appServer", "Initial read-only DotCraft pass.", null, null));
 
         await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.AwaitingReview);
-        _ = await fakeAppServer.ReadPromptAsync();
 
         await PostAsync<ItemDetailResponse>(
             client,
@@ -2128,17 +2098,15 @@ public sealed class OratorioApiTests
             new DispatchRequest("appServer", "Follow up on requested changes.", null, null));
 
         await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.AwaitingReview && x.Item.CurrentRound == 2);
-        var prompt = await fakeAppServer.ReadPromptAsync();
-        Assert.DoesNotContain("Context JSON:", prompt);
-        Assert.Contains("Follow up on requested changes.", prompt);
-        Assert.Contains("Please address the refresh-token race before another review.", prompt);
-        Assert.DoesNotContain("Please use a constant-time comparison helper.", prompt);
         Assert.Equal(1, fakeAppServer.StartThreadCount);
         Assert.Equal(["thread-test-1", "thread-test-1"], fakeAppServer.TurnThreadIds);
         var resume = Assert.Single(fakeAppServer.ThreadResumeRequests);
         Assert.Equal("thread-test-1", resume.ThreadId);
         Assert.Contains(resume.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitReviewDraft");
         Assert.Contains(resume.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitFollowUpDraft");
+        Assert.NotNull(resume.RuntimeAdditionalContext);
+        Assert.True(resume.RuntimeAdditionalContext.ContainsKey("oratorio.reviewDraft"));
+        Assert.True(resume.RuntimeAdditionalContext.ContainsKey("oratorio.followUpDraft"));
 
         var secondRun = Assert.Single(
             (await client.GetFromJsonAsync<ItemDetailResponse>($"/api/v1/items/id/{pr.ItemId}", JsonOptions))!.Runs,
@@ -2147,6 +2115,7 @@ public sealed class OratorioApiTests
 
         var root = context.RootElement;
         Assert.Equal("compact", root.GetProperty("promptMode").GetString());
+        Assert.Equal("oratorio-runtime-context-v1", root.GetProperty("runtimeContextVersion").GetString());
         Assert.Equal("incremental", root.GetProperty("turnPromptMode").GetString());
         Assert.Equal(2, root.GetProperty("currentRound").GetProperty("roundNumber").GetInt32());
         Assert.Equal("Follow up on requested changes.", root.GetProperty("currentRound").GetProperty("operatorNote").GetString());
@@ -2214,10 +2183,6 @@ public sealed class OratorioApiTests
         Assert.Empty(queued.DiscussionTurns);
 
         var reviewed = await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.AwaitingReview && x.Item.CurrentRound == 2);
-        var prompt = await fakeAppServer.ReadPromptAsync();
-        Assert.Contains("You are continuing an existing Oratorio DotCraft thread with incremental context.", prompt);
-        Assert.Contains("review target head changed from abc123 to def456", prompt);
-        Assert.Contains("Re-review the latest head", prompt);
         Assert.Equal(1, fakeAppServer.StartThreadCount);
         Assert.Equal(["thread-test-1", "thread-test-1"], fakeAppServer.TurnThreadIds);
         Assert.Contains(reviewed.Runs, x => x.Status == RunStatus.Succeeded && x.BaseSha == "def456");
@@ -2403,6 +2368,41 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
+    public async Task AppServerDispatch_FailsWhenRuntimeAdditionalContextUnsupported()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft)
+        {
+            SupportsRuntimeAdditionalContext = false
+        };
+        await using var app = new TestOratorioApp(services =>
+        {
+            services.RemoveAll<IGitHubApiClient>();
+            services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+            services.RemoveAll<IDotCraftAppServerProcessManager>();
+            services.RemoveAll<IDotCraftAppServerClientFactory>();
+            services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+            services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+        });
+        var client = app.CreateClient();
+
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Runtime context is required.", null, null));
+
+        var failed = await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.Failed);
+        var run = Assert.Single(failed.Runs, x => x.RunnerKind == "appServer");
+        Assert.Equal(RunStatus.Failed, run.Status);
+        Assert.Equal("runtimeAdditionalContextUnsupported", run.ErrorCode);
+        Assert.Equal(0, fakeAppServer.StartThreadCount);
+    }
+
+    [Fact]
     public async Task AppServerDispatch_DoesNotReuseLegacyPromptContextThread()
     {
         var fakeGitHub = new FakeGitHubApiClient();
@@ -2503,13 +2503,10 @@ public sealed class OratorioApiTests
         var resume = Assert.Single(fakeAppServer.ThreadResumeRequests);
         Assert.Equal("thread-test-1", resume.ThreadId);
         Assert.Contains(resume.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitDiscussionReply");
+        Assert.NotNull(resume.RuntimeAdditionalContext);
+        Assert.True(resume.RuntimeAdditionalContext.ContainsKey("oratorio.discussionTurn"));
         Assert.NotNull(fakeAppServer.LastToolResult);
         Assert.True(fakeAppServer.LastToolResult!.Success);
-
-        var discussionPrompt = await fakeAppServer.ReadPromptAsync();
-        Assert.Contains("Agent Discussion Turn", discussionPrompt);
-        Assert.Contains("Why did you call out the refresh-token path?", discussionPrompt);
-        Assert.Contains("SubmitDiscussionReply", discussionPrompt);
     }
 
     [Fact]
@@ -2527,6 +2524,43 @@ public sealed class OratorioApiTests
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
         Assert.Equal("noCompatibleDiscussionThread", error?.Error.Code);
+    }
+
+    [Fact]
+    public async Task AgentDiscussionTurn_FailsWhenRuntimeAdditionalContextUnsupported()
+    {
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.Success);
+        await using var app = new TestOratorioApp(services =>
+        {
+            services.RemoveAll<IDotCraftAppServerProcessManager>();
+            services.RemoveAll<IDotCraftAppServerClientFactory>();
+            services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+            services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+        });
+        var client = app.CreateClient();
+
+        var task = await CreateLocalTaskAsync(client, "Discuss without runtime context", repository: "example-owner/oratorio");
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{task.Item.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Initial DotCraft analysis.", null, null));
+        var reviewed = await WaitForItemByIdAsync(client, task.Item.ItemId, x => x.Item.State == ItemState.AwaitingReview);
+        _ = await fakeAppServer.ReadPromptAsync();
+
+        fakeAppServer.SupportsRuntimeAdditionalContext = false;
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{task.Item.ItemId}/discussion-turns",
+            new DiscussionTurnRequest("Can you answer without runtime context?", reviewed.Item.CurrentRound, null));
+
+        var failed = await WaitForItemByIdAsync(
+            client,
+            task.Item.ItemId,
+            x => x.DiscussionTurns.Any(turn => turn.Status == DiscussionTurnStatus.Failed));
+        var turn = Assert.Single(failed.DiscussionTurns);
+        Assert.Equal("runtimeAdditionalContextUnsupported", turn.ErrorCode);
+        Assert.Single(fakeAppServer.ThreadStartRequests);
+        Assert.Empty(fakeAppServer.ThreadResumeRequests);
     }
 
     [Fact]
@@ -2650,12 +2684,13 @@ public sealed class OratorioApiTests
             $"/api/v1/items/id/{task.Item.ItemId}/dispatch",
             new DispatchRequest("appServer", "Follow up without discussion comments.", null, null));
 
-        await WaitForItemByIdAsync(client, task.Item.ItemId, x => x.Item.State == ItemState.AwaitingReview && x.Item.CurrentRound == 2);
-        var prompt = await fakeAppServer.ReadPromptAsync();
-        Assert.Contains("Follow up without discussion comments.", prompt);
-        Assert.Contains("Actual next-round feedback.", prompt);
-        Assert.DoesNotContain("Do not treat this question as feedback.", prompt);
-        Assert.DoesNotContain("Agent answer from DotCraft.", prompt);
+        var redispatched = await WaitForItemByIdAsync(client, task.Item.ItemId, x => x.Item.State == ItemState.AwaitingReview && x.Item.CurrentRound == 2);
+        var currentRound = Assert.Single(redispatched.Rounds, x => x.RoundNumber == 2);
+        var run = Assert.Single(
+            redispatched.Runs,
+            x => x.RunnerKind == "appServer" && x.Status == RunStatus.Succeeded && x.RoundId == currentRound.RoundId);
+        using var context = await ReadPromptContextAsync(app, run.RunId);
+        Assert.Equal("Actual next-round feedback.", context.RootElement.GetProperty("feedbackForThisRound")[0].GetProperty("body").GetString());
     }
 
     [Fact]
@@ -3363,6 +3398,8 @@ public sealed class OratorioApiTests
         var draft = Assert.Single(reviewed.ImplementationDrafts);
 
         Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitImplementationDraft");
+        Assert.NotNull(fakeAppServer.LastThreadStartRequest?.RuntimeAdditionalContext);
+        Assert.True(fakeAppServer.LastThreadStartRequest.RuntimeAdditionalContext.ContainsKey("oratorio.implementationDraft"));
         Assert.Equal(RunPurpose.Implementation, Assert.Single(reviewed.Runs, x => x.RunnerKind == "appServer").Purpose);
         Assert.Equal(ImplementationDraftStatus.Delivered, draft.Status);
         Assert.Equal(DeliveryPolicy.AutoPr, draft.DeliveryPolicy);
@@ -3649,6 +3686,8 @@ public sealed class OratorioApiTests
 
         Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitReviewDraft");
         Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitFollowUpDraft");
+        Assert.NotNull(fakeAppServer.LastThreadStartRequest?.RuntimeAdditionalContext);
+        Assert.True(fakeAppServer.LastThreadStartRequest.RuntimeAdditionalContext.ContainsKey("oratorio.followUpDraft"));
         Assert.Equal(FollowUpDraftStatus.Draft, draft.Status);
         Assert.Equal("Split out migration cleanup", draft.Title);
         Assert.Equal("example-owner/oratorio", draft.Repository);
@@ -5258,12 +5297,14 @@ internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) :
     public AppServerThreadStartRequest? LastThreadStartRequest { get; private set; }
     public List<AppServerThreadStartRequest> ThreadStartRequests { get; } = [];
     public List<AppServerThreadResumeRequest> ThreadResumeRequests { get; } = [];
+    public List<AppBindingContextBlockUpsertRequest> AppBindingContextBlockUpsertRequests { get; } = [];
     public int StartThreadCount { get; private set; }
     public int ConnectCount { get; private set; }
     public List<string> StartedThreadIds { get; } = [];
     public List<string> TurnThreadIds { get; } = [];
     public bool UseMismatchedToolThreadId { get; set; }
     public bool SupportsDynamicToolRebind { get; set; } = true;
+    public bool SupportsRuntimeAdditionalContext { get; set; } = true;
     public AppServerDynamicToolResult? LastToolResult { get; set; }
     public List<AppServerDynamicToolResult> ToolResults { get; } = [];
     public AppBindingConnectionStatus ConnectionStatus { get; set; } = new(
@@ -5300,8 +5341,10 @@ internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) :
                 return $"turn-test-{_turnCount}";
             },
             () => SupportsDynamicToolRebind,
+            () => SupportsRuntimeAdditionalContext,
             () => UseMismatchedToolThreadId,
             () => ConnectionStatus,
+            request => AppBindingContextBlockUpsertRequests.Add(request),
             result =>
             {
                 LastToolResult = result;
@@ -5321,14 +5364,18 @@ internal sealed class FakeAppServerClient(
     Action<AppServerThreadResumeRequest> resumeThread,
     Func<string, string> startTurn,
     Func<bool> supportsDynamicToolRebind,
+    Func<bool> supportsRuntimeAdditionalContext,
     Func<bool> useMismatchedToolThreadId,
     Func<AppBindingConnectionStatus> getConnectionStatus,
+    Action<AppBindingContextBlockUpsertRequest> upsertContextBlock,
     Action<AppServerDynamicToolResult> captureToolResult) : IDotCraftAppServerClient
 {
     private readonly Channel<AppServerNotification> _notifications = Channel.CreateUnbounded<AppServerNotification>();
     private Func<AppServerDynamicToolCall, CancellationToken, Task<AppServerDynamicToolResult>>? _dynamicToolHandler;
+    private AppServerThreadResumeRequest? _lastResumeRequest;
 
     public bool SupportsDynamicToolRebind => supportsDynamicToolRebind();
+    public bool SupportsRuntimeAdditionalContext => supportsRuntimeAdditionalContext();
 
     public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
 
@@ -5342,9 +5389,14 @@ internal sealed class FakeAppServerClient(
         return Task.FromResult(threadId);
     }
 
-    public Task ResumeThreadAsync(string threadId, IReadOnlyList<AppServerDynamicToolSpec>? dynamicTools, CancellationToken ct)
+    public Task ResumeThreadAsync(
+        string threadId,
+        IReadOnlyList<AppServerDynamicToolSpec>? dynamicTools,
+        IReadOnlyDictionary<string, AppServerRuntimeAdditionalContextEntry>? runtimeAdditionalContext,
+        CancellationToken ct)
     {
-        resumeThread(new AppServerThreadResumeRequest(threadId, dynamicTools));
+        _lastResumeRequest = new AppServerThreadResumeRequest(threadId, dynamicTools, runtimeAdditionalContext);
+        resumeThread(_lastResumeRequest);
         _notifications.Writer.TryWrite(Notification("thread/resumed", new { threadId }));
         return Task.CompletedTask;
     }
@@ -5674,7 +5726,7 @@ internal sealed class FakeAppServerClient(
                 {
                     var arguments = JsonSerializer.SerializeToElement(new
                     {
-                        discussionTurnId = ExtractDiscussionTurnId(prompt),
+                        discussionTurnId = ExtractDiscussionTurnId(prompt, _lastResumeRequest?.RuntimeAdditionalContext),
                         body = "Agent answer from DotCraft."
                     }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                     var toolThreadId = useMismatchedToolThreadId() ? "thread-mismatch" : threadId;
@@ -5782,6 +5834,22 @@ internal sealed class FakeAppServerClient(
             request.Tools.Count,
             []));
 
+    public Task<AppBindingContextBlockUpsertResponse> UpsertAppBindingContextBlockAsync(
+        AppBindingContextBlockUpsertRequest request,
+        CancellationToken ct)
+    {
+        upsertContextBlock(request);
+        return Task.FromResult(new AppBindingContextBlockUpsertResponse(
+            JsonSerializer.SerializeToElement(new
+            {
+                request.BlockId,
+                request.Kind,
+                request.Title,
+                request.Visibility,
+                request.Version
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
+    }
+
     public IAsyncEnumerable<AppServerNotification> ReadNotificationsAsync(CancellationToken ct) =>
         _notifications.Reader.ReadAllAsync(ct);
 
@@ -5798,18 +5866,32 @@ internal sealed class FakeAppServerClient(
     private static AppServerNotification Notification(string method, object parameters) =>
         new(method, JsonSerializer.SerializeToElement(parameters, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
 
-    private static string ExtractDiscussionTurnId(string prompt)
+    private static string ExtractDiscussionTurnId(
+        string prompt,
+        IReadOnlyDictionary<string, AppServerRuntimeAdditionalContextEntry>? runtimeAdditionalContext)
     {
         const string marker = "discussionTurnId `";
-        var start = prompt.IndexOf(marker, StringComparison.Ordinal);
-        if (start < 0)
+        var context = runtimeAdditionalContext is not null &&
+            runtimeAdditionalContext.TryGetValue("oratorio.discussionTurn", out var entry)
+            ? entry.Value
+            : null;
+        var sources = string.IsNullOrWhiteSpace(context)
+            ? new[] { prompt }
+            : new[] { context!, prompt };
+        foreach (var source in sources)
         {
-            return "missing-discussion-turn";
+            var start = source.IndexOf(marker, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                continue;
+            }
+
+            start += marker.Length;
+            var end = source.IndexOf('`', start);
+            return end > start ? source[start..end] : "missing-discussion-turn";
         }
 
-        start += marker.Length;
-        var end = prompt.IndexOf('`', start);
-        return end > start ? prompt[start..end] : "missing-discussion-turn";
+        return "missing-discussion-turn";
     }
 
     private static AppServerNotification DisposedNotification(string method)

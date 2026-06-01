@@ -12,10 +12,18 @@ public static class AppServerDynamicToolCatalog
     public const string SubmitDiscussionReplyId = "oratorio.SubmitDiscussionReply";
     public const string ResolveReviewFindingName = "ResolveReviewFinding";
     public const string ResolveReviewFindingId = "oratorio.ResolveReviewFinding";
+    public const string SubmitReviewDraftName = "SubmitReviewDraft";
+    public const string SubmitReviewDraftId = "oratorio.SubmitReviewDraft";
+    public const string SubmitImplementationDraftName = "SubmitImplementationDraft";
+    public const string SubmitImplementationDraftId = "oratorio.SubmitImplementationDraft";
+    public const string SubmitFollowUpDraftName = "SubmitFollowUpDraft";
+    public const string SubmitFollowUpDraftId = "oratorio.SubmitFollowUpDraft";
     public const string ListBoardItemsName = "ListBoardItems";
     public const string GetBoardItemName = "GetBoardItem";
     public const string CreateBoardTaskName = "CreateBoardTask";
     public const string QueueReviewRoundName = "QueueReviewRound";
+    public const string BoardToolsContextBlockId = "oratorio.boardTools";
+    public const string BoardToolsContextBlockTitle = "Oratorio board tools";
 
     public static AppServerDynamicToolSpec SubmitDiscussionReply(JsonSerializerOptions jsonOptions) =>
         new(
@@ -73,6 +81,35 @@ public static class AppServerDynamicToolCatalog
         }
 
         return tools;
+    }
+
+    public static string AppBoundManagerToolsContext(IReadOnlySet<string> grantedScopes)
+    {
+        var toolNames = new List<string>();
+        if (grantedScopes.Contains(BoardReadScope))
+        {
+            toolNames.Add(ListBoardItemsName);
+            toolNames.Add(GetBoardItemName);
+        }
+
+        if (grantedScopes.Contains(BoardManageScope))
+        {
+            toolNames.Add(CreateBoardTaskName);
+            toolNames.Add(QueueReviewRoundName);
+        }
+
+        var availableTools = toolNames.Count == 0
+            ? "none"
+            : string.Join(", ", toolNames);
+        return $"""
+            Oratorio exposes app-bound board tools in this thread.
+
+            When the user asks about Oratorio tasks, board status, queued work, item details, local task creation, or review queueing, search for and load the relevant Oratorio tool first instead of guessing from conversation memory.
+
+            Available Oratorio board tools for this binding: {availableTools}.
+
+            Read-only board inspection uses {ListBoardItemsName} and {GetBoardItemName}. Board mutations use {CreateBoardTaskName} and {QueueReviewRoundName} and may require approval.
+            """;
     }
 
     public static AppServerDynamicToolSpec ListBoardItems(JsonSerializerOptions jsonOptions) =>

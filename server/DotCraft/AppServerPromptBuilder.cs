@@ -9,7 +9,25 @@ namespace Oratorio.Server.DotCraft;
 
 public sealed class AppServerPromptBuilder(OratorioDbContext db)
 {
+    public const string RuntimeContextVersion = "oratorio-runtime-context-v1";
+
+    private const string RunContractInstructions = """
+        Oratorio owns this DotCraft thread's board/run lifecycle. Follow the current turn facts and use only the Oratorio runtime tools exposed for that turn.
+        - Oratorio performs external delivery; do not push, merge, approve, request changes, create PRs/MRs, or mutate GitHub/GitLab directly.
+        - Propose separate work with oratorio.SubmitFollowUpDraft when available.
+        - Use oratorio.SubmitDiscussionReply only when the current turn is an Agent Discussion Turn.
+        """;
+
+    private const string DiscussionTurnInstructions = """
+        Agent Discussion Turns:
+        - When the user turn identifies an Oratorio Agent Discussion Turn, answer only that operator question.
+        - Call oratorio.SubmitDiscussionReply with the discussionTurnId supplied in the user turn/context and your Markdown reply.
+        - If the user turn lists open findings and the discussion shows one is a non-issue or already handled, you may resolve it with oratorio.ResolveReviewFinding; otherwise leave it open.
+        - Do not modify files or turn the question into follow-up work.
+        """;
+
     private const string ReviewDraftIntroInstructions = """
+        During Oratorio PR/MR review-analysis runs when oratorio.SubmitReviewDraft is available:
         - Always call the available oratorio.SubmitReviewDraft tool before your final response; it is required even when the PR/MR is clean.
         - If you find no actionable issues, submit a summary-only draft with majorCount 0, minorCount 0, suggestionCount 0, a concise body stating that the current head was reviewed and no required changes were found, and comments: [].
         - Write Review Draft text in restrained English engineering prose: no greetings, no filler, no raw JSON in final response, and no repeated machine-readable draft in the final answer.
@@ -31,6 +49,19 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
         - If oratorio.SubmitReviewDraft fails with reviewDraftAnchorNotCommentable, choose a valid line from the returned commentable ranges and call oratorio.SubmitReviewDraft again before your final response.
         - Count only accepted concrete code suggestions in suggestionCount; do not count prose-only findings or follow-up ideas as suggestions.
         - Do not place machine-readable review JSON in the final answer.
+        """;
+
+    private const string ImplementationDraftInstructions = """
+        During Oratorio implementation runs when oratorio.SubmitImplementationDraft is available:
+        - Modify only files inside the Oratorio-managed execution worktree named in the user turn.
+        - When your implementation draft is ready, call oratorio.SubmitImplementationDraft with summary, tests, risks, changedFiles, proposedCommitMessage, proposedPrTitle, and proposedPrBody.
+        - Do not place machine-readable implementation JSON in the final answer.
+        """;
+
+    private const string FollowUpDraftInstructions = """
+        During Oratorio review or implementation runs when oratorio.SubmitFollowUpDraft is available:
+        - If you identify follow-up work that should be split from the current round, call oratorio.SubmitFollowUpDraft with proposals.
+        - Follow-up drafts are advisory, not hidden requirements for this round.
         """;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
@@ -131,6 +162,7 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
         var context = new
         {
             promptMode = "compact",
+            runtimeContextVersion = RuntimeContextVersion,
             turnPromptMode = incremental ? "incremental" : "full",
             mode = run.Purpose == RunPurpose.Implementation ? "implementation" : "readOnlyReviewAnalysis",
             requiredDynamicTools,
@@ -246,6 +278,7 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
         };
 
         var contextJson = JsonSerializer.Serialize(context, JsonOptions);
+        var runtimeAdditionalContext = BuildThreadRuntimeAdditionalContext();
         var prompt = new StringBuilder();
         if (incremental)
         {
@@ -320,8 +353,6 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
         {
             prompt.AppendLine("- Implement the requested change in the Oratorio-managed worktree.");
             prompt.AppendLine("- Run focused validation when feasible and include observed results.");
-            prompt.AppendLine("- When your implementation draft is ready, call oratorio.SubmitImplementationDraft with summary, tests, risks, changedFiles, proposedCommitMessage, proposedPrTitle, and proposedPrBody.");
-            prompt.AppendLine("- Do not place machine-readable implementation JSON in the final answer.");
         }
         else
         {
@@ -331,12 +362,6 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
 
         if (run.Purpose == RunPurpose.ReviewAnalysis && item.Source is "github" or "gitlab" && item.Kind == ItemKind.PullRequest)
         {
-            prompt.AppendLine(ReviewDraftIntroInstructions);
-            if (reviewDiff is not null)
-            {
-                prompt.AppendLine("- First inspect the Review diff range file list/stat and focused per-path diffs before concluding the PR/MR is clean.");
-            }
-            prompt.AppendLine(ReviewDraftDiffInstructions);
             if (priorOpenFindings.Count > 0)
             {
                 prompt.AppendLine();
@@ -348,26 +373,6 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
 
                 prompt.AppendLine($"- For each open finding above that the current head now addresses, call {AppServerDynamicToolCatalog.ResolveReviewFindingId} with its findingId and resolutionKind `fixed`. Leave still-present findings open and do not re-report them as new comments.");
             }
-        }
-        if (requiredDynamicTools.Contains("oratorio.SubmitFollowUpDraft", StringComparer.Ordinal))
-        {
-            prompt.AppendLine("- If you identify follow-up work that should be split from the current round, call oratorio.SubmitFollowUpDraft with proposals. Follow-up drafts are advisory and must not be treated as hidden requirements for this round.");
-        }
-
-        prompt.AppendLine();
-        prompt.AppendLine("Constraints:");
-        prompt.AppendLine("- Do not write to GitHub or GitLab.");
-        prompt.AppendLine("- Do not create GitHub/GitLab issues or mutate external issue trackers; use oratorio.SubmitFollowUpDraft for proposed follow-up work.");
-        prompt.AppendLine("- Do not merge, approve, reject, or request changes on GitHub/GitLab.");
-        prompt.AppendLine("- Do not create branches, worktrees, commits, pull requests, or merge requests.");
-        if (run.Purpose == RunPurpose.Implementation)
-        {
-            prompt.AppendLine("- Modify only files inside the Oratorio-managed execution worktree.");
-            prompt.AppendLine("- Do not use local git credentials, push branches, or create PRs/MRs yourself. Oratorio performs delivery after your draft.");
-        }
-        else
-        {
-            prompt.AppendLine("- Do not modify files in the workspace unless a future Oratorio node explicitly enables execution.");
         }
         prompt.AppendLine();
         prompt.AppendLine("Available tools:");
@@ -383,8 +388,33 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
             }
         }
 
-        return new AppServerPrompt(contextJson, prompt.ToString());
+        return new AppServerPrompt(contextJson, prompt.ToString(), runtimeAdditionalContext);
     }
+
+    public static IReadOnlyDictionary<string, AppServerRuntimeAdditionalContextEntry> BuildThreadRuntimeAdditionalContext() =>
+        new Dictionary<string, AppServerRuntimeAdditionalContextEntry>(StringComparer.Ordinal)
+        {
+            ["oratorio.runContract"] = RuntimeEntry(RunContractInstructions),
+            ["oratorio.discussionTurn"] = RuntimeEntry(DiscussionTurnInstructions),
+            ["oratorio.reviewDraft"] = RuntimeEntry(BuildReviewDraftRuntimeContext()),
+            ["oratorio.implementationDraft"] = RuntimeEntry(ImplementationDraftInstructions),
+            ["oratorio.followUpDraft"] = RuntimeEntry(FollowUpDraftInstructions)
+        };
+
+    private static string BuildReviewDraftRuntimeContext()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("PR/MR review draft contract:");
+        sb.AppendLine();
+        sb.AppendLine(ReviewDraftIntroInstructions.Trim());
+        sb.AppendLine("- When the user turn lists a Review diff range, first inspect its file list/stat and focused per-path diffs before concluding the PR/MR is clean.");
+        sb.AppendLine(ReviewDraftDiffInstructions.Trim());
+        sb.AppendLine("- When the user turn lists open findings from earlier published review rounds, call oratorio.ResolveReviewFinding for each finding that the current head now addresses, and do not re-report still-present findings as new comments.");
+        return sb.ToString().Trim();
+    }
+
+    private static AppServerRuntimeAdditionalContextEntry RuntimeEntry(string value) =>
+        new(value.Trim());
 
     private static bool IsOperatorComment(OratorioComment comment) =>
         comment.AuthorKind == AuthorKind.Operator &&
@@ -575,4 +605,7 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
     private sealed record ReviewDiffTarget(string BaseRef, string BaseSha, string HeadRef, string HeadSha);
 }
 
-public sealed record AppServerPrompt(string ContextJson, string Prompt);
+public sealed record AppServerPrompt(
+    string ContextJson,
+    string Prompt,
+    IReadOnlyDictionary<string, AppServerRuntimeAdditionalContextEntry> RuntimeAdditionalContext);

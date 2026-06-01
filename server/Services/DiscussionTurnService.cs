@@ -277,16 +277,25 @@ public sealed class DiscussionTurnService(
                 await FailTurnAsync(discussionTurnId, "dynamicToolRebindUnsupported", "The AppServer cannot rebind Oratorio discussion tools for this thread.", CancellationToken.None);
                 return;
             }
+            if (!client.SupportsRuntimeAdditionalContext)
+            {
+                await FailTurnAsync(discussionTurnId, "runtimeAdditionalContextUnsupported", "The DotCraft AppServer does not support runtime additional context required by Oratorio discussion turns.", CancellationToken.None);
+                return;
+            }
 
             client.SetDynamicToolHandler(async (call, handlerCt) => await HandleDiscussionToolCallAsync(discussionTurnId, call, handlerCt));
-            await client.ResumeThreadAsync(turn.ThreadId, [AppServerDynamicToolCatalog.SubmitDiscussionReply(JsonOptions), AppServerDynamicToolCatalog.ResolveReviewFinding(JsonOptions)], ct);
+            var openFindings = await LoadOpenFindingsAsync(turn.ItemId, ct);
+            var prompt = BuildPrompt(turn, openFindings);
+            await client.ResumeThreadAsync(
+                turn.ThreadId,
+                [AppServerDynamicToolCatalog.SubmitDiscussionReply(JsonOptions), AppServerDynamicToolCatalog.ResolveReviewFinding(JsonOptions)],
+                prompt.RuntimeAdditionalContext,
+                ct);
             await client.SubscribeThreadAsync(turn.ThreadId, ct);
 
-            var openFindings = await LoadOpenFindingsAsync(turn.ItemId, ct);
-            var prompt = BuildPrompt(turn, openFindings, out var contextJson);
             var input = new[]
             {
-                new TurnInputPartDto("text", prompt, null, null, null, null, null, null)
+                new TurnInputPartDto("text", prompt.Prompt, null, null, null, null, null, null)
             };
             var appTurnId = await client.StartTurnAsync(turn.ThreadId, input, turn.ModelId, ct);
             if (string.IsNullOrWhiteSpace(appTurnId))
@@ -295,7 +304,7 @@ public sealed class DiscussionTurnService(
                 return;
             }
 
-            await MarkTurnStartedAsync(discussionTurnId, appTurnId!, contextJson, ct);
+            await MarkTurnStartedAsync(discussionTurnId, appTurnId!, prompt.ContextJson, ct);
             await ConsumeDiscussionNotificationsAsync(discussionTurnId, client, ct);
         }
         catch (OperationCanceledException) when (!outerCt.IsCancellationRequested)
@@ -428,11 +437,12 @@ public sealed class DiscussionTurnService(
         }
     }
 
-    private string BuildPrompt(OratorioDiscussionTurn turn, IReadOnlyList<FindingPromptInfo> openFindings, out string contextJson)
+    private DiscussionPrompt BuildPrompt(OratorioDiscussionTurn turn, IReadOnlyList<FindingPromptInfo> openFindings)
     {
         var context = new
         {
             promptMode = "discussion",
+            runtimeContextVersion = AppServerPromptBuilder.RuntimeContextVersion,
             requiredDynamicTools = new[] { AppServerDynamicToolCatalog.SubmitDiscussionReplyId, AppServerDynamicToolCatalog.ResolveReviewFindingId },
             discussionTurn = new
             {
@@ -467,10 +477,11 @@ public sealed class DiscussionTurnService(
                     turn.BaseRun.Purpose,
                     turn.BaseRun.Summary,
                     turn.BaseRun.CompletedAt
-                },
+            },
             question = turn.QuestionComment?.Body
         };
-        contextJson = JsonSerializer.Serialize(context, JsonOptions);
+        var contextJson = JsonSerializer.Serialize(context, JsonOptions);
+        var runtimeAdditionalContext = AppServerPromptBuilder.BuildThreadRuntimeAdditionalContext();
 
         var prompt = new StringBuilder();
         prompt.AppendLine("You are answering an Oratorio Agent Discussion Turn in an existing DotCraft thread.");
@@ -484,6 +495,9 @@ public sealed class DiscussionTurnService(
         prompt.AppendLine("Most recent completed run:");
         prompt.AppendLine($"- Run: {turn.BaseRunId}");
         prompt.AppendLine($"- Summary: {EmptyToNone(turn.BaseRun?.Summary)}");
+        prompt.AppendLine();
+        prompt.AppendLine("Discussion turn:");
+        prompt.AppendLine($"- discussionTurnId `{turn.DiscussionTurnId}`");
         prompt.AppendLine();
         prompt.AppendLine("Operator question:");
         prompt.AppendLine(turn.QuestionComment?.Body.Trim() ?? "");
@@ -500,16 +514,9 @@ public sealed class DiscussionTurnService(
         }
 
         prompt.AppendLine("Instructions:");
-        prompt.AppendLine($"- Answer only this question for the Oratorio operator.");
-        prompt.AppendLine($"- Call {AppServerDynamicToolCatalog.SubmitDiscussionReplyId} with discussionTurnId `{turn.DiscussionTurnId}` and your Markdown reply.");
-        if (openFindings.Count > 0)
-        {
-            prompt.AppendLine($"- If the discussion concludes that one of the open findings above is a non-issue or already handled, you may call {AppServerDynamicToolCatalog.ResolveReviewFindingId} with its findingId and resolutionKind `dismissed`. Otherwise leave it open. Never resolve a finding just to avoid answering.");
-        }
-
-        prompt.AppendLine("- Do not modify files, create commits, write to GitHub directly, or create follow-up work from this question.");
-        prompt.AppendLine("- Do not treat this discussion question as next-round feedback unless the operator later adds it as feedback.");
-        return prompt.ToString();
+        prompt.AppendLine("- Answer only the operator question shown above.");
+        prompt.AppendLine("- Use the Oratorio discussion runtime context for reply submission and boundaries.");
+        return new DiscussionPrompt(contextJson, prompt.ToString(), runtimeAdditionalContext);
     }
 
     private async Task<IReadOnlyList<FindingPromptInfo>> LoadOpenFindingsAsync(string itemId, CancellationToken ct) =>
@@ -552,6 +559,13 @@ public sealed class DiscussionTurnService(
             var root = document.RootElement;
             if (!TryGetProperty(root, "promptMode", "PromptMode", out var promptMode) ||
                 !string.Equals(promptMode.GetString(), "compact", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            if (!TryGetProperty(root, "runtimeContextVersion", "RuntimeContextVersion", out var runtimeContextVersion) ||
+                runtimeContextVersion.ValueKind != JsonValueKind.String ||
+                !string.Equals(runtimeContextVersion.GetString(), AppServerPromptBuilder.RuntimeContextVersion, StringComparison.Ordinal))
             {
                 return false;
             }
@@ -648,4 +662,9 @@ public sealed class DiscussionTurnService(
 
     private static string? EmptyToNull(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private sealed record DiscussionPrompt(
+        string ContextJson,
+        string Prompt,
+        IReadOnlyDictionary<string, AppServerRuntimeAdditionalContextEntry> RuntimeAdditionalContext);
 }
