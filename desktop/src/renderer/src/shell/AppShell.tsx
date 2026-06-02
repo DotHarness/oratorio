@@ -28,6 +28,8 @@ import { BoardView, type BoardViewMode } from '../views/BoardView'
 import { TaskDrawer } from '../views/TaskDrawer'
 import { TaskStatusPanel } from '../views/drawer/TaskStatusPanel'
 import { CelebrationBurst } from '../components/feedback/CelebrationBurst'
+import { OnboardingTour } from '../components/onboarding/OnboardingTour'
+import { markOnboardingSeen, shouldShowOnboarding } from '../lib/onboarding'
 import { useBoardStream } from '../hooks/useBoardStream'
 import { applyBoardEvent } from '../lib/sortOrder'
 import { parseTaskSearchQuery, taskSearchApiSource } from '../lib/taskSearch'
@@ -288,6 +290,15 @@ function OratorioApp() {
       latestThemeRef.current = resolvedTheme
       return resolvedTheme
     })
+  }, [])
+  const [onboardingOpen, setOnboardingOpen] = useState(false)
+  const onboardingAutoTriggeredRef = useRef(false)
+  const completeOnboarding = useCallback(() => {
+    markOnboardingSeen()
+    setOnboardingOpen(false)
+  }, [])
+  const replayOnboarding = useCallback(() => {
+    setOnboardingOpen(true)
   }, [])
   const appIconSrc = `${import.meta.env.BASE_URL}oratorio-icon.svg`
   const dotcraftIconSrc = `${import.meta.env.BASE_URL}dotcraft-icon.svg`
@@ -948,6 +959,17 @@ function OratorioApp() {
     }, INITIAL_LAUNCH_REVEAL_MS)
 
     return () => window.clearTimeout(timer)
+  }, [initialLaunchPhase])
+
+  useEffect(() => {
+    if (initialLaunchPhase !== 'ready' || onboardingAutoTriggeredRef.current) {
+      return
+    }
+
+    onboardingAutoTriggeredRef.current = true
+    if (shouldShowOnboarding()) {
+      setOnboardingOpen(true)
+    }
   }, [initialLaunchPhase])
 
   useEffect(() => {
@@ -2374,6 +2396,7 @@ function OratorioApp() {
                   isStartingAppServer={isStartingAppServer}
                   serverRestartPending={Boolean(pendingServerRestart)}
                   onServerRestartRequired={handleServerRestartRequired}
+                  onReplayOnboarding={replayOnboarding}
                 />
               }
             />
@@ -2490,6 +2513,8 @@ function OratorioApp() {
         onCreateIntent={startTaskCreateCelebration}
         submitLocalTaskForm={submitLocalTaskForm}
       />
+
+      {onboardingOpen ? <OnboardingTour onClose={completeOnboarding} /> : null}
     </main>
   )
 

@@ -11,6 +11,7 @@ import enDomain from './resources/en/domain.json'
 import enErrors from './resources/en/errors.json'
 import enDetail from './resources/en/detail.json'
 import enItemDetail from './resources/en/itemDetail.json'
+import enOnboarding from './resources/en/onboarding.json'
 
 import zhCommon from './resources/zh-CN/common.json'
 import zhBoard from './resources/zh-CN/board.json'
@@ -21,6 +22,7 @@ import zhDomain from './resources/zh-CN/domain.json'
 import zhErrors from './resources/zh-CN/errors.json'
 import zhDetail from './resources/zh-CN/detail.json'
 import zhItemDetail from './resources/zh-CN/itemDetail.json'
+import zhOnboarding from './resources/zh-CN/onboarding.json'
 
 export const defaultNS = 'common' as const
 export const localeStorageKey = 'oratorio.ui.locale'
@@ -43,6 +45,7 @@ export const resources = {
     errors: enErrors,
     detail: enDetail,
     itemDetail: enItemDetail,
+    onboarding: enOnboarding,
   },
   'zh-CN': {
     common: zhCommon,
@@ -54,6 +57,7 @@ export const resources = {
     errors: zhErrors,
     detail: zhDetail,
     itemDetail: zhItemDetail,
+    onboarding: zhOnboarding,
   },
 } as const
 
@@ -65,7 +69,7 @@ void i18n
     fallbackLng: 'en',
     supportedLngs: ['en', 'zh-CN'],
     defaultNS,
-    ns: ['common', 'board', 'drawer', 'review', 'settings', 'domain', 'errors', 'detail', 'itemDetail'],
+    ns: ['common', 'board', 'drawer', 'review', 'settings', 'domain', 'errors', 'detail', 'itemDetail', 'onboarding'],
     interpolation: { escapeValue: false },
     returnNull: false,
     detection: {

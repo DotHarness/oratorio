@@ -1,0 +1,55 @@
+{
+  "title": "Quick start",
+  "ariaLabel": "Oratorio quick start tour",
+  "controls": {
+    "back": "Back",
+    "next": "Next",
+    "done": "Get started",
+    "skip": "Skip tour",
+    "close": "Close tour",
+    "step": "Step {{current}} of {{total}}"
+  },
+  "replay": {
+    "groupTitle": "Help",
+    "label": "Quick start tour",
+    "description": "Replay the guided walkthrough of the Oratorio board.",
+    "button": "Replay tour"
+  },
+  "figureFallback": "Preview unavailable offline",
+  "steps": {
+    "welcome": {
+      "title": "Welcome to Oratorio",
+      "body": "Oratorio is a board where you hand work to your AI agent — DotCraft — and watch it go. Before you start, make sure DotCraft is already set up for your project.",
+      "cta": "Open DotCraft setup"
+    },
+    "columns": {
+      "title": "The rhythm of the board",
+      "body": "Four columns follow the natural flow of work: To do → In progress → In review → Done. Every card moves left to right as your agent picks it up and finishes it."
+    },
+    "connectProject": {
+      "title": "Connect your project",
+      "body": "Open Settings → Projects and point Oratorio at the same folder DotCraft is configured for. One connection, one save."
+    },
+    "credentials": {
+      "title": "Pull in real work (optional)",
+      "body": "Connect GitHub or GitLab under Settings → Credentials and Oratorio mirrors your issues, PRs, and MRs as cards. Skip this to just try the board with your own tasks."
+    },
+    "newTask": {
+      "title": "Write your first task",
+      "body": "Click New task to add a local one — a title, a short description, and the project you connected. The card lands in the To do column."
+    },
+    "handOff": {
+      "title": "Hand it off to the agent",
+      "body": "Drag a card from To do into In progress. Oratorio gives the agent a safe copy of your project, DotCraft picks up the task, and progress streams back into the card."
+    },
+    "review": {
+      "title": "Review and decide",
+      "body": "When a card reaches In review, open it to read the agent's summary, inline suggestions, and comments. Then choose: Approve, Ask for changes, or Reject."
+    },
+    "next": {
+      "title": "You're ready",
+      "body": "That's a full cycle — task created, agent worked, you decided. You can replay this tour anytime from Settings → General.",
+      "cta": "Open the full guide"
+    }
+  }
+}

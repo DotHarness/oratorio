@@ -247,7 +247,7 @@ export function BoardView({
         <RepositoryFilterDropdown value={repositoryFilter} repositories={repositories} onChange={setRepositoryFilter} />
         <FilterDropdown label={t('board:filters.assignee')} value={assigneeFilter} onChange={setAssigneeFilter} options={filterOptions(t('board:filters.allAssignees'), assigneeOptions)} />
         <div className="board-toolbar-actions">
-          <ActionIcon label={t('board:actions.newLocalTask')} onClick={openCreateLocalTask}>
+          <ActionIcon label={t('board:actions.newLocalTask')} onClick={openCreateLocalTask} dataTour="new-task">
             <Plus size={16} />
           </ActionIcon>
           <ActionIcon label={pullGitHubLabel} title={pullGitHubTitle} onClick={() => void syncGitHubSource()} disabled={!canPullGitHub}>
@@ -256,7 +256,7 @@ export function BoardView({
           <ActionIcon label={t('board:actions.refresh')} onClick={() => void (isActiveView ? refreshAll() : refreshClosedItems())}>
             <RefreshCw size={16} />
           </ActionIcon>
-          <ActionIcon label={t('board:actions.settings')} onClick={openSettings}>
+          <ActionIcon label={t('board:actions.settings')} onClick={openSettings} dataTour="settings-gear">
             <Settings size={16} />
           </ActionIcon>
         </div>
@@ -264,11 +264,11 @@ export function BoardView({
 
       {isActiveView ? (
         <DragDropContext onDragEnd={commander.handleDragEnd}>
-          <div className="board-columns" aria-label={t('board:aria.statusColumns')}>
+          <div className="board-columns" aria-label={t('board:aria.statusColumns')} data-tour="board-columns">
             {activeTaskStatusColumns().map((column) => {
               const columnItems = itemsByStatus.get(column.id) ?? []
               return (
-                <section className="board-column" aria-label={column.label} key={column.id}>
+                <section className="board-column" aria-label={column.label} key={column.id} data-tour={`board-column-${column.id}`}>
                   <header className="board-column-header">
                     <span>
                       <strong>{column.label}</strong>

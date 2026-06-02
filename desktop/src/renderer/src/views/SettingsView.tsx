@@ -389,6 +389,7 @@ type SettingsViewProps = {
   isStartingAppServer: boolean
   serverRestartPending: boolean
   onServerRestartRequired: (restart: { signature: string; fields: string[] }) => void
+  onReplayOnboarding?: () => void
 }
 
 export function SettingsView({
@@ -411,6 +412,7 @@ export function SettingsView({
   isStartingAppServer,
   serverRestartPending,
   onServerRestartRequired,
+  onReplayOnboarding,
 }: SettingsViewProps) {
   const { section } = useParams()
   const navigate = useNavigate()
@@ -970,6 +972,20 @@ export function SettingsView({
                         options={windowCloseBehaviorOptions}
                         onChange={updateWindowCloseBehavior}
                       />
+                    }
+                  />
+                </SettingsGroup>
+              ) : null}
+              {onReplayOnboarding ? (
+                <SettingsGroup title={t('onboarding:replay.groupTitle')}>
+                  <SettingsRow
+                    icon={RotateCcw}
+                    label={t('onboarding:replay.label')}
+                    description={t('onboarding:replay.description')}
+                    control={
+                      <button type="button" className="secondary-button inline compact-row-action settings-action-button" onClick={onReplayOnboarding}>
+                        {t('onboarding:replay.button')}
+                      </button>
                     }
                   />
                 </SettingsGroup>
