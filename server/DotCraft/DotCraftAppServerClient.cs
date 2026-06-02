@@ -326,7 +326,7 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
 
     public async Task<AppServerThreadReadResult> ReadThreadAsync(string threadId, CancellationToken ct)
     {
-        var read = await client.Threads.ReadAsync(threadId, includeTurns: true, ct);
+        var read = await client.Threads.ReadAsync(threadId, includeTurns: true, cancellationToken: ct);
         var thread = read.Thread;
         var items = new List<ConversationItemDto>();
         if (thread.ValueKind == JsonValueKind.Object &&
