@@ -703,13 +703,13 @@ public sealed class OratorioSchemaMigrator(OratorioDbContext db)
     private async Task BackfillRunLifecycleColumnsAsync(CancellationToken ct)
     {
         await db.Database.ExecuteSqlRawAsync(
-            "UPDATE runs SET progress_percent = 100 WHERE status IN ('Succeeded', 'Failed', 'TimedOut') AND progress_percent = 0",
+            "UPDATE runs SET progress_percent = 100 WHERE status IN ('Succeeded', 'Failed', 'Cancelled', 'TimedOut') AND progress_percent = 0",
             ct);
         await db.Database.ExecuteSqlRawAsync(
             "UPDATE runs SET status_message = 'Review output is ready.' WHERE status = 'Succeeded' AND status_message IS NULL",
             ct);
         await db.Database.ExecuteSqlRawAsync(
-            "UPDATE runs SET status_message = COALESCE(error_message, 'Run failed.') WHERE status IN ('Failed', 'TimedOut') AND status_message IS NULL",
+            "UPDATE runs SET status_message = COALESCE(error_message, CASE WHEN status = 'Cancelled' THEN 'Run cancelled.' ELSE 'Run failed.' END) WHERE status IN ('Failed', 'Cancelled', 'TimedOut') AND status_message IS NULL",
             ct);
     }
 

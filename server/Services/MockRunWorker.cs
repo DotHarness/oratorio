@@ -75,10 +75,16 @@ public sealed class MockRunWorker(IServiceScopeFactory scopeFactory, IClock cloc
             AdvanceRun(run, now);
         }
 
-        await RecordCompletedReviewGatesAsync(scope, activeRuns, ct);
-        await RecordFailedReviewGatesAsync(scope, activeRuns, ct);
+        var runsStillOwnedByThisTick = await FilterRunsStillOwnedByThisTickAsync(db, activeRuns, ct);
+        if (runsStillOwnedByThisTick.Count == 0)
+        {
+            return;
+        }
+
+        await RecordCompletedReviewGatesAsync(scope, runsStillOwnedByThisTick, ct);
+        await RecordFailedReviewGatesAsync(scope, runsStillOwnedByThisTick, ct);
         await db.SaveChangesAsync(ct);
-        PublishRunItems(activeRuns, now);
+        PublishRunItems(runsStillOwnedByThisTick, now);
     }
 
     private static async Task<List<OratorioRun>> LoadActiveRuns(OratorioDbContext db, CancellationToken ct) =>
@@ -87,6 +93,41 @@ public sealed class MockRunWorker(IServiceScopeFactory scopeFactory, IClock cloc
             .Include(x => x.Round)
             .Where(x => x.RunnerKind == "mock" && ActiveStatuses.Contains(x.Status))
             .ToListAsync(ct);
+
+    private static async Task<IReadOnlyList<OratorioRun>> FilterRunsStillOwnedByThisTickAsync(
+        OratorioDbContext db,
+        IReadOnlyList<OratorioRun> runs,
+        CancellationToken ct)
+    {
+        var runIds = runs.Select(x => x.RunId).ToArray();
+        var currentStatuses = await db.Runs
+            .AsNoTracking()
+            .Where(x => runIds.Contains(x.RunId))
+            .ToDictionaryAsync(x => x.RunId, x => x.Status, ct);
+        var retained = new List<OratorioRun>(runs.Count);
+        foreach (var run in runs)
+        {
+            if (!currentStatuses.TryGetValue(run.RunId, out var currentStatus) || !ActiveStatuses.Contains(currentStatus))
+            {
+                db.Entry(run).State = EntityState.Unchanged;
+                if (run.Item is not null)
+                {
+                    db.Entry(run.Item).State = EntityState.Unchanged;
+                }
+
+                if (run.Round is not null)
+                {
+                    db.Entry(run.Round).State = EntityState.Unchanged;
+                }
+
+                continue;
+            }
+
+            retained.Add(run);
+        }
+
+        return retained;
+    }
 
     private void PublishRunItems(IEnumerable<OratorioRun> runs, DateTimeOffset timestamp)
     {

@@ -1,6 +1,7 @@
 {
   "itemNotFound": "The requested item does not exist.",
   "runNotFound": "The requested run does not exist.",
+  "runNotCancellable": "Only dispatching or running tasks can be cancelled.",
   "reviewDraftUnsupportedItem": "Review drafts are only supported for GitHub pull request and GitLab merge request runs.",
   "invalidImplementationDraftBinding": "Implementation draft is missing its run binding.",
   "followUpDraftNotFound": "The requested follow-up draft does not exist.",

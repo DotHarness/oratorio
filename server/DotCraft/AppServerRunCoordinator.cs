@@ -18,6 +18,7 @@ public interface IAppServerRunCoordinator
     Task<DrawerSnapshotResponse> GetSnapshotAsync(string runId, CancellationToken ct);
     Task<SubmitTurnResponse> SubmitTurnAsync(string runId, IReadOnlyList<TurnInputPartDto> input, string? modelId, CancellationToken ct);
     Task<InterruptResponse> InterruptTurnAsync(string runId, CancellationToken ct);
+    Task<bool> TryInterruptTurnAsync(string runId, CancellationToken ct);
     Task<IReadOnlyList<ModelInfoDto>> GetModelsAsync(string? endpointUrl, CancellationToken ct);
 }
 
@@ -128,10 +129,7 @@ public sealed class AppServerRunCoordinator(
 
     public async Task<InterruptResponse> InterruptTurnAsync(string runId, CancellationToken ct)
     {
-        if (!_bindings.TryGetValue(runId, out var binding) ||
-            binding.Client is null ||
-            string.IsNullOrWhiteSpace(binding.ThreadId) ||
-            string.IsNullOrWhiteSpace(binding.CurrentTurnId))
+        if (!await TryInterruptTurnAsync(runId, ct))
         {
             throw new OratorioApiException(
                 StatusCodes.Status422UnprocessableEntity,
@@ -140,8 +138,21 @@ public sealed class AppServerRunCoordinator(
                 new Dictionary<string, object?> { ["runId"] = runId });
         }
 
-        await binding.Client.InterruptTurnAsync(binding.ThreadId, binding.CurrentTurnId!, ct);
         return new InterruptResponse(true);
+    }
+
+    public async Task<bool> TryInterruptTurnAsync(string runId, CancellationToken ct)
+    {
+        if (!_bindings.TryGetValue(runId, out var binding) ||
+            binding.Client is null ||
+            string.IsNullOrWhiteSpace(binding.ThreadId) ||
+            string.IsNullOrWhiteSpace(binding.CurrentTurnId))
+        {
+            return false;
+        }
+
+        await binding.Client.InterruptTurnAsync(binding.ThreadId, binding.CurrentTurnId!, ct);
+        return true;
     }
 
     public async Task<IReadOnlyList<ModelInfoDto>> GetModelsAsync(string? endpointUrl, CancellationToken ct)

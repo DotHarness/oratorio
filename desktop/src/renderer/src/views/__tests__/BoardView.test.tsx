@@ -11,7 +11,7 @@ function makeItem(overrides: Partial<WorkItem> & { id: string; title: string; sh
     itemId: overrides.itemId ?? overrides.id,
     sourceKey: overrides.sourceKey ?? 'local',
     externalId: overrides.externalId ?? overrides.id,
-    currentRunId: null,
+    currentRunId: overrides.currentRunId ?? null,
     type: overrides.type ?? 'task',
     kind: overrides.kind ?? 'localTask',
     number: overrides.number ?? overrides.shortId,
@@ -263,6 +263,64 @@ describe('BoardView', () => {
     act(() => dragApiRef.current!.handleDragEnd(dropResult('review-1', 'in_review', 0, 'in_progress', 0)))
 
     expect(screen.getByRole('form', { name: /Request changes for DEF-2/ })).toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('confirms in progress to todo cancellation before calling the API', async () => {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockReset()
+    const item = makeItem({
+      id: 'running-1',
+      itemId: 'item-running',
+      title: 'Cancel this run',
+      shortId: 'DEF-10',
+      taskStatus: 'in_progress',
+      state: 'running',
+      currentRunId: 'run-1',
+    })
+    const cancelled = { ...item, taskStatus: 'todo' as const, state: 'discovered' as const, currentRunId: null }
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify(detailResponse(cancelled)), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ tasks: [] }), { status: 200 }))
+    const dragApiRef: { current: BoardViewTestApi | null } = { current: null }
+    const showNotice = vi.fn()
+
+    renderBoard([item], { dragApiRef, showNotice })
+
+    act(() => dragApiRef.current!.handleDragEnd(dropResult('running-1', 'in_progress', 0, 'todo', 0)))
+
+    expect(screen.getByRole('dialog', { name: /Cancel run for DEF-10/ })).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel run' }))
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/items/id/item-running/cancel-run', expect.any(Object))
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/tasks/reorder', expect.any(Object))
+    expect(showNotice).toHaveBeenCalledWith('Cancelled run for DEF-10.')
+  })
+
+  it('rejects dragging failed in progress tasks back to todo', () => {
+    const showNotice = vi.fn()
+    const item = makeItem({
+      id: 'failed-1',
+      itemId: 'item-failed',
+      title: 'Failed run',
+      shortId: 'DEF-11',
+      taskStatus: 'in_progress',
+      state: 'failed',
+    })
+    const dragApiRef: { current: BoardViewTestApi | null } = { current: null }
+
+    renderBoard([item], { dragApiRef, showNotice })
+
+    act(() => dragApiRef.current!.handleDragEnd(dropResult('failed-1', 'in_progress', 0, 'todo', 0)))
+
+    expect(showNotice).toHaveBeenCalledWith('Only dispatching or running tasks can be cancelled by dragging.', 'error')
     expect(fetch).not.toHaveBeenCalled()
   })
 

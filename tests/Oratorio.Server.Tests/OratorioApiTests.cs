@@ -95,6 +95,80 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
+    public async Task CancelRun_StopsLongMockRun_AndReturnsItemToDiscovered()
+    {
+        await using var app = new TestOratorioApp();
+        var client = app.CreateClient();
+
+        var task = await CreateLocalTaskAsync(client, "Cancel mock run");
+        var dispatched = await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{task.Item.ItemId}/dispatch",
+            new DispatchRequest("mock", "Long enough to cancel.", MockOutcome.Success, 30));
+
+        var runId = Assert.Single(dispatched.Runs).RunId;
+        var cancelled = await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{task.Item.ItemId}/cancel-run",
+            new CancelRunRequest("Operator moved it back to To do."));
+
+        Assert.Equal(ItemState.Discovered, cancelled.Item.State);
+        Assert.Null(cancelled.Item.CurrentRunId);
+        Assert.Equal(CheckState.NotConfigured, cancelled.Item.CheckState);
+        Assert.Contains(cancelled.Runs, x => x.RunId == runId && x.Status == RunStatus.Cancelled && x.ErrorCode == "operatorCancelled");
+        Assert.Contains(cancelled.Rounds, x => x.RoundNumber == 1 && x.Status == RoundStatus.Cancelled);
+        Assert.Contains(cancelled.Timeline, x => x.Kind == TimelineEventKind.RunCancelled);
+
+        await Task.Delay(1200);
+        var afterWorkerTick = await client.GetFromJsonAsync<ItemDetailResponse>($"/api/v1/items/id/{task.Item.ItemId}", JsonOptions);
+        Assert.Equal(ItemState.Discovered, afterWorkerTick!.Item.State);
+        Assert.Contains(afterWorkerTick.Runs, x => x.RunId == runId && x.Status == RunStatus.Cancelled);
+        Assert.DoesNotContain(afterWorkerTick.Runs, x => x.RunId == runId && x.Status == RunStatus.Succeeded);
+    }
+
+    [Fact]
+    public async Task CancelRun_IsRejected_WhenItemDoesNotHaveActiveRun()
+    {
+        await using var app = new TestOratorioApp();
+        var client = app.CreateClient();
+
+        await CreateItemAsync(client, "task:test-cancel-discovered");
+        await AssertCancelRejectedAsync(client, "/api/v1/items/local/task:test-cancel-discovered/cancel-run");
+
+        await CreateItemAsync(client, "task:test-cancel-reviewed");
+        await PostAsync<ItemDetailResponse>(
+            client,
+            "/api/v1/items/local/task:test-cancel-reviewed/dispatch",
+            new DispatchRequest("mock", "Complete.", MockOutcome.Success, 1));
+        await WaitForItemAsync(client, "task:test-cancel-reviewed", x => x.Item.State == ItemState.AwaitingReview);
+        await AssertCancelRejectedAsync(client, "/api/v1/items/local/task:test-cancel-reviewed/cancel-run");
+
+        await CreateItemAsync(client, "task:test-cancel-failed");
+        await PostAsync<ItemDetailResponse>(
+            client,
+            "/api/v1/items/local/task:test-cancel-failed/dispatch",
+            new DispatchRequest("mock", "Fail.", MockOutcome.Fail, 1));
+        await WaitForItemAsync(client, "task:test-cancel-failed", x => x.Item.State == ItemState.Failed);
+        await AssertCancelRejectedAsync(client, "/api/v1/items/local/task:test-cancel-failed/cancel-run");
+
+        await CreateItemAsync(client, "task:test-cancel-approved");
+        await PostAsync<ItemDetailResponse>(
+            client,
+            "/api/v1/items/local/task:test-cancel-approved/dispatch",
+            new DispatchRequest("mock", "Complete.", MockOutcome.Success, 1));
+        await WaitForItemAsync(client, "task:test-cancel-approved", x => x.Item.State == ItemState.AwaitingReview);
+        await PostAsync<ItemDetailResponse>(
+            client,
+            "/api/v1/items/local/task:test-cancel-approved/approve",
+            new DecisionRequest("Approved."));
+        await AssertCancelRejectedAsync(client, "/api/v1/items/local/task:test-cancel-approved/cancel-run");
+
+        var archived = await CreateLocalTaskAsync(client, "Archived cancel target");
+        await PostAsync<ItemDetailResponse>(client, $"/api/v1/items/id/{archived.Item.ItemId}/archive", new { });
+        await AssertCancelRejectedAsync(client, $"/api/v1/items/id/{archived.Item.ItemId}/cancel-run");
+    }
+
+    [Fact]
     public async Task FailedMockRun_CanBeRetried_InSameRoundWithNextAttempt()
     {
         await using var app = new TestOratorioApp();
@@ -1637,6 +1711,41 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
+    public async Task GitHubPullRequestCancelRun_CompletesReviewGateCheckAsCancelled()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        await using var app = new TestOratorioApp(services =>
+        {
+            services.RemoveAll<IGitHubApiClient>();
+            services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+        });
+        var client = app.CreateClient();
+
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/dispatch",
+            new DispatchRequest("mock", "Run GitHub PR review until cancelled.", MockOutcome.Success, 30));
+
+        var cancelled = await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/cancel-run",
+            new CancelRunRequest("No longer needed."));
+
+        var check = Assert.Single(fakeGitHub.CheckRuns);
+        Assert.Equal("completed", check.Status);
+        Assert.Equal("cancelled", check.Conclusion);
+        Assert.Equal(1, check.UpdateCount);
+        Assert.Contains(cancelled.SourceWrites, write =>
+            write.Kind == SourceWriteKind.CheckRun &&
+            write.Intent == "reviewGateRunCancelled" &&
+            write.Status == SourceWriteStatus.Succeeded);
+    }
+
+    [Fact]
     public async Task GitHubPullRequestApprove_WritesReviewAndCheckRun()
     {
         var fakeGitHub = new FakeGitHubApiClient();
@@ -1960,6 +2069,45 @@ public sealed class OratorioApiTests
         Assert.NotEqual("appServerFailed", run.ErrorCode);
         Assert.Contains("DotCraft analysis complete", run.Summary);
         Assert.Equal(1, fakeAppServer.StartThreadCount);
+    }
+
+    [Fact]
+    public async Task CancelRun_InterruptsActiveAppServerTurn_AndKeepsRunCancelled()
+    {
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.Hold);
+        await using var app = new TestOratorioApp(services =>
+        {
+            services.RemoveAll<IDotCraftAppServerProcessManager>();
+            services.RemoveAll<IDotCraftAppServerClientFactory>();
+            services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+            services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+        });
+        var client = app.CreateClient();
+
+        await CreateItemAsync(client, "task:test-cancel-appserver");
+        await PostAsync<ItemDetailResponse>(
+            client,
+            "/api/v1/items/local/task:test-cancel-appserver/dispatch",
+            new DispatchRequest("appServer", "Hold until cancellation.", null, null));
+
+        var running = await WaitForItemAsync(client, "task:test-cancel-appserver", x => x.Item.State == ItemState.Running);
+        var runId = running.Item.CurrentRunId!;
+
+        var cancelled = await PostAsync<ItemDetailResponse>(
+            client,
+            "/api/v1/items/local/task:test-cancel-appserver/cancel-run",
+            new CancelRunRequest("Stop this AppServer run."));
+
+        Assert.Equal(ItemState.Discovered, cancelled.Item.State);
+        Assert.Null(cancelled.Item.CurrentRunId);
+        Assert.Contains(cancelled.Runs, x => x.RunId == runId && x.Status == RunStatus.Cancelled);
+        Assert.Contains(fakeAppServer.InterruptedTurns, x => x.ThreadId == "thread-test-1" && x.TurnId == "turn-test-1");
+
+        await Task.Delay(300);
+        var afterCancelledNotification = await client.GetFromJsonAsync<ItemDetailResponse>("/api/v1/items/local/task:test-cancel-appserver", JsonOptions);
+        Assert.Equal(ItemState.Discovered, afterCancelledNotification!.Item.State);
+        Assert.Contains(afterCancelledNotification.Runs, x => x.RunId == runId && x.Status == RunStatus.Cancelled);
+        Assert.DoesNotContain(afterCancelledNotification.Runs, x => x.RunId == runId && x.Status == RunStatus.Failed);
     }
 
     [Fact]
@@ -4214,6 +4362,14 @@ public sealed class OratorioApiTests
                 "local/m1",
                 ["m1", "local"]));
 
+    private static async Task AssertCancelRejectedAsync(HttpClient client, string path)
+    {
+        var response = await client.PostAsJsonAsync(path, new CancelRunRequest("Stop."), JsonOptions);
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
+        Assert.Equal("runNotCancellable", error?.Error.Code);
+    }
+
     private static async Task WaitUntilAsync(Func<bool> predicate)
     {
         var deadline = DateTimeOffset.UtcNow.AddSeconds(8);
@@ -5180,6 +5336,7 @@ internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) :
     public int ConnectCount { get; private set; }
     public List<string> StartedThreadIds { get; } = [];
     public List<string> TurnThreadIds { get; } = [];
+    public List<(string ThreadId, string TurnId)> InterruptedTurns { get; } = [];
     public bool UseMismatchedToolThreadId { get; set; }
     public bool SupportsDynamicToolRebind { get; set; } = true;
     public bool SupportsRuntimeAdditionalContext { get; set; } = true;
@@ -5216,6 +5373,7 @@ internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) :
                 _turnCount++;
                 return $"turn-test-{_turnCount}";
             },
+            (threadId, turnId) => InterruptedTurns.Add((threadId, turnId)),
             () => SupportsDynamicToolRebind,
             () => SupportsRuntimeAdditionalContext,
             () => UseMismatchedToolThreadId,
@@ -5234,6 +5392,7 @@ internal sealed class FakeAppServerClient(
     Func<AppServerThreadStartRequest, string> startThread,
     Action<AppServerThreadResumeRequest> resumeThread,
     Func<string, string> startTurn,
+    Action<string, string> interruptTurn,
     Func<bool> supportsDynamicToolRebind,
     Func<bool> supportsRuntimeAdditionalContext,
     Func<bool> useMismatchedToolThreadId,
@@ -5619,6 +5778,7 @@ internal sealed class FakeAppServerClient(
 
     public Task InterruptTurnAsync(string threadId, string turnId, CancellationToken ct)
     {
+        interruptTurn(threadId, turnId);
         _notifications.Writer.TryWrite(Notification("turn/cancelled", new { threadId, turnId }));
         return Task.CompletedTask;
     }

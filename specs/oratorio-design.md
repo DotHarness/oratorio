@@ -111,10 +111,12 @@ Oratorio state names are product states, not built-in Automations states.
 stateDiagram-v2
     [*] --> Discovered
     Discovered --> Dispatching: Dispatch
+    Dispatching --> Discovered: Cancel run
     Dispatching --> Running: Runner started
     Dispatching --> Failed: Preparation failed
     Running --> AwaitingReview: Run succeeded
-    Running --> Failed: Run failed, cancelled, or timed out
+    Running --> Failed: Run failed or timed out
+    Running --> Discovered: Cancel run
     AwaitingReview --> Approved: Approve
     AwaitingReview --> Discovered: Request changes
     AwaitingReview --> Rejected: Reject
@@ -134,6 +136,11 @@ progress, heartbeat, summary, and error information when available.
 - Timeline entries are operator-facing projections; canonical state remains in
 items, rounds, runs, comments, decisions, source snapshots, and source write
 logs.
+- Operator cancellation is available only while an item is `dispatching` or
+  `running`. It marks the active run as `cancelled`, closes the current round as
+  `cancelled`, clears the current run, and returns the item to `discovered`.
+  Cancellation is a run lifecycle action, not a decision, and the next dispatch
+  creates the next numbered round.
 - `requestChanges` requires non-empty feedback, records a linked operator
 comment, closes the current round as `changesRequested`, and returns the item
 to `discovered`.

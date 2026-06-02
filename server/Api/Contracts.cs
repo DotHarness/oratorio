@@ -526,6 +526,8 @@ public sealed record DispatchRequest(
 
 public sealed record DecisionRequest(string? Body);
 
+public sealed record CancelRunRequest(string? Body);
+
 public sealed record TaskReorderRequest(IReadOnlyList<TaskReorderEntry> Updates);
 
 public sealed record TaskReorderEntry(string TaskId, long SortOrder);

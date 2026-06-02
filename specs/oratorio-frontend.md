@@ -155,6 +155,16 @@ The board owns:
 - drag-and-drop operations;
 - loading, empty, error, reconnect, and undo states.
 
+Drag-and-drop operations are lifecycle actions, not arbitrary column edits. The
+Active board supports dispatching `todo` cards to `in_progress`, requesting
+changes from `in_review` back to `in_progress`, approving `in_review` cards to
+`done`, and confirmed active-run cancellation from `in_progress` back to
+`todo`. Run cancellation is available only for cards whose lifecycle state is
+`dispatching` or `running`; failed cards that project to `in_progress` remain
+non-cancellable by dragging. Confirmed cancellation interrupts the active
+DotCraft run when one is attached, returns the card to `todo`, and does not show
+an undo toast because the interrupt is an external side effect.
+
 Column labels:
 
 | TaskStatus | Label |

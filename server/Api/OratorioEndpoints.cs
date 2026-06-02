@@ -479,6 +479,16 @@ public static class OratorioEndpoints
             return Results.Ok(result);
         });
 
+        group.MapPost("/items/id/{itemId}/cancel-run", async (
+            string itemId,
+            CancelRunRequest request,
+            OratorioService service,
+            CancellationToken ct) =>
+        {
+            var result = await service.CancelRunByIdAsync(itemId, request, ct);
+            return Results.Ok(result);
+        });
+
         group.MapPost("/items/id/{itemId}/rereview", async (
             string itemId,
             OratorioService service,
@@ -562,6 +572,17 @@ public static class OratorioEndpoints
             CancellationToken ct) =>
         {
             var result = await service.DispatchAsync(source, externalId, request, ct);
+            return Results.Ok(result);
+        });
+
+        group.MapPost("/items/{source}/{externalId}/cancel-run", async (
+            string source,
+            string externalId,
+            CancelRunRequest request,
+            OratorioService service,
+            CancellationToken ct) =>
+        {
+            var result = await service.CancelRunAsync(source, externalId, request, ct);
             return Results.Ok(result);
         });
 

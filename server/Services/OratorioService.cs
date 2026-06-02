@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Oratorio.Server.Api;
 using Oratorio.Server.Data;
 using Oratorio.Server.Domain;
+using Oratorio.Server.DotCraft;
 using Oratorio.Server.GitLab;
 using Oratorio.Server.GitHub;
 using Oratorio.Server.Realtime;
@@ -20,8 +21,11 @@ public sealed class OratorioService(
     ImplementationDraftService implementationDraftService,
     FollowUpDraftService followUpDraftService,
     TaskBoardPlacementService taskBoardPlacement,
+    IAppServerRunCoordinator appServerRunCoordinator,
     BoardEventHub boardEvents)
 {
+    private static readonly RunStatus[] ActiveRunStatuses = [RunStatus.Queued, RunStatus.Dispatching, RunStatus.Running];
+
     public async Task<ItemListResponse> ListItemsAsync(
         string? state,
         string? source,
@@ -167,6 +171,12 @@ public sealed class OratorioService(
     {
         var item = await GetItemByIdAsync(itemId, tracking: false, ct);
         return await DispatchAsync(item.Source, item.ExternalId, request, trigger, ct);
+    }
+
+    public async Task<ItemDetailResponse> CancelRunByIdAsync(string itemId, CancelRunRequest request, CancellationToken ct)
+    {
+        var item = await GetItemByIdAsync(itemId, tracking: false, ct);
+        return await CancelRunAsync(item.Source, item.ExternalId, request, ct);
     }
 
     public async Task<ItemDetailResponse> ReReviewPullRequestByIdAsync(string itemId, CancellationToken ct)
@@ -460,6 +470,74 @@ public sealed class OratorioService(
 
         await db.SaveChangesAsync(ct);
         PublishTaskUpdated(item);
+        return await GetItemDetailAsync(source, externalId, ct);
+    }
+
+    public async Task<ItemDetailResponse> CancelRunAsync(string source, string externalId, CancelRunRequest request, CancellationToken ct)
+    {
+        var item = await GetItemAsync(source, externalId, tracking: true, ct);
+        if (item.State is not (ItemState.Dispatching or ItemState.Running))
+        {
+            throw RunNotCancellable(item, null);
+        }
+
+        if (string.IsNullOrWhiteSpace(item.CurrentRunId))
+        {
+            throw RunNotCancellable(item, null);
+        }
+
+        var run = await db.Runs
+            .Include(x => x.Round)
+            .Include(x => x.Item)
+            .FirstOrDefaultAsync(x => x.RunId == item.CurrentRunId && x.ItemId == item.ItemId, ct)
+            ?? throw RunNotCancellable(item, null);
+        if (!ActiveRunStatuses.Contains(run.Status))
+        {
+            throw RunNotCancellable(item, run);
+        }
+
+        var now = clock.UtcNow;
+        var body = EmptyToNull(request.Body);
+        var message = body ?? "Operator cancelled the active run.";
+
+        run.Status = RunStatus.Cancelled;
+        run.CompletedAt = now;
+        run.Summary = message;
+        run.ErrorCode = "operatorCancelled";
+        run.ErrorMessage = message;
+        run.ProgressPercent = 100;
+        run.StatusMessage = message;
+        run.LastHeartbeatAt = now;
+        run.LeaseOwner = null;
+        run.LeaseAcquiredAt = null;
+        if (run.WorktreeStatus is WorktreeStatus.Ready or WorktreeStatus.Preparing)
+        {
+            run.WorktreeStatus = run.WorktreePath is null ? WorktreeStatus.Failed : WorktreeStatus.CleanupPending;
+            run.WorktreeCleanupAfterAt = now;
+        }
+
+        if (run.Round is not null)
+        {
+            run.Round.Status = RoundStatus.Cancelled;
+            run.Round.Summary = message;
+            run.Round.CompletedAt = now;
+        }
+
+        item.State = ItemState.Discovered;
+        item.CurrentRunId = null;
+        item.CheckState = item.Kind == ItemKind.PullRequest ? CheckState.Attention : CheckState.NotConfigured;
+        item.UpdatedAt = now;
+        AddTimeline(item, run.Round, run, TimelineEventKind.RunCancelled, ActorKind.Operator, "operator", "Run cancelled", body, now);
+        AddTimeline(item, run.Round, run, TimelineEventKind.CheckUpdated, ActorKind.System, "oratorio/review", "Check cancelled", "The active Oratorio run was cancelled by the operator.", now);
+
+        await gitHubWriteService.RecordReviewGateRunCancelledAsync(run, ct);
+        await db.SaveChangesAsync(ct);
+        PublishTaskUpdated(item);
+        if (run.RunnerKind == "appServer")
+        {
+            await appServerRunCoordinator.TryInterruptTurnAsync(run.RunId, ct);
+        }
+
         return await GetItemDetailAsync(source, externalId, ct);
     }
 
@@ -873,7 +951,7 @@ public sealed class OratorioService(
     private async Task<bool> CurrentRoundIsClosedAsync(OratorioItem item, CancellationToken ct)
     {
         var current = await FindCurrentRoundAsync(item, ct);
-        return current is null || current.Status is RoundStatus.Approved or RoundStatus.ChangesRequested or RoundStatus.Superseded or RoundStatus.Rejected or RoundStatus.Failed;
+        return current is null || current.Status is RoundStatus.Approved or RoundStatus.ChangesRequested or RoundStatus.Superseded or RoundStatus.Rejected or RoundStatus.Cancelled or RoundStatus.Failed;
     }
 
     private async Task<OratorioItem> GetItemAsync(string source, string externalId, bool tracking, CancellationToken ct)
@@ -1101,6 +1179,17 @@ public sealed class OratorioService(
             "invalidTransition",
             $"Cannot {action} an item from its current state.",
             new Dictionary<string, object?> { ["state"] = state });
+
+    private static OratorioApiException RunNotCancellable(OratorioItem item, OratorioRun? run) =>
+        OratorioApiException.Conflict(
+            "runNotCancellable",
+            "Only dispatching or running items with an active run can be cancelled.",
+            new Dictionary<string, object?>
+            {
+                ["state"] = item.State,
+                ["runStatus"] = run?.Status,
+                ["currentRunId"] = item.CurrentRunId
+            });
 
     private void AddTimeline(
         OratorioItem item,

@@ -18,16 +18,28 @@ type PendingComposer = {
   toIndex: number
 }
 
+type PendingCancelRun = {
+  item: WorkItem
+  fromStatus: TaskStatus
+  toStatus: TaskStatus
+  toIndex: number
+}
+
 export type BoardCommander = {
   boardItems: WorkItem[]
   undoToasts: UndoToastEntry[]
   pendingComposer: PendingComposer | null
+  pendingCancelRun: PendingCancelRun | null
   composerBusy: boolean
   composerError: string | null
+  cancelRunBusy: boolean
+  cancelRunError: string | null
   liveMessage: string
   handleDragEnd: (result: DropResult) => void
   cancelRequestChanges: () => void
   submitRequestChanges: (value: RequestChangesValue) => Promise<void>
+  cancelCancelRun: () => void
+  confirmCancelRun: (body?: string) => Promise<void>
 }
 
 export function useBoardCommander({
@@ -46,8 +58,11 @@ export function useBoardCommander({
   const [boardItems, setBoardItems] = useState(() => sortItemsForBoard(items))
   const [undoToasts, setUndoToasts] = useState<UndoToastEntry[]>([])
   const [pendingComposer, setPendingComposer] = useState<PendingComposer | null>(null)
+  const [pendingCancelRun, setPendingCancelRun] = useState<PendingCancelRun | null>(null)
   const [composerBusy, setComposerBusy] = useState(false)
   const [composerError, setComposerError] = useState<string | null>(null)
+  const [cancelRunBusy, setCancelRunBusy] = useState(false)
+  const [cancelRunError, setCancelRunError] = useState<string | null>(null)
   const [liveMessage, setLiveMessage] = useState('')
   const boardItemsRef = useRef(boardItems)
   const pendingCommitsRef = useRef(new Map<string, () => Promise<void>>())
@@ -82,6 +97,8 @@ export function useBoardCommander({
     async (item: WorkItem, outcome: ReturnType<typeof resolveDrag>) => {
       if (outcome.kind === 'dispatch') {
         await postItemAction(item, '/dispatch', dispatchBody(runnerMode, mockOutcome))
+      } else if (outcome.kind === 'cancel-run') {
+        await postItemAction(item, '/cancel-run', {})
       } else if (outcome.kind === 'approve') {
         await postItemAction(item, '/approve', { body: 'Approved from the board.' })
       } else if (outcome.kind === 'reject') {
@@ -111,7 +128,7 @@ export function useBoardCommander({
         return
       }
 
-      const outcome = resolveDrag(fromStatus, toStatus)
+      const outcome = resolveDrag(fromStatus, toStatus, item)
       if (outcome.kind === 'invalid') {
         const message = outcome.message ?? i18n.t('board:drag.notAvailable')
         setLiveMessage(message)
@@ -123,6 +140,13 @@ export function useBoardCommander({
         setPendingComposer({ item, fromStatus, toStatus, toIndex: result.destination.index })
         setComposerError(null)
         setLiveMessage(i18n.t('board:drag.addFeedbackBefore', { name: item.shortId ?? item.title }))
+        return
+      }
+
+      if (outcome.kind === 'cancel-run') {
+        setPendingCancelRun({ item, fromStatus, toStatus, toIndex: result.destination.index })
+        setCancelRunError(null)
+        setLiveMessage(i18n.t('board:cancelRun.pending', { name: item.shortId ?? item.title }))
         return
       }
 
@@ -224,19 +248,69 @@ export function useBoardCommander({
     [notify, pendingComposer, refreshAll],
   )
 
+  const cancelCancelRun = useCallback(() => {
+    setPendingCancelRun(null)
+    setCancelRunError(null)
+  }, [])
+
+  const confirmCancelRun = useCallback(
+    async (body?: string) => {
+      if (!pendingCancelRun) {
+        return
+      }
+
+      const previousItems = boardItemsRef.current
+      const nextItems = moveBoardItem(previousItems, pendingCancelRun.item.id, pendingCancelRun.fromStatus, pendingCancelRun.toStatus, pendingCancelRun.toIndex)
+      boardItemsRef.current = nextItems
+      setBoardItems(nextItems)
+      setCancelRunBusy(true)
+      setCancelRunError(null)
+      setLiveMessage(i18n.t('board:drag.movedTo', { name: pendingCancelRun.item.shortId ?? pendingCancelRun.item.title, status: taskStatusLabel(pendingCancelRun.toStatus) }))
+      let cancellationCommitted = false
+      try {
+        await postItemAction(pendingCancelRun.item, '/cancel-run', { body: body?.trim() || null })
+        cancellationCommitted = true
+        await persistOrders(boardItemsRef.current).catch((reason) => {
+          notify(errorMessage(reason), 'error')
+        })
+        setPendingCancelRun(null)
+        notify(i18n.t('board:cancelRun.success', { name: pendingCancelRun.item.shortId ?? pendingCancelRun.item.number }))
+        await refreshAll().catch((reason) => {
+          notify(errorMessage(reason), 'error')
+        })
+      } catch (reason) {
+        if (!cancellationCommitted) {
+          boardItemsRef.current = previousItems
+          setBoardItems(previousItems)
+          setCancelRunError(errorMessage(reason))
+        } else {
+          notify(errorMessage(reason), 'error')
+        }
+      } finally {
+        setCancelRunBusy(false)
+      }
+    },
+    [notify, pendingCancelRun, persistOrders, refreshAll],
+  )
+
   return useMemo(
     () => ({
       boardItems,
       undoToasts,
       pendingComposer,
+      pendingCancelRun,
       composerBusy,
       composerError,
+      cancelRunBusy,
+      cancelRunError,
       liveMessage,
       handleDragEnd,
       cancelRequestChanges,
       submitRequestChanges,
+      cancelCancelRun,
+      confirmCancelRun,
     }),
-    [boardItems, cancelRequestChanges, composerBusy, composerError, handleDragEnd, liveMessage, pendingComposer, submitRequestChanges, undoToasts],
+    [boardItems, cancelCancelRun, cancelRunBusy, cancelRunError, cancelRequestChanges, composerBusy, composerError, confirmCancelRun, handleDragEnd, liveMessage, pendingCancelRun, pendingComposer, submitRequestChanges, undoToasts],
   )
 }
 

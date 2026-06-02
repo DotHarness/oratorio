@@ -44,6 +44,7 @@ public enum RoundStatus
     ChangesRequested,
     Superseded,
     Rejected,
+    Cancelled,
     Failed
 }
 
@@ -154,6 +155,7 @@ public enum TimelineEventKind
     RunQueued,
     RunStarted,
     RunCompleted,
+    RunCancelled,
     RunFailed,
     CommentAdded,
     DecisionRecorded,

@@ -535,6 +535,17 @@ public sealed class AppServerRunWorker(
         try
         {
             using var scope = scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
+            var status = await db.Runs
+                .AsNoTracking()
+                .Where(x => x.RunId == runId)
+                .Select(x => (RunStatus?)x.Status)
+                .FirstOrDefaultAsync(ct);
+            if (status is null || IsTerminal(status.Value))
+            {
+                return new AppServerDynamicToolResult(false, ErrorCode: "RunNotActive", ErrorMessage: "The Oratorio run is no longer active.");
+            }
+
             if (call.Tool == "SubmitReviewDraft")
             {
                 var drafts = scope.ServiceProvider.GetRequiredService<ReviewDraftService>();

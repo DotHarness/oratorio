@@ -1,6 +1,7 @@
 {
   "itemNotFound": "请求的条目不存在。",
   "runNotFound": "请求的运行不存在。",
+  "runNotCancellable": "只有正在派发或运行中的任务才能取消。",
   "reviewDraftUnsupportedItem": "评审草稿仅支持 GitHub 拉取请求和 GitLab 合并请求的运行。",
   "invalidImplementationDraftBinding": "实现草稿缺少其运行绑定。",
   "followUpDraftNotFound": "请求的后续草稿不存在。",

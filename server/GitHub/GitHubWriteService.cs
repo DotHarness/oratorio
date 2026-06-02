@@ -19,6 +19,7 @@ public sealed class GitHubWriteService(
     private const string ReviewGateStartIntent = "reviewGateStart";
     private const string ReviewGateCompleteIntent = "reviewGateComplete";
     private const string ReviewGateRunFailedIntent = "reviewGateRunFailed";
+    private const string ReviewGateRunCancelledIntent = "reviewGateRunCancelled";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -206,6 +207,67 @@ public sealed class GitHubWriteService(
             Source = "github",
             Kind = SourceWriteKind.CheckRun,
             Intent = ReviewGateCompleteIntent,
+            Status = SourceWriteStatus.Pending,
+            Repository = repository.FullName,
+            Number = number,
+            HeadSha = headSha,
+            RequestJson = JsonSerializer.Serialize(request, JsonOptions),
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        db.SourceWriteLogs.Add(write);
+        AddTimeline(write, TimelineEventKind.SourceWriteQueued, "GitHub write queued", null);
+        await TryExecuteAsync(write, ct);
+    }
+
+    public async Task RecordReviewGateRunCancelledAsync(OratorioRun run, CancellationToken ct)
+    {
+        var headSha = ResolveReviewGateHeadSha(run);
+        if (run.Item is null || run.Round is null ||
+            run.Status != RunStatus.Cancelled ||
+            !IsReviewGateTarget(run.Item, run) ||
+            string.IsNullOrWhiteSpace(headSha) ||
+            !TryResolveGitHubTarget(run.Item, out var repository, out var number))
+        {
+            return;
+        }
+
+        if (await db.SourceWriteLogs.AsNoTracking().AnyAsync(x =>
+                x.ItemId == run.ItemId &&
+                x.RoundId == run.RoundId &&
+                x.Source == "github" &&
+                x.Kind == SourceWriteKind.CheckRun &&
+                x.Intent == ReviewGateRunCancelledIntent &&
+                x.HeadSha == headSha,
+                ct))
+        {
+            return;
+        }
+
+        var now = clock.UtcNow;
+        var request = new Dictionary<string, object?>
+        {
+            ["name"] = CheckRunName,
+            ["status"] = "completed",
+            ["conclusion"] = "cancelled",
+            ["title"] = "Oratorio review cancelled",
+            ["summary"] = "The active Oratorio review run was cancelled by the operator.",
+            ["runId"] = run.RunId
+        };
+        var checkRunId = await FindLatestReviewGateCheckRunIdAsync(run.ItemId, run.RoundId, headSha, ct);
+        if (!string.IsNullOrWhiteSpace(checkRunId))
+        {
+            request["checkRunId"] = checkRunId;
+        }
+
+        var write = new OratorioSourceWriteLog
+        {
+            ItemId = run.ItemId,
+            RoundId = run.RoundId,
+            Source = "github",
+            Kind = SourceWriteKind.CheckRun,
+            Intent = ReviewGateRunCancelledIntent,
             Status = SourceWriteStatus.Pending,
             Repository = repository.FullName,
             Number = number,

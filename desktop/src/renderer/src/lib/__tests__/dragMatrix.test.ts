@@ -6,6 +6,7 @@ describe('resolveDrag', () => {
   it.each([
     ['todo', 'todo', 'reorder', undefined],
     ['todo', 'in_progress', 'dispatch', 8000],
+    ['in_progress', 'todo', 'invalid', undefined],
     ['in_review', 'done', 'approve', 5000],
     ['in_review', 'in_progress', 'request-changes', undefined],
     ['in_review', 'cancelled', 'invalid', undefined],
@@ -24,6 +25,21 @@ describe('resolveDrag', () => {
       expect(outcome.undoMs).toBe(expectedUndoMs)
     },
   )
+
+  it.each([
+    ['dispatching'],
+    ['running'],
+  ] as const)('maps active in progress %s tasks back to todo cancellation', (state) => {
+    const outcome = resolveDrag('in_progress', 'todo', { state })
+
+    expect(outcome.kind).toBe('cancel-run')
+  })
+
+  it('rejects failed in progress tasks dragged back to todo', () => {
+    expect(resolveDrag('in_progress', 'todo', { state: 'failed' })).toMatchObject({
+      kind: 'invalid',
+    })
+  })
 
   it('requires feedback composer for request changes', () => {
     expect(resolveDrag('in_review', 'in_progress')).toMatchObject({

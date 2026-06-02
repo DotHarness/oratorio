@@ -10,6 +10,7 @@ import { Tooltip } from '../components/primitives/Tooltip'
 import { FilterDropdown, RepositoryFilterDropdown } from '../components/filters/RepositoryFilterDropdown'
 import { UndoToastHost } from '../components/board/UndoToastHost'
 import { RequestChangesModal } from '../components/board/RequestChangesModal'
+import { CancelRunModal } from '../components/board/CancelRunModal'
 import { useBoardCommander } from '../hooks/useBoardCommander'
 import { sortItemsForBoard } from '../lib/sortOrder'
 import { parseTaskSearchQuery, taskMatchesSearch } from '../lib/taskSearch'
@@ -348,6 +349,15 @@ export function BoardView({
           error={commander.composerError}
           onCancel={commander.cancelRequestChanges}
           onSubmit={(value) => void commander.submitRequestChanges(value)}
+        />
+      ) : null}
+      {commander.pendingCancelRun ? (
+        <CancelRunModal
+          item={commander.pendingCancelRun.item}
+          busy={commander.cancelRunBusy}
+          error={commander.cancelRunError}
+          onCancel={commander.cancelCancelRun}
+          onConfirm={(body) => void commander.confirmCancelRun(body)}
         />
       ) : null}
     </section>

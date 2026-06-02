@@ -771,6 +771,7 @@ export type WorkItem = {
 export type DragOutcomeKind =
   | 'reorder'
   | 'dispatch'
+  | 'cancel-run'
   | 'approve'
   | 'request-changes'
   | 'reject'
