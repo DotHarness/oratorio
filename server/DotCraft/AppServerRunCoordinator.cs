@@ -27,6 +27,7 @@ public sealed class AppServerRunCoordinator(
     DrawerStateService drawerState,
     IDotCraftAppServerClientFactory clientFactory,
     IDotCraftAppServerProcessManager processManager,
+    IDotCraftAppServerEndpointResolver endpointResolver,
     IDotCraftWorkspaceResolver workspaceResolver) : IAppServerRunCoordinator
 {
     private static readonly TimeSpan ModelCacheTtl = TimeSpan.FromMinutes(5);
@@ -79,7 +80,7 @@ public sealed class AppServerRunCoordinator(
         {
             try
             {
-                await using var client = await clientFactory.ConnectAsync(run.AppServerEndpoint!, ct);
+                await using var client = await clientFactory.ConnectAsync(run.AppServerEndpoint!, ct, endpointResolver.ResolveConfiguredToken());
                 await client.InitializeAsync(ct);
                 var read = await client.ReadThreadAsync(run.ThreadId!, ct);
                 foreach (var item in read.Items)
@@ -181,14 +182,16 @@ public sealed class AppServerRunCoordinator(
             }
 
             var resolvedEndpoint = endpointUrl;
+            var resolvedToken = endpointResolver.ResolveConfiguredToken();
             if (string.IsNullOrWhiteSpace(resolvedEndpoint))
             {
                 var workspacePath = workspaceResolver.ResolveWorkspacePath(null);
                 var endpoint = await processManager.EnsureAvailableAsync(workspacePath, ct);
                 resolvedEndpoint = endpoint.Url;
+                resolvedToken = endpoint.Token ?? resolvedToken;
             }
 
-            await using var client = await clientFactory.ConnectAsync(resolvedEndpoint!, ct);
+            await using var client = await clientFactory.ConnectAsync(resolvedEndpoint!, ct, resolvedToken);
             await client.InitializeAsync(ct);
             _cachedModels = await client.ListModelsAsync(ct);
             _modelsCachedAt = now;

@@ -26,6 +26,12 @@ const enSidebar: DefaultTheme.Sidebar = [
     ]
   },
   {
+    text: 'Deploy',
+    items: [
+      { text: withIcon('server', 'Server Deployment'), link: '/server-deployment' }
+    ]
+  },
+  {
     text: 'Reference',
     items: [
       { text: withIcon('cog', 'Configuration Reference'), link: '/configuration' },
@@ -50,6 +56,12 @@ const zhSidebar: DefaultTheme.Sidebar = [
       { text: withIcon('workspace', '接入 DotCraft'), link: '/zh/dotcraft-workspaces' },
       { text: withIcon('github', 'GitHub 集成'), link: '/zh/github' },
       { text: withIcon('gitlab', 'GitLab 集成'), link: '/zh/gitlab' }
+    ]
+  },
+  {
+    text: '部署',
+    items: [
+      { text: withIcon('server', '服务器部署'), link: '/zh/server-deployment' }
     ]
   },
   {

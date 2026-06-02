@@ -5,6 +5,13 @@ public sealed class DotCraftOptions
     public Dictionary<string, string> RepositoryWorkspaces { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<DotCraftRepositoryWorkspaceRoute> RepositoryWorkspaceRoutes { get; set; } = [];
     public string AppServerUrl { get; set; } = "ws://127.0.0.1:9100/ws";
+
+    /// <summary>
+    /// Bearer token presented to a configured (non-Hub) DotCraft AppServer. May be stored
+    /// in plaintext or as an <c>enc:v1:</c> value protected by <see cref="Oratorio.Server.Services.IConfigurationSecretProtector"/>;
+    /// it is unprotected at connection time. Hub-discovered endpoints carry their token in the URL instead.
+    /// </summary>
+    public string AppServerToken { get; set; } = "";
     public bool HubDiscoveryEnabled { get; set; } = true;
     public string HubLockPath { get; set; } = "";
     public bool AutoStart { get; set; }

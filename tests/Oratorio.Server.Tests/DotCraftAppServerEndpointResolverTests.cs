@@ -36,14 +36,14 @@ public sealed class DotCraftAppServerEndpointResolverTests
                 Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
                 Assert.Equal("hub-token", request.Headers.Authorization?.Parameter);
                 Assert.Equal("/v1/appservers/by-workspace", request.RequestUri?.AbsolutePath);
-                Assert.Contains("path=F%3A%5Cdotcraft", request.RequestUri?.Query);
+                Assert.Contains("path=%2Fworkspace%2Fsample", request.RequestUri?.Query);
 
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent("""
                         {
-                          "workspacePath": "F:\\dotcraft",
-                          "canonicalWorkspacePath": "F:\\dotcraft",
+                          "workspacePath": "/workspace/sample",
+                          "canonicalWorkspacePath": "/workspace/sample",
                           "state": "running",
                           "pid": 1234,
                           "endpoints": {
@@ -66,9 +66,10 @@ public sealed class DotCraftAppServerEndpointResolverTests
                     HubLockPath = lockPath
                 }),
                 new SingleClientFactory(new HttpClient(handler)),
+                new PassthroughSecretProtector(),
                 NullLogger<DotCraftAppServerEndpointResolver>.Instance);
 
-            var endpoint = await resolver.ResolveAsync("F:\\dotcraft", CancellationToken.None);
+            var endpoint = await resolver.ResolveAsync("/workspace/sample", CancellationToken.None);
 
             Assert.NotNull(endpoint);
             Assert.Equal("hub", endpoint.Source);
@@ -114,8 +115,8 @@ public sealed class DotCraftAppServerEndpointResolverTests
                 {
                     Content = new StringContent("""
                         {
-                          "workspacePath": "F:\\dotcraft",
-                          "canonicalWorkspacePath": "F:\\dotcraft",
+                          "workspacePath": "/workspace/sample",
+                          "canonicalWorkspacePath": "/workspace/sample",
                           "state": "running",
                           "pid": 1234,
                           "endpoints": {
@@ -140,7 +141,7 @@ public sealed class DotCraftAppServerEndpointResolverTests
                 new SingleClientFactory(new HttpClient(handler)),
                 NullLogger<DotCraftAppServerProcessManager>.Instance);
 
-            var endpoint = await processManager.EnsureAvailableAsync("F:\\dotcraft", CancellationToken.None);
+            var endpoint = await processManager.EnsureAvailableAsync("/workspace/sample", CancellationToken.None);
 
             Assert.Equal("hub", endpoint.Source);
             Assert.Equal("ws://127.0.0.1:53698/ws?token=ensured", endpoint.Url);
@@ -161,10 +162,11 @@ public sealed class DotCraftAppServerEndpointResolverTests
                 HubDiscoveryEnabled = false
             }),
             new SingleClientFactory(new HttpClient(new CaptureHandler(_ => throw new InvalidOperationException("Hub should not be queried.")))),
+            new PassthroughSecretProtector(),
             NullLogger<DotCraftAppServerEndpointResolver>.Instance);
 
-        var defaultEndpoint = await resolver.ResolveAsync("F:\\dotcraft", CancellationToken.None);
-        var repositoryEndpoint = await resolver.ResolveAsync("F:\\other-workspace", CancellationToken.None);
+        var defaultEndpoint = await resolver.ResolveAsync("/workspace/sample", CancellationToken.None);
+        var repositoryEndpoint = await resolver.ResolveAsync("/workspace/other", CancellationToken.None);
 
         Assert.NotNull(defaultEndpoint);
         Assert.Equal("configuration", defaultEndpoint.Source);
@@ -186,7 +188,7 @@ public sealed class DotCraftAppServerEndpointResolverTests
             new SingleClientFactory(new HttpClient(new CaptureHandler(_ => throw new InvalidOperationException("Hub should not be queried.")))),
             NullLogger<DotCraftAppServerProcessManager>.Instance);
 
-        var probe = await processManager.ProbeAsync("F:\\other-workspace", CancellationToken.None);
+        var probe = await processManager.ProbeAsync("/workspace/other", CancellationToken.None);
 
         Assert.False(probe.Connected);
         Assert.Equal("workspaceNotRegisteredInHub", probe.Reason);
@@ -208,5 +210,14 @@ public sealed class DotCraftAppServerEndpointResolverTests
     {
         public Task<DotCraftAppServerEndpoint?> ResolveAsync(string workspacePath, CancellationToken ct) =>
             Task.FromResult<DotCraftAppServerEndpoint?>(null);
+
+        public string? ResolveConfiguredToken() => null;
+    }
+
+    private sealed class PassthroughSecretProtector : Oratorio.Server.Services.IConfigurationSecretProtector
+    {
+        public bool IsProtected(string? value) => false;
+        public string Protect(string value) => value;
+        public string? Unprotect(string? value) => value;
     }
 }

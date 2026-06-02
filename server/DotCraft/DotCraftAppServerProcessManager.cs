@@ -56,7 +56,7 @@ public sealed class DotCraftAppServerProcessManager(
         timeout.CancelAfter(TimeSpan.FromSeconds(1.5));
         try
         {
-            await socket.ConnectAsync(new Uri(endpoint.Url), timeout.Token);
+            await socket.ConnectAsync(BuildProbeUri(endpoint), timeout.Token);
             if (socket.State == WebSocketState.Open)
             {
                 await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "probe", CancellationToken.None);
@@ -72,6 +72,20 @@ public sealed class DotCraftAppServerProcessManager(
                 "unreachable",
                 "DotCraft AppServer is not reachable. Start or select the workspace AppServer through DotCraft Hub, then retry.");
         }
+    }
+
+    private static Uri BuildProbeUri(DotCraftAppServerEndpoint endpoint)
+    {
+        if (string.IsNullOrWhiteSpace(endpoint.Token))
+        {
+            return new Uri(endpoint.Url);
+        }
+
+        var builder = new UriBuilder(endpoint.Url);
+        var tokenPair = "token=" + Uri.EscapeDataString(endpoint.Token);
+        var existing = builder.Query.TrimStart('?');
+        builder.Query = string.IsNullOrEmpty(existing) ? tokenPair : existing + "&" + tokenPair;
+        return builder.Uri;
     }
 
     private async Task<DotCraftAppServerEndpoint?> TryEnsureFromHubAsync(string workspacePath, CancellationToken ct)

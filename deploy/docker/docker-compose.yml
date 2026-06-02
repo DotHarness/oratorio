@@ -1,0 +1,83 @@
+# Oratorio + DotCraft AppServer, co-located on one host with a shared workspace.
+#
+# Why co-located: Oratorio creates git worktrees on disk and hands their absolute
+# paths to the DotCraft AppServer, which then reads/writes those same paths. The
+# two services therefore MUST share the workspace filesystem at the SAME path
+# (here: /workspace in both containers). See the deployment guide for details.
+#
+# Quick start:
+#   cd oratorio/deploy/docker
+#   cp .env.example .env            # then edit .env
+#   mkdir -p workspace              # clone the repos you want to dispatch into ./workspace/<repo>
+#   docker compose up -d --build
+#
+# Endpoints are published on loopback only. Reach them remotely via an SSH tunnel
+# or a TLS reverse proxy with authentication.
+
+services:
+  dotcraft:
+    image: ghcr.io/dotharness/dotcraft:latest
+    # To build DotCraft from a source checkout instead of pulling GHCR, point this
+    # at ../../../dotcraft and use deploy/docker/Dockerfile from that repo.
+    env_file:
+      - .env
+    environment:
+      DOTCRAFT_WORKSPACE: /workspace
+      APPSERVER_LISTEN_HOST: 0.0.0.0          # reachable from the oratorio container over the compose network
+      APPSERVER_PORT: ${APPSERVER_PORT:-9100}
+      APPSERVER_TOKEN: ${APPSERVER_TOKEN:?set APPSERVER_TOKEN in .env}
+      DASHBOARD_LISTEN_HOST: 0.0.0.0
+      DASHBOARD_PORT: ${DASHBOARD_PORT:-8080}
+    ports:
+      # Optional: lets DotCraft Desktop tunnel directly to the AppServer/Dashboard.
+      - "${APPSERVER_PUBLISH_HOST:-127.0.0.1}:${APPSERVER_PORT:-9100}:${APPSERVER_PORT:-9100}"
+      - "${DASHBOARD_PUBLISH_HOST:-127.0.0.1}:${DASHBOARD_PORT:-8080}:${DASHBOARD_PORT:-8080}"
+    volumes:
+      - ${ORATORIO_WORKSPACE_DIR:-./workspace}:/workspace
+    restart: unless-stopped
+
+  oratorio:
+    image: ghcr.io/dotharness/oratorio:latest
+    # To build from source instead of pulling GHCR, check out dotcraft/ next to
+    # oratorio/ (the server references the DotCraft SDK by relative path), then
+    # uncomment this block and run `docker compose up -d --build`:
+    # build:
+    #   context: ../../..
+    #   dockerfile: oratorio/deploy/docker/Dockerfile
+    depends_on:
+      - dotcraft
+    environment:
+      ASPNETCORE_URLS: http://0.0.0.0:5087
+      ORATORIO_STATE_ROOT: /data/oratorio
+
+      # --- DotCraft AppServer connection -------------------------------------
+      Oratorio__DotCraft__AppServerUrl: ws://dotcraft:${APPSERVER_PORT:-9100}/ws
+      Oratorio__DotCraft__HubDiscoveryEnabled: "false"
+      # Same token DotCraft uses. The entrypoint also falls back to reading
+      # /workspace/.craft/appserver.token if this is left empty.
+      Oratorio__DotCraft__AppServerToken: ${APPSERVER_TOKEN:-}
+
+      # --- Managed worktrees (must live on the shared volume) ----------------
+      Oratorio__DotCraft__ManagedWorktreesEnabled: "true"
+      Oratorio__DotCraft__WorktreeRoot: /workspace/.oratorio/worktrees
+
+      # --- Repository -> workspace routing -----------------------------------
+      # One route per dispatchable repo. Project is a source key (e.g.
+      # github:owner/repo); WorkspacePath is the checkout on the shared volume.
+      # Add __1__, __2__, ... blocks for more repos.
+      Oratorio__DotCraft__RepositoryWorkspaceRoutes__0__Project: ${ORATORIO_REPO0_PROJECT:?set ORATORIO_REPO0_PROJECT in .env}
+      Oratorio__DotCraft__RepositoryWorkspaceRoutes__0__WorkspacePath: ${ORATORIO_REPO0_WORKSPACE:?set ORATORIO_REPO0_WORKSPACE in .env}
+
+      # --- GitHub source sync (optional) -------------------------------------
+      Oratorio__GitHub__Repositories__0: ${ORATORIO_GITHUB_REPO0:-}
+      Oratorio__GitHub__Token: ${GITHUB_TOKEN:-}
+      Oratorio__GitHub__WritesEnabled: ${ORATORIO_GITHUB_WRITES:-false}
+    volumes:
+      - ${ORATORIO_WORKSPACE_DIR:-./workspace}:/workspace   # SAME path as dotcraft
+      - oratorio-state:/data/oratorio
+    ports:
+      - "${ORATORIO_PUBLISH_HOST:-127.0.0.1}:${ORATORIO_PORT:-5087}:5087"
+    restart: unless-stopped
+
+volumes:
+  oratorio-state:

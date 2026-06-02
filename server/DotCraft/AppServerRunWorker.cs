@@ -248,7 +248,7 @@ public sealed class AppServerRunWorker(
             var endpoint = await processManager.EnsureAvailableAsync(baseWorkspacePath, timeout.Token);
             await MarkDispatchingAsync(runId, endpoint.Url, timeout.Token);
 
-            await using var client = await clientFactory.ConnectAsync(endpoint.Url, timeout.Token);
+            await using var client = await clientFactory.ConnectAsync(endpoint.Url, timeout.Token, endpoint.Token);
             await client.InitializeAsync(timeout.Token);
             if (!client.SupportsRuntimeAdditionalContext)
             {

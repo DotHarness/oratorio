@@ -1,0 +1,61 @@
+name: Publish Docker Image
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      # The server project references the DotCraft SDK by relative path, so the
+      # build context needs both repos checked out side by side.
+      - name: Checkout Oratorio
+        uses: actions/checkout@v6
+        with:
+          path: oratorio
+
+      - name: Checkout DotCraft
+        uses: actions/checkout@v6
+        with:
+          repository: DotHarness/dotcraft
+          path: dotcraft
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/dotharness/oratorio
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          # Context is the workspace root holding both oratorio/ and dotcraft/.
+          context: .
+          file: oratorio/deploy/docker/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -38,7 +38,8 @@ const SOURCES = {
   book: 'book-open',
   tag: 'tag',
   matrix: 'list-checks',
-  hammer: 'hammer'
+  hammer: 'hammer',
+  server: 'server'
 } as const
 
 export const ICONS = Object.fromEntries(

@@ -4579,7 +4579,7 @@ public sealed class OratorioApiTests
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
         var run = await db.Runs.Include(x => x.Round).FirstAsync(x => x.RunId == runId);
-        run.PromptContextJson = """{"promptMode":"legacy","workspace":{"path":"F:\\workspace"},"requiredDynamicTools":["oratorio.SubmitReviewDraft"]}""";
+        run.PromptContextJson = """{"promptMode":"legacy","workspace":{"path":"/workspace/sample"},"requiredDynamicTools":["oratorio.SubmitReviewDraft"]}""";
         if (run.Round is not null)
         {
             run.Round.PromptContextJson = run.PromptContextJson;

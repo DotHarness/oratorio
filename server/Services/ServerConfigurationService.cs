@@ -713,6 +713,7 @@ public sealed class ServerConfigurationService(
     {
         var existingGitHubSecrets = ReadExistingSecretNodes(overlayPath, "GitHub", ["Token", "PrivateKey", "PrivateKeyPath", "WebhookSecret"]);
         var existingGitLabProfileSecrets = ReadExistingGitLabProfileSecretNodes(overlayPath);
+        var existingDotCraftSecrets = ReadExistingSecretNodes(overlayPath, "DotCraft", ["AppServerToken"]);
         var repositoryWorkspaceOverlay = BuildRepositoryWorkspaceOverlay(next.DotCraft.RepositoryWorkspaces);
         var gitHubNode = JsonSerializer.SerializeToNode(new
         {
@@ -738,36 +739,44 @@ public sealed class ServerConfigurationService(
             next.GitLab.AllowLocalDevelopmentUnsafeWebhooks
         }, JsonOptions)!.AsObject();
 
+        var dotCraftNode = JsonSerializer.SerializeToNode(new
+        {
+            repositoryWorkspaceOverlay.RepositoryWorkspaces,
+            repositoryWorkspaceOverlay.RepositoryWorkspaceRoutes,
+            next.DotCraft.AppServerUrl,
+            next.DotCraft.HubDiscoveryEnabled,
+            next.DotCraft.HubLockPath,
+            next.DotCraft.ApprovalPolicy,
+            next.DotCraft.RunTimeoutSeconds,
+            next.Runtime.ManagedWorktreesEnabled,
+            next.Runtime.WorktreeRoot,
+            next.Runtime.WorktreeBranchPrefix,
+            next.Runtime.GlobalMaxActiveRuns,
+            next.Runtime.MaxActiveRunsPerRepository,
+            next.Runtime.MaxActiveRunsPerSource,
+            next.Runtime.MaxRunAttempts,
+            next.Runtime.RetryBackoffSeconds,
+            next.Runtime.MaxRetryBackoffSeconds,
+            next.Runtime.StallTimeoutSeconds,
+            next.Runtime.SucceededWorktreeRetentionHours,
+            next.Runtime.FailedWorktreeRetentionHours,
+            next.Runtime.WorktreeCleanupEnabled,
+            next.Runtime.WorktreeCleanupIntervalSeconds
+        }, JsonOptions)!.AsObject();
+        // AppServerToken is managed out-of-band (overlay file or environment), not through the Settings DTO.
+        // Preserve any existing value so a Settings save never drops the AppServer credential.
+        if (existingDotCraftSecrets.TryGetValue("AppServerToken", out var appServerTokenNode) && appServerTokenNode is not null)
+        {
+            dotCraftNode["AppServerToken"] = appServerTokenNode.DeepClone();
+        }
+
         var root = new JsonObject
         {
             ["Oratorio"] = new JsonObject
             {
                 ["GitHub"] = gitHubNode,
                 ["GitLab"] = gitLabNode,
-                ["DotCraft"] = JsonSerializer.SerializeToNode(new
-                {
-                    repositoryWorkspaceOverlay.RepositoryWorkspaces,
-                    repositoryWorkspaceOverlay.RepositoryWorkspaceRoutes,
-                    next.DotCraft.AppServerUrl,
-                    next.DotCraft.HubDiscoveryEnabled,
-                    next.DotCraft.HubLockPath,
-                    next.DotCraft.ApprovalPolicy,
-                    next.DotCraft.RunTimeoutSeconds,
-                    next.Runtime.ManagedWorktreesEnabled,
-                    next.Runtime.WorktreeRoot,
-                    next.Runtime.WorktreeBranchPrefix,
-                    next.Runtime.GlobalMaxActiveRuns,
-                    next.Runtime.MaxActiveRunsPerRepository,
-                    next.Runtime.MaxActiveRunsPerSource,
-                    next.Runtime.MaxRunAttempts,
-                    next.Runtime.RetryBackoffSeconds,
-                    next.Runtime.MaxRetryBackoffSeconds,
-                    next.Runtime.StallTimeoutSeconds,
-                    next.Runtime.SucceededWorktreeRetentionHours,
-                    next.Runtime.FailedWorktreeRetentionHours,
-                    next.Runtime.WorktreeCleanupEnabled,
-                    next.Runtime.WorktreeCleanupIntervalSeconds
-                }, JsonOptions),
+                ["DotCraft"] = dotCraftNode,
                 ["Automation"] = JsonSerializer.SerializeToNode(new
                 {
                     next.Automation.AutoDispatchEnabled,

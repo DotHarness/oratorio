@@ -1,2 +1,9 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Files consumed inside Linux containers must keep LF regardless of host OS.
+*.sh text eol=lf
+deploy/docker/Dockerfile text eol=lf
+deploy/docker/oratorio-entrypoint.sh text eol=lf
+deploy/docker/docker-compose.yml text eol=lf
+deploy/docker/.env.example text eol=lf

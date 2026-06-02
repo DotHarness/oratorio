@@ -1,18 +1,31 @@
 using DotCraft.Sdk.Hub;
 using Microsoft.Extensions.Options;
+using Oratorio.Server.Services;
 
 namespace Oratorio.Server.DotCraft;
 
 public interface IDotCraftAppServerEndpointResolver
 {
     Task<DotCraftAppServerEndpoint?> ResolveAsync(string workspacePath, CancellationToken ct);
+
+    /// <summary>
+    /// Resolves the bearer token for a configured AppServer endpoint, unprotecting it when stored encrypted.
+    /// Returns <c>null</c> when no token is configured. Use this when reconnecting to a stored endpoint URL
+    /// that does not already carry a token in its query string.
+    /// </summary>
+    string? ResolveConfiguredToken();
 }
 
-public sealed record DotCraftAppServerEndpoint(string Url, string Source);
+/// <param name="Token">
+/// Bearer token to present when connecting, or <c>null</c>. Populated for configuration-sourced endpoints;
+/// Hub-sourced endpoints leave this null because their token is embedded in <see cref="Url"/>.
+/// </param>
+public sealed record DotCraftAppServerEndpoint(string Url, string Source, string? Token = null);
 
 public sealed class DotCraftAppServerEndpointResolver(
     IOptionsMonitor<DotCraftOptions> options,
     IHttpClientFactory httpClientFactory,
+    IConfigurationSecretProtector secretProtector,
     ILogger<DotCraftAppServerEndpointResolver> logger) : IDotCraftAppServerEndpointResolver
 {
     public async Task<DotCraftAppServerEndpoint?> ResolveAsync(string workspacePath, CancellationToken ct)
@@ -29,7 +42,19 @@ public sealed class DotCraftAppServerEndpointResolver(
 
         return string.IsNullOrWhiteSpace(value.AppServerUrl)
             ? null
-            : new DotCraftAppServerEndpoint(value.AppServerUrl, "configuration");
+            : new DotCraftAppServerEndpoint(value.AppServerUrl, "configuration", ResolveConfiguredToken());
+    }
+
+    public string? ResolveConfiguredToken()
+    {
+        var raw = options.CurrentValue.AppServerToken;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var resolved = secretProtector.Unprotect(raw);
+        return string.IsNullOrWhiteSpace(resolved) ? null : resolved;
     }
 
     private async Task<DotCraftAppServerEndpoint?> ResolveFromHubAsync(DotCraftOptions value, string workspacePath, CancellationToken ct)
