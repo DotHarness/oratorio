@@ -120,6 +120,51 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
                 .Select(c => new PromptFinding(c.DraftCommentId, c.Severity, c.Title, c.Path, c.Line))
                 .ToListAsync(ct)
             : [];
+        var isImplementationRun = run.Purpose == RunPurpose.Implementation &&
+            item.Kind is ItemKind.Issue or ItemKind.LocalTask;
+        var generatedPr = isImplementationRun
+            ? await db.Items.AsNoTracking()
+                .Where(x =>
+                    x.ParentItemId == item.ItemId &&
+                    x.Kind == ItemKind.PullRequest &&
+                    (x.Source == "github" || x.Source == "gitlab") &&
+                    x.SourceState == SourceState.Open)
+                .OrderByDescending(x => x.CreatedAt)
+                .FirstOrDefaultAsync(ct)
+            : null;
+        var followUpFindings = generatedPr is null
+            ? new List<PromptFollowUpFinding>()
+            : await db.ReviewDraftComments.AsNoTracking()
+                .Where(c =>
+                    c.Draft!.ItemId == generatedPr.ItemId &&
+                    c.Draft.Status == ReviewDraftStatus.Published &&
+                    c.Status == ReviewDraftCommentStatus.Accepted &&
+                    c.ResolutionState == ReviewFindingResolutionState.Open)
+                .OrderBy(c => c.Draft!.CreatedAt)
+                .ThenBy(c => c.Path)
+                .ThenBy(c => c.Line)
+                .Select(c => new PromptFollowUpFinding(c.Severity, c.Title, c.Body, c.Path, c.Line, c.SuggestionReplacement))
+                .Take(50)
+                .ToListAsync(ct);
+        var lastImplementationCompletedAt = allRuns
+            .Where(r => r.RunId != run.RunId && r.Purpose == RunPurpose.Implementation && r.Status == RunStatus.Succeeded && r.CompletedAt != null)
+            .Select(r => r.CompletedAt!.Value)
+            .DefaultIfEmpty(DateTimeOffset.MinValue)
+            .Max();
+        var followUpComments = generatedPr is null
+            ? new List<PromptFollowUpComment>()
+            : (await db.Comments.AsNoTracking()
+                .Where(c =>
+                    c.ItemId == generatedPr.ItemId &&
+                    c.Purpose == CommentPurpose.SourceContext &&
+                    c.SourceCommentId != null)
+                .OrderBy(c => c.CreatedAt)
+                .Select(c => new { c.AuthorName, c.Body, c.CreatedAt, c.SourceUpdatedAt })
+                .ToListAsync(ct))
+                .Where(c => (c.SourceUpdatedAt ?? c.CreatedAt) > lastImplementationCompletedAt)
+                .Select(c => new PromptFollowUpComment(c.AuthorName, c.Body))
+                .Take(50)
+                .ToList();
         var sourceSnapshots = await db.SourceSnapshots.AsNoTracking()
             .Where(x => x.ItemId == item.ItemId)
             .OrderByDescending(x => x.SyncedAt)
@@ -355,6 +400,45 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
         {
             prompt.AppendLine("- Inspect the current source state in the workspace and produce a concise review summary for the Oratorio operator.");
             prompt.AppendLine("- Mention blockers, missing information, and suggested next operator actions.");
+        }
+
+        if (isImplementationRun && generatedPr is not null && (followUpFindings.Count > 0 || followUpComments.Count > 0))
+        {
+            prompt.AppendLine();
+            prompt.AppendLine($"Review feedback on the generated pull request ({generatedPr.ExternalUrl ?? generatedPr.ExternalId}, branch {generatedPr.Branch ?? "unknown"}):");
+            prompt.AppendLine("- You are continuing this existing pull request. Apply fixes in the managed worktree; your committed changes are delivered as follow-up commits to the same pull request.");
+            prompt.AppendLine("- Do not resolve review findings yourself; a follow-up Oratorio review re-evaluates the new head and resolves the findings it confirms fixed.");
+            if (followUpFindings.Count > 0)
+            {
+                prompt.AppendLine("- Open review findings to address:");
+                foreach (var finding in followUpFindings)
+                {
+                    var anchor = finding.Line is null ? finding.Path : $"{finding.Path}:{finding.Line}";
+                    prompt.AppendLine($"  - {finding.Severity} {finding.Title} ({anchor})");
+                    if (!string.IsNullOrWhiteSpace(finding.Body))
+                    {
+                        prompt.AppendLine($"    {finding.Body.Trim()}");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(finding.SuggestionReplacement))
+                    {
+                        prompt.AppendLine("    Suggested replacement:");
+                        foreach (var line in finding.SuggestionReplacement.Replace("\r\n", "\n").Split('\n'))
+                        {
+                            prompt.AppendLine($"      {line}");
+                        }
+                    }
+                }
+            }
+
+            if (followUpComments.Count > 0)
+            {
+                prompt.AppendLine("- New human review comments to consider:");
+                foreach (var comment in followUpComments)
+                {
+                    prompt.AppendLine($"  - {comment.AuthorName}: {comment.Body.Trim()}");
+                }
+            }
         }
 
         if (run.Purpose == RunPurpose.ReviewAnalysis && item.Source is "github" or "gitlab" && item.Kind == ItemKind.PullRequest)
@@ -598,6 +682,10 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
     private sealed record PromptFeedback(string Kind, string? DecisionId, string? CommentId, string Body, DateTimeOffset CreatedAt);
 
     private sealed record PromptFinding(string FindingId, string Severity, string Title, string Path, int Line);
+
+    private sealed record PromptFollowUpFinding(string Severity, string Title, string Body, string Path, int? Line, string? SuggestionReplacement);
+
+    private sealed record PromptFollowUpComment(string AuthorName, string Body);
 
     private sealed record ReviewDiffTarget(string BaseRef, string BaseSha, string HeadRef, string HeadSha);
 }

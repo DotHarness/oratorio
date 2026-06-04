@@ -401,6 +401,10 @@
     "publishDefault": "Publishes valid Review Drafts as GitHub COMMENT reviews only.",
     "emptyWithGitlab": "No projects included.",
     "emptyDefault": "No repositories included.",
+    "followUpAllowlist": "Implementation follow-up allowlist",
+    "followUpAllowlistDescription": "When a generated pull request gains unresolved review findings or new human review comments, automatically re-implements the originating issue/task and pushes follow-up commits to the same pull request.",
+    "followUpRounds": "Max follow-up rounds",
+    "followUpRoundsDescription": "Upper bound on automatic implementation follow-up rounds per originating item before the loop stops.",
     "allowlistCard": {
       "includedSingular": "{{count}} included repository",
       "includedPlural": "{{count}} included repositories",
@@ -411,8 +415,10 @@
     "modal": {
       "autoReviewTitle": "Select source projects",
       "publishTitle": "Select publish projects",
+      "followUpTitle": "Select follow-up projects",
       "autoReviewDescription": "Select source projects to enable automatic {{term}} reviews.",
       "publishDescription": "Select source projects whose Review Drafts may be published through {{route}}.",
+      "followUpDescription": "Select source projects whose generated pull requests may trigger automatic implementation follow-up.",
       "close": "Close",
       "searchPlaceholder": "Search source projects...",
       "searchAria": "Search source projects",

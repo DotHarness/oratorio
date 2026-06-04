@@ -17,6 +17,7 @@ public sealed class OratorioDbContext(DbContextOptions<OratorioDbContext> option
     public DbSet<OratorioRun> Runs => Set<OratorioRun>();
     public DbSet<OratorioAutoReviewRepositoryState> AutoReviewRepositoryStates => Set<OratorioAutoReviewRepositoryState>();
     public DbSet<OratorioAutoReviewItemState> AutoReviewItemStates => Set<OratorioAutoReviewItemState>();
+    public DbSet<OratorioImplementationFollowUpItemState> ImplementationFollowUpItemStates => Set<OratorioImplementationFollowUpItemState>();
     public DbSet<OratorioComment> Comments => Set<OratorioComment>();
     public DbSet<OratorioDecision> Decisions => Set<OratorioDecision>();
     public DbSet<OratorioTimelineEvent> TimelineEvents => Set<OratorioTimelineEvent>();
@@ -42,6 +43,7 @@ public sealed class OratorioDbContext(DbContextOptions<OratorioDbContext> option
         ConfigureRuns(modelBuilder);
         ConfigureAutoReviewRepositoryStates(modelBuilder);
         ConfigureAutoReviewItemStates(modelBuilder);
+        ConfigureImplementationFollowUpItemStates(modelBuilder);
         ConfigureComments(modelBuilder);
         ConfigureDecisions(modelBuilder);
         ConfigureTimelineEvents(modelBuilder);
@@ -208,6 +210,32 @@ public sealed class OratorioDbContext(DbContextOptions<OratorioDbContext> option
         entity.HasIndex(x => new { x.Repository, x.UpdatedAt });
         entity.HasIndex(x => x.LastQueuedRunId);
         entity.HasOne(x => x.Item).WithOne().HasForeignKey<OratorioAutoReviewItemState>(x => x.ItemId).OnDelete(DeleteBehavior.Cascade);
+        entity.HasOne(x => x.LastQueuedRun).WithMany().HasForeignKey(x => x.LastQueuedRunId).OnDelete(DeleteBehavior.SetNull);
+    }
+
+    private static void ConfigureImplementationFollowUpItemStates(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<OratorioImplementationFollowUpItemState>();
+        entity.ToTable("implementation_follow_up_item_states");
+        entity.HasKey(x => x.OriginatingItemId);
+        entity.Property(x => x.OriginatingItemId).HasColumnName("originating_item_id").IsRequired();
+        entity.Property(x => x.GeneratedPrItemId).HasColumnName("generated_pr_item_id");
+        entity.Property(x => x.Repository).HasColumnName("repository").IsRequired();
+        entity.Property(x => x.LastObservedFindingsKey).HasColumnName("last_observed_findings_key");
+        entity.Property(x => x.LastObservedCommentAt).HasColumnName("last_observed_comment_at").HasConversion(NullableDateTimeOffsetConverter);
+        entity.Property(x => x.LastQueuedHeadSha).HasColumnName("last_queued_head_sha");
+        entity.Property(x => x.LastQueuedRoundId).HasColumnName("last_queued_round_id");
+        entity.Property(x => x.LastQueuedRunId).HasColumnName("last_queued_run_id");
+        entity.Property(x => x.FollowUpRoundCount).HasColumnName("follow_up_round_count");
+        entity.Property(x => x.LastErrorCode).HasColumnName("last_error_code");
+        entity.Property(x => x.LastErrorMessage).HasColumnName("last_error_message");
+        entity.Property(x => x.LastErrorAt).HasColumnName("last_error_at").HasConversion(NullableDateTimeOffsetConverter);
+        entity.Property(x => x.CreatedAt).HasColumnName("created_at").HasConversion(DateTimeOffsetConverter);
+        entity.Property(x => x.UpdatedAt).HasColumnName("updated_at").HasConversion(DateTimeOffsetConverter);
+        entity.HasIndex(x => new { x.Repository, x.UpdatedAt });
+        entity.HasIndex(x => x.GeneratedPrItemId);
+        entity.HasOne(x => x.OriginatingItem).WithOne().HasForeignKey<OratorioImplementationFollowUpItemState>(x => x.OriginatingItemId).OnDelete(DeleteBehavior.Cascade);
+        entity.HasOne(x => x.GeneratedPrItem).WithMany().HasForeignKey(x => x.GeneratedPrItemId).OnDelete(DeleteBehavior.SetNull);
         entity.HasOne(x => x.LastQueuedRun).WithMany().HasForeignKey(x => x.LastQueuedRunId).OnDelete(DeleteBehavior.SetNull);
     }
 

@@ -359,6 +359,25 @@ public sealed class AppServerRunWorker(
             await db.SaveChangesAsync(ct);
 
             var item = run.Item;
+            string? stackOntoBranch = null;
+            string? stackOntoSha = null;
+            if (run.Purpose == RunPurpose.Implementation && run.DispatchTrigger == RunDispatchTrigger.AutoFollowUp)
+            {
+                var generatedPr = await db.Items.AsNoTracking()
+                    .Where(x =>
+                        x.ParentItemId == item.ItemId &&
+                        x.Kind == ItemKind.PullRequest &&
+                        (x.Source == "github" || x.Source == "gitlab") &&
+                        x.SourceState == SourceState.Open)
+                    .OrderByDescending(x => x.CreatedAt)
+                    .FirstOrDefaultAsync(ct);
+                if (generatedPr is not null)
+                {
+                    stackOntoBranch = generatedPr.Branch;
+                    stackOntoSha = generatedPr.HeadSha;
+                }
+            }
+
             request = new WorktreePrepareRequest(
                 run.RunId,
                 item.ItemId,
@@ -367,7 +386,9 @@ public sealed class AppServerRunWorker(
                 item.Repository,
                 item.Branch,
                 item.HeadSha,
-                baseWorkspacePath);
+                baseWorkspacePath,
+                stackOntoBranch,
+                stackOntoSha);
         }
 
         try

@@ -881,7 +881,7 @@ describe('SettingsView', () => {
     renderSettings('/settings/review')
 
     await screen.findByText('Automatic review')
-    expect(screen.getAllByText('No repositories included.')).toHaveLength(2)
+    expect(screen.getAllByText('No repositories included.')).toHaveLength(3)
     expect(screen.getAllByRole('button', { name: 'Manage' }).every((button) => button.hasAttribute('disabled'))).toBe(true)
   })
 

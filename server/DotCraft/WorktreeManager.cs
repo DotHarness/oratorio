@@ -22,7 +22,9 @@ public sealed record WorktreePrepareRequest(
     string? Repository,
     string? SourceBranch,
     string? HeadSha,
-    string BaseWorkspacePath);
+    string BaseWorkspacePath,
+    string? StackOntoBranch = null,
+    string? StackOntoSha = null);
 
 public sealed record WorktreePrepareResult(
     string BaseWorkspacePath,
@@ -55,14 +57,18 @@ public sealed class WorktreeManager(IOptionsMonitor<DotCraftOptions> options, IL
         var key = BuildWorktreeKey(request);
         var branchName = BuildBranchName(key);
         var worktreePath = Path.Combine(worktreeRoot, key);
-        var baseRef = ResolveBaseRef(request);
+        var stackOntoExistingPr = !string.IsNullOrWhiteSpace(request.StackOntoBranch) || !string.IsNullOrWhiteSpace(request.StackOntoSha);
+        var baseRef = stackOntoExistingPr
+            ? request.StackOntoBranch ?? request.StackOntoSha!
+            : ResolveBaseRef(request);
 
         var repoLock = RepoLocks.GetOrAdd(repoRoot, _ => new SemaphoreSlim(1, 1));
         await repoLock.WaitAsync(ct);
         try
         {
-            var baseSha = await GitAsync(repoRoot, ["rev-parse", baseRef], ct);
-            baseSha = baseSha.Trim();
+            var baseSha = stackOntoExistingPr
+                ? await ResolveStackBaseShaAsync(repoRoot, request, ct)
+                : (await GitAsync(repoRoot, ["rev-parse", baseRef], ct)).Trim();
             if (string.IsNullOrWhiteSpace(baseSha))
             {
                 throw new WorktreeException("baseRefUnresolved", $"Could not resolve base ref '{baseRef}'.");
@@ -171,6 +177,55 @@ public sealed class WorktreeManager(IOptionsMonitor<DotCraftOptions> options, IL
         }
 
         return string.IsNullOrWhiteSpace(request.SourceBranch) ? "HEAD" : request.SourceBranch;
+    }
+
+    // Implementation follow-up rounds must stack on the existing generated PR head so prior
+    // delivered commits are retained (design spec §5.5). Prefer the locally available head SHA,
+    // then a best-effort fetch of the PR branch, then a retained local branch ref.
+    private static async Task<string> ResolveStackBaseShaAsync(string repoRoot, WorktreePrepareRequest request, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(request.StackOntoSha) &&
+            await TryGitAsync(repoRoot, ["cat-file", "-e", request.StackOntoSha!], ct))
+        {
+            return request.StackOntoSha!.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.StackOntoBranch))
+        {
+            if (await TryGitAsync(repoRoot, ["fetch", "origin", request.StackOntoBranch!], ct))
+            {
+                var fetched = (await GitAsync(repoRoot, ["rev-parse", "FETCH_HEAD"], ct)).Trim();
+                if (!string.IsNullOrWhiteSpace(fetched))
+                {
+                    return fetched;
+                }
+            }
+
+            if (await TryGitAsync(repoRoot, ["rev-parse", "--verify", "--quiet", request.StackOntoBranch!], ct))
+            {
+                return (await GitAsync(repoRoot, ["rev-parse", request.StackOntoBranch!], ct)).Trim();
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.StackOntoSha))
+        {
+            return (await GitAsync(repoRoot, ["rev-parse", request.StackOntoSha!], ct)).Trim();
+        }
+
+        throw new WorktreeException("followUpBaseUnresolved", "Could not resolve the existing pull request head for the implementation follow-up worktree.");
+    }
+
+    private static async Task<bool> TryGitAsync(string workingDirectory, IReadOnlyList<string> arguments, CancellationToken ct)
+    {
+        try
+        {
+            await GitAsync(workingDirectory, arguments, ct);
+            return true;
+        }
+        catch (WorktreeException)
+        {
+            return false;
+        }
     }
 
     private static async Task EnsureCleanWorktreeAsync(string worktreePath, CancellationToken ct)

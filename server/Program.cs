@@ -82,6 +82,7 @@ builder.Services.AddScoped<TaskBoardPlacementService>();
 builder.Services.AddScoped<AppServerPromptBuilder>();
 builder.Services.AddScoped<OratorioAppBindingToolHandler>();
 builder.Services.AddScoped<AutoReviewDispatchService>();
+builder.Services.AddScoped<ImplementationFollowUpDispatchService>();
 builder.Services.AddSingleton<OratorioAppBindingService>();
 builder.Services.AddScoped<OratorioSeeder>();
 builder.Services.AddScoped<OratorioSchemaMigrator>();
@@ -96,6 +97,7 @@ builder.Services.AddHostedService<AppServerRunWorker>();
 builder.Services.AddHostedService<DiscussionTurnWorker>();
 builder.Services.AddHostedService<ImplementationAutoDispatchWorker>();
 builder.Services.AddHostedService<AutoReviewDispatchWorker>();
+builder.Services.AddHostedService<ImplementationFollowUpDispatchWorker>();
 builder.Services.AddHostedService<WorktreeCleanupWorker>();
 
 var databasePath = ResolveDatabasePath(builder);

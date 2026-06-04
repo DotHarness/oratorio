@@ -47,7 +47,7 @@ type WindowCloseBehavior = 'minimizeToTray' | 'quitApp'
 type DotCraftHealth = 'connected' | 'configured' | 'unavailable'
 type DeliveryPolicy = 'manualDelivery' | 'autoPr'
 type SecretMode = 'unchanged' | 'replace' | 'clear'
-type RepositoryAllowlistKind = 'autoReview' | 'publish'
+type RepositoryAllowlistKind = 'autoReview' | 'publish' | 'followUp'
 type SourceProviderId = 'github' | 'gitlab'
 
 const DEFAULT_RUN_TIMEOUT_SECONDS = 30 * 60
@@ -355,6 +355,9 @@ type ServerConfiguration = {
     autoReviewRepositories: string[]
     autoReviewPublishEnabled: boolean
     autoReviewPublishRepositories: string[]
+    autoFollowUpEnabled: boolean
+    autoFollowUpRepositories: string[]
+    maxFollowUpRounds: number
   }
 }
 
@@ -912,6 +915,13 @@ export function SettingsView({
       autoReviewPublishRepositories: filtered,
     })
   }
+  const updateAutoFollowUpRepositories = (repositories: string[]) => {
+    const filtered = filterRepositories(repositories, configuredProjects)
+    updateAutomationConfig({
+      autoFollowUpEnabled: filtered.length > 0,
+      autoFollowUpRepositories: filtered,
+    })
+  }
 
   return (
       <section className="settings-page" aria-label={t('pageTitle')} ref={settingsPageRef}>
@@ -1176,6 +1186,17 @@ export function SettingsView({
                   onManage={() => setRepositoryAllowlistModal('publish')}
                   onRemove={(repository) => updateAutoReviewPublishRepositories(removeRepository(effectiveAutoReviewPublishRepositories(configDraft?.automation), repository))}
                 />
+                <RepositoryAllowlistCard
+                  title={t('review.followUpAllowlist')}
+                  description={t('review.followUpAllowlistDescription')}
+                  repositories={effectiveAutoFollowUpRepositories(configDraft?.automation)}
+                  disabled={!serverConfig?.writable}
+                  manageDisabled={allowlistManageDisabled}
+                  emptyLabel={allowlistEmptyLabel}
+                  onManage={() => setRepositoryAllowlistModal('followUp')}
+                  onRemove={(repository) => updateAutoFollowUpRepositories(removeRepository(effectiveAutoFollowUpRepositories(configDraft?.automation), repository))}
+                />
+                <SettingsRow icon={RotateCcw} label={t('review.followUpRounds')} description={t('review.followUpRoundsDescription')} control={<NumberControl label={t('review.followUpRounds')} value={configDraft?.automation.maxFollowUpRounds ?? 5} disabled={!serverConfig?.writable} min={1} max={20} onChange={(value) => updateAutomationConfig({ maxFollowUpRounds: value })} />} />
               </SettingsGroup>
             </div>
           ) : null}
@@ -1185,13 +1206,21 @@ export function SettingsView({
           <RepositoryAllowlistModal
             kind={repositoryAllowlistModal}
             repositories={configuredProjects}
-            selectedRepositories={repositoryAllowlistModal === 'autoReview' ? configDraft?.automation.autoReviewRepositories ?? [] : effectiveAutoReviewPublishRepositories(configDraft?.automation)}
+            selectedRepositories={
+              repositoryAllowlistModal === 'autoReview'
+                ? configDraft?.automation.autoReviewRepositories ?? []
+                : repositoryAllowlistModal === 'followUp'
+                  ? effectiveAutoFollowUpRepositories(configDraft?.automation)
+                  : effectiveAutoReviewPublishRepositories(configDraft?.automation)
+            }
             targetTerm={reviewTargetTerm}
             publishRouteTerm={publishRouteTerm}
             onCancel={() => setRepositoryAllowlistModal(null)}
             onSave={(selectedRepositories) => {
               if (repositoryAllowlistModal === 'autoReview') {
                 updateAutoReviewRepositories(selectedRepositories)
+              } else if (repositoryAllowlistModal === 'followUp') {
+                updateAutoFollowUpRepositories(selectedRepositories)
               } else {
                 updateAutoReviewPublishRepositories(selectedRepositories)
               }
@@ -1996,10 +2025,16 @@ function RepositoryAllowlistModal({
     searchRef.current?.focus()
   }, [])
 
-  const title = kind === 'autoReview' ? t('review.modal.autoReviewTitle') : t('review.modal.publishTitle')
+  const title = kind === 'autoReview'
+    ? t('review.modal.autoReviewTitle')
+    : kind === 'followUp'
+      ? t('review.modal.followUpTitle')
+      : t('review.modal.publishTitle')
   const description = kind === 'autoReview'
     ? t('review.modal.autoReviewDescription', { term: targetTerm })
-    : t('review.modal.publishDescription', { route: publishRouteTerm })
+    : kind === 'followUp'
+      ? t('review.modal.followUpDescription')
+      : t('review.modal.publishDescription', { route: publishRouteTerm })
   const filteredRepositories = normalizedRepositories.filter((repository) => repositoryMatchesQuery(repository, query))
 
   const toggleRepository = (repository: string) => {
@@ -3341,6 +3376,14 @@ function effectiveAutoReviewPublishRepositories(automation?: ServerConfiguration
   }
 
   return automation.autoReviewPublishRepositories ?? []
+}
+
+function effectiveAutoFollowUpRepositories(automation?: ServerConfiguration['automation']) {
+  if (!automation?.autoFollowUpEnabled) {
+    return []
+  }
+
+  return automation.autoFollowUpRepositories ?? []
 }
 
 function normalizeRepositoryList(repositories: string[]) {

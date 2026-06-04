@@ -142,7 +142,10 @@ public sealed class ServerConfigurationService(
         "maxImplementationTurns",
         "autoReviewRepositories",
         "autoReviewPublishEnabled",
-        "autoReviewPublishRepositories"
+        "autoReviewPublishRepositories",
+        "autoFollowUpEnabled",
+        "autoFollowUpRepositories",
+        "maxFollowUpRounds"
     };
 
     private static readonly HashSet<string> BlockedProperties = new(StringComparer.OrdinalIgnoreCase)
@@ -183,6 +186,9 @@ public sealed class ServerConfigurationService(
         "automation.autoReviewRepositories",
         "automation.autoReviewPublishEnabled",
         "automation.autoReviewPublishRepositories",
+        "automation.autoFollowUpEnabled",
+        "automation.autoFollowUpRepositories",
+        "automation.maxFollowUpRounds",
         "runtime.managedWorktreesEnabled",
         "runtime.worktreeRoot",
         "runtime.worktreeBranchPrefix",
@@ -356,7 +362,10 @@ public sealed class ServerConfigurationService(
                 automation.MaxImplementationTurns,
                 automation.AutoReviewRepositories,
                 automation.AutoReviewPublishEnabled,
-                automation.AutoReviewPublishRepositories));
+                automation.AutoReviewPublishRepositories,
+                automation.AutoFollowUpEnabled,
+                automation.AutoFollowUpRepositories,
+                automation.MaxFollowUpRounds));
     }
 
     private static IReadOnlyList<GitHubInstallationProfileDto> BuildGitHubInstallationProfiles(GitHubOptions options)
@@ -786,7 +795,10 @@ public sealed class ServerConfigurationService(
                     next.Automation.MaxImplementationTurns,
                     AutoReviewRepositories = next.Automation.AutoReviewRepositories,
                     next.Automation.AutoReviewPublishEnabled,
-                    AutoReviewPublishRepositories = next.Automation.AutoReviewPublishRepositories
+                    AutoReviewPublishRepositories = next.Automation.AutoReviewPublishRepositories,
+                    next.Automation.AutoFollowUpEnabled,
+                    AutoFollowUpRepositories = next.Automation.AutoFollowUpRepositories,
+                    next.Automation.MaxFollowUpRounds
                 }, JsonOptions)
             }
         };
@@ -1285,6 +1297,8 @@ public sealed class ServerConfigurationService(
         ValidateLabels(configuration.Automation.AutoDispatchBlockLabels, "automation.autoDispatchBlockLabels", errors);
         ValidateRepositories(configuration.Automation.AutoReviewRepositories, "automation.autoReviewRepositories", errors);
         ValidateRepositories(configuration.Automation.AutoReviewPublishRepositories, "automation.autoReviewPublishRepositories", errors);
+        ValidateRepositories(configuration.Automation.AutoFollowUpRepositories, "automation.autoFollowUpRepositories", errors);
+        ValidateRange(configuration.Automation.MaxFollowUpRounds, 1, 20, "automation.maxFollowUpRounds", errors);
         ValidateSecretUpdate(configuration.GitHub.Secrets?.Token, "github.secrets.token", errors);
         ValidateSecretUpdate(configuration.GitHub.Secrets?.PrivateKey, "github.secrets.privateKey", errors);
         ValidateSecretUpdate(configuration.GitHub.Secrets?.PrivateKeyPath, "github.secrets.privateKeyPath", errors);
@@ -1484,6 +1498,9 @@ public sealed class ServerConfigurationService(
         ["automation.autoReviewRepositories"] = string.Join("\n", value.Automation.AutoReviewRepositories.Order(StringComparer.OrdinalIgnoreCase)),
         ["automation.autoReviewPublishEnabled"] = value.Automation.AutoReviewPublishEnabled.ToString(),
         ["automation.autoReviewPublishRepositories"] = string.Join("\n", value.Automation.AutoReviewPublishRepositories.Order(StringComparer.OrdinalIgnoreCase)),
+        ["automation.autoFollowUpEnabled"] = value.Automation.AutoFollowUpEnabled.ToString(),
+        ["automation.autoFollowUpRepositories"] = string.Join("\n", value.Automation.AutoFollowUpRepositories.Order(StringComparer.OrdinalIgnoreCase)),
+        ["automation.maxFollowUpRounds"] = value.Automation.MaxFollowUpRounds.ToString(),
         ["runtime.managedWorktreesEnabled"] = value.Runtime.ManagedWorktreesEnabled.ToString(),
         ["runtime.worktreeRoot"] = value.Runtime.WorktreeRoot,
         ["runtime.worktreeBranchPrefix"] = value.Runtime.WorktreeBranchPrefix,
@@ -1516,6 +1533,7 @@ public sealed class ServerConfigurationService(
                 "automation.autoDispatchEnabled" or "automation.autoDispatchAllowLabels" or "automation.autoDispatchBlockLabels" or "automation.deliveryPolicy" or "automation.maxImplementationTurns" => "Automation policy changes affect future implementation dispatches and handoffs.",
                 "automation.autoReviewRepositories" => "Automatic review changes affect future PR/MR review dispatches.",
                 "automation.autoReviewPublishEnabled" or "automation.autoReviewPublishRepositories" => "Draft auto-publish changes affect future PR/MR review draft source writes.",
+                "automation.autoFollowUpEnabled" or "automation.autoFollowUpRepositories" or "automation.maxFollowUpRounds" => "Implementation follow-up changes affect future automatic re-implementation of items whose generated pull request gains review feedback.",
                 "runtime.managedWorktreesEnabled" or "runtime.worktreeRoot" or "runtime.worktreeBranchPrefix" => "Managed worktree changes affect new worktree preparation and cleanup boundaries.",
                 "runtime.globalMaxActiveRuns" or "runtime.maxActiveRunsPerRepository" or "runtime.maxActiveRunsPerSource" => "Concurrency changes affect new run scheduling.",
                 _ => "This change affects future runtime behavior."

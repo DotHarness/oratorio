@@ -149,6 +149,28 @@ public sealed class OratorioAutoReviewItemState
     public OratorioRun? LastQueuedRun { get; set; }
 }
 
+public sealed class OratorioImplementationFollowUpItemState
+{
+    public string OriginatingItemId { get; set; } = "";
+    public string? GeneratedPrItemId { get; set; }
+    public string Repository { get; set; } = "";
+    public string? LastObservedFindingsKey { get; set; }
+    public DateTimeOffset? LastObservedCommentAt { get; set; }
+    public string? LastQueuedHeadSha { get; set; }
+    public string? LastQueuedRoundId { get; set; }
+    public string? LastQueuedRunId { get; set; }
+    public int FollowUpRoundCount { get; set; }
+    public string? LastErrorCode { get; set; }
+    public string? LastErrorMessage { get; set; }
+    public DateTimeOffset? LastErrorAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    public OratorioItem? OriginatingItem { get; set; }
+    public OratorioItem? GeneratedPrItem { get; set; }
+    public OratorioRun? LastQueuedRun { get; set; }
+}
+
 public sealed class OratorioComment
 {
     public string CommentId { get; set; } = Guid.NewGuid().ToString("n");

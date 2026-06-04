@@ -847,7 +847,10 @@ public sealed record AutomationServerConfigurationDto(
     int MaxImplementationTurns,
     IReadOnlyList<string> AutoReviewRepositories,
     bool AutoReviewPublishEnabled,
-    IReadOnlyList<string> AutoReviewPublishRepositories);
+    IReadOnlyList<string> AutoReviewPublishRepositories,
+    bool AutoFollowUpEnabled,
+    IReadOnlyList<string> AutoFollowUpRepositories,
+    int MaxFollowUpRounds);
 
 public sealed record ConfigurationChangeDto(
     string ChangeId,

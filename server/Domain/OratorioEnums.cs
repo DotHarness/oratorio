@@ -191,6 +191,7 @@ public enum SourceWriteKind
     MergeRequestDiscussion,
     CommitStatus,
     MergeRequestCreation,
+    PullRequestUpdate,
     ResolveReviewThread
 }
 
@@ -277,7 +278,8 @@ public enum RunDispatchTrigger
     Manual,
     AppBinding,
     AutoImplementation,
-    AutoReview
+    AutoReview,
+    AutoFollowUp
 }
 
 public enum DeliveryPolicy

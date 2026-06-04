@@ -13,8 +13,13 @@ public sealed class OratorioAutomationOptions
     public string[] AutoReviewRepositories { get; set; } = [];
     public bool AutoReviewPublishEnabled { get; set; }
     public string[] AutoReviewPublishRepositories { get; set; } = [];
+    public bool AutoFollowUpEnabled { get; set; }
+    public string[] AutoFollowUpRepositories { get; set; } = [];
+    public int MaxFollowUpRounds { get; set; } = 5;
 
     public int EffectiveMaxImplementationTurns => Math.Clamp(MaxImplementationTurns, 1, 10);
+
+    public int EffectiveMaxFollowUpRounds => Math.Clamp(MaxFollowUpRounds, 1, 20);
 
     public bool CanAutoReviewRepository(string? repository) =>
         !string.IsNullOrWhiteSpace(repository) &&
@@ -24,6 +29,11 @@ public sealed class OratorioAutomationOptions
         AutoReviewPublishEnabled &&
         !string.IsNullOrWhiteSpace(repository) &&
         AutoReviewPublishRepositories.Any(x => MatchesRepository(x, repository));
+
+    public bool CanAutoFollowUpRepository(string? repository) =>
+        AutoFollowUpEnabled &&
+        !string.IsNullOrWhiteSpace(repository) &&
+        AutoFollowUpRepositories.Any(x => MatchesRepository(x, repository));
 
     private static bool MatchesRepository(string configured, string repository)
     {

@@ -190,6 +190,12 @@ public sealed class OratorioService(
         return await ReReviewPullRequestAsync(item.Source, item.ExternalId, trigger, ct);
     }
 
+    public async Task<ItemDetailResponse> ReactivateForImplementationFollowUpByIdAsync(string itemId, string note, CancellationToken ct)
+    {
+        var item = await GetItemByIdAsync(itemId, tracking: false, ct);
+        return await ReactivateForImplementationFollowUpAsync(item.Source, item.ExternalId, note, ct);
+    }
+
     public async Task<ItemDetailResponse> ApproveByIdAsync(string itemId, DecisionRequest request, CancellationToken ct)
     {
         var item = await GetItemByIdAsync(itemId, tracking: false, ct);
@@ -629,6 +635,57 @@ public sealed class OratorioService(
             nextRound,
             new DispatchRequest("appServer", note, null, null, "reviewAnalysis", DeliveryPolicy.ManualDelivery),
             trigger,
+            now,
+            ct);
+
+        await db.SaveChangesAsync(ct);
+        PublishTaskUpdated(item);
+        return await GetItemDetailAsync(source, externalId, ct);
+    }
+
+    private async Task<ItemDetailResponse> ReactivateForImplementationFollowUpAsync(string source, string externalId, string note, CancellationToken ct)
+    {
+        var item = await GetItemAsync(source, externalId, tracking: true, ct);
+        if (item.Kind is not (ItemKind.Issue or ItemKind.LocalTask))
+        {
+            throw OratorioApiException.Conflict(
+                "implementationUnsupportedItem",
+                "Implementation follow-up is only supported for issue and local task items.",
+                new Dictionary<string, object?> { ["kind"] = item.Kind });
+        }
+
+        if (item.State is ItemState.Running or ItemState.Dispatching)
+        {
+            throw OratorioApiException.Conflict(
+                "activeRunExists",
+                "Cannot start an implementation follow-up while another run is active.",
+                new Dictionary<string, object?> { ["state"] = item.State });
+        }
+
+        if (item.State != ItemState.AwaitingReview)
+        {
+            throw InvalidTransition(item.State, "implementationFollowUp");
+        }
+
+        await EnsureSourceDetailsCurrentForDispatchAsync(item, ct);
+
+        var now = clock.UtcNow;
+        var dispatchNote = string.IsNullOrWhiteSpace(note)
+            ? "Oratorio queued an implementation follow-up for new review feedback on the generated pull request."
+            : note.Trim();
+        var currentRound = await FindCurrentRoundAsync(item, ct);
+        if (currentRound is not null && currentRound.Status == RoundStatus.AwaitingReview)
+        {
+            currentRound.Status = RoundStatus.Superseded;
+            currentRound.CompletedAt = now;
+        }
+
+        var nextRound = CreateNextRound(item, now);
+        await QueueDispatchRunAsync(
+            item,
+            nextRound,
+            new DispatchRequest("appServer", dispatchNote, null, null, "implementation", DeliveryPolicy.AutoPr),
+            RunDispatchTrigger.AutoFollowUp,
             now,
             ct);
 

@@ -401,6 +401,10 @@
     "publishDefault": "仅将有效的评审草稿作为 GitHub COMMENT 评审发布。",
     "emptyWithGitlab": "未包含任何项目。",
     "emptyDefault": "未包含任何仓库。",
+    "followUpAllowlist": "实现跟进允许列表",
+    "followUpAllowlistDescription": "当生成的 PR 出现未解决的评审 findings 或新的人类评审评论时，自动重新实现原始 issue/任务，并将跟进提交推送到同一个 PR。",
+    "followUpRounds": "最大跟进轮数",
+    "followUpRoundsDescription": "每个原始条目自动实现跟进的轮数上限，达到后循环停止。",
     "allowlistCard": {
       "includedSingular": "已包含 {{count}} 个仓库",
       "includedPlural": "已包含 {{count}} 个仓库",
@@ -411,8 +415,10 @@
     "modal": {
       "autoReviewTitle": "选择来源项目",
       "publishTitle": "选择发布项目",
+      "followUpTitle": "选择跟进项目",
       "autoReviewDescription": "选择来源项目以启用自动 {{term}} 评审。",
       "publishDescription": "选择其评审草稿可通过 {{route}} 发布的来源项目。",
+      "followUpDescription": "选择其生成的 PR 可触发自动实现跟进的来源项目。",
       "close": "关闭",
       "searchPlaceholder": "搜索来源项目...",
       "searchAria": "搜索来源项目",

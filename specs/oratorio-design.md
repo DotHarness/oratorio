@@ -119,6 +119,7 @@ stateDiagram-v2
     Running --> Discovered: Cancel run
     AwaitingReview --> Approved: Approve
     AwaitingReview --> Discovered: Request changes
+    AwaitingReview --> Discovered: Implementation follow-up
     AwaitingReview --> Rejected: Reject
     Failed --> Dispatching: Retry
     Approved --> Discovered: Reopen
@@ -156,6 +157,26 @@ to `discovered`.
   SHA changes supersede the current round and queue the next read-only review
   round after any active run finishes. Auto Review never writes a GitHub
   decision.
+- Implementation Follow-up is an automated, gated, bounded loop anchored on the
+  originating GitHub/GitLab issue or local task — never on the generated pull
+  request, which stays a read-only review target per §5.5 and §6. When an
+  originating item that already delivered a generated pull request is in
+  `awaitingReview` and that generated PR accrues new unresolved published review
+  findings (§5.3) or new human PR review comments, the Implementation Follow-up
+  scheduler re-activates the originating item to `discovered`, creates the next
+  numbered round, and queues a new implementation run that reuses the existing PR
+  branch and pushes follow-up commits to the same pull request (§5.5). The loop
+  fires only while the originating item is `awaitingReview`, has no active run, is
+  not `approved`/`rejected`/`archived`, the generated PR is still open (not merged
+  or closed), and the item's follow-up round count is below the configured
+  maximum. The next implementation round after follow-up re-activation is an
+  ordinary numbered round.
+- Implementation Follow-up terminates when the generated PR has no open findings
+  and its latest review round is clean, when the follow-up round cap is reached
+  (recorded as an operator-visible skip state), when the operator `approve`s the
+  originating item (accepting the handoff), or when the generated PR is merged,
+  closed, or archived. Operators can disable the loop globally or per repository
+  through the Implementation Follow-up policy in §4.
 - `approve` is allowed only after a completed run has moved the item to
   `awaitingReview`.
 - For GitHub pull request review rounds, Oratorio writes the `oratorio/review`
@@ -172,7 +193,11 @@ to `discovered`.
   compatibility `cancelled` TaskStatus projection but are not part of the
   default Active board.
 - Imported source comments are source context, not operator feedback, and must
-  not be treated as requested follow-up work by themselves.
+  not be treated as requested follow-up work by themselves. The one bounded
+  exemption is human review comments on the generated pull request of an
+  originating implementation item: under the gated Implementation Follow-up loop
+  they are actionable follow-up feedback for that originating item's next
+  implementation round (§5.5, §6).
 
 ---
 
@@ -215,6 +240,11 @@ Canonical domain records:
   scheduler state for repository Auto Review enablement, first-enable
   baselines, last observed PR heads, last queued PR heads, and visible skip or
   routing errors.
+- `ImplementationFollowUpItemState`: durable backend scheduler state for the
+  Implementation Follow-up loop (§3, §5.5), keyed by originating item, with the
+  linked generated PR item, the last observed open-finding signature, the last
+  observed human PR comment time, last queued head/round/run, the follow-up round
+  count, and visible skip or cap state.
 
 Public REST endpoints live under `/api/v1`, use camelCase JSON, and return
 stable error objects:
@@ -257,7 +287,9 @@ administration API. They require a trusted local boundary or production operator
 authentication. Writable fields include selected GitHub source, GitHub credential
 presence, DotCraft bridge, workspace routing, managed worktree, concurrency,
 retry, timeout, cleanup policy values, implementation auto-dispatch policy,
-repository Auto Review allowlists, and Draft auto-publish allowlists. Tokens,
+repository Auto Review allowlists, Draft auto-publish allowlists, and the
+Implementation Follow-up policy (global enablement, repository allowlist, and
+maximum follow-up rounds). Tokens,
 webhook secrets, and private keys are writable only through one-shot
 replace/clear semantics and must be stored encrypted. Auto-start commands and
 process arguments are never writable through Settings. Writes create a durable
@@ -650,6 +682,35 @@ implementation runs. `deliveryPolicy` decides whether a valid draft waits for
 manual delivery or uses `autoPr`. Allow/block labels and repository/workspace
 configuration determine eligibility.
 
+Implementation follow-up delivery handles the case where an originating item that
+already delivered a generated pull request is implemented again under the
+Implementation Follow-up loop (§3). It is delivery of additional commits to the
+existing review target, not creation of a new one:
+
+- Before creating a review target, delivery must detect an existing open
+  generated pull request for the originating item (by parent linkage and head
+  branch). When one exists, delivery pushes follow-up commits to the same branch
+  and updates the same generated PR item; it must not open a second pull request.
+  If the source API rejects a duplicate creation because the PR already exists,
+  delivery resolves and links the existing pull request instead of failing.
+- After a follow-up push, delivery updates the generated PR item head so that
+  Auto Review or `reReview` (§3, §5.3) detects the new head and re-reviews it.
+- The follow-up implementation round's managed worktree is prepared from the
+  existing generated PR branch head, not reset to the repository base ref, so
+  previously delivered commits are retained and new commits stack on top. This is
+  the narrow exception to the per-round worktree base-ref reset in §6.
+
+`autoFollowUp` is a third policy, independent of `autoDispatch` and
+`deliveryPolicy`. It decides whether the backend may automatically re-implement an
+originating item in response to its generated pull request's review feedback. It
+is globally gated and repository opt-in by exact `owner/name`, mirroring Auto
+Review and Draft auto-publish. With `autoFollowUp` disabled or the repository not
+allow-listed, generated PR feedback never auto-re-activates the originating item.
+
+The Implementation Follow-up loop (§3) is distinct from `SubmitFollowUpDraft`
+below: the loop continues the current item's own delivery on its existing PR,
+while `SubmitFollowUpDraft` proposes separately scoped new work.
+
 Follow-up runs expose an Oratorio-owned Runtime Dynamic Tool named
 `SubmitFollowUpDraft` when eligible. Agents use it to propose split-out work,
 blockers, or separately scoped improvements without directly creating external
@@ -874,6 +935,22 @@ Prompt context for real AppServer rounds must include:
 - prior run summaries and errors;
 - workspace, repository, branch, and head SHA metadata when available.
 
+For an implementation run on an originating item that has a linked generated pull
+request (the Implementation Follow-up loop, §3, §5.5), the per-turn prompt's
+feedback section must additionally include the generated PR's still-open published
+review findings — `findingId`, severity, title, path, line, and the
+`suggestionReplacement` text for concrete code suggestions — together with the
+human PR review comments added since the previous follow-up round. The prompt
+instructs the agent to address them on the existing PR branch. The implementation
+agent does not resolve findings itself: finding resolution stays bound to the
+generated PR per §5.7, so the follow-up push changes the PR head and the
+subsequent PR review round resolves the findings it confirms fixed. This is the
+only place where one item's prompt references another item's review
+state, and it is bounded to the originating-item → generated-PR parent link. Only
+findings from a published review draft participate; unpublished drafts do not
+trigger or feed the loop. This per-run, cross-item feedback stays in the user-turn
+request, never in thread-stable runtime additional context.
+
 The stored `PromptContextJson` is audit data and may contain full structured
 context. The Dashboard-visible prompt should be compact prose with sections
 such as:
@@ -1082,6 +1159,19 @@ Validation expectations:
   delivery blocking, auto PR delivery, generated PR item linkage, and failure
   transitions for missing drafts, empty diffs, template errors, push failures,
   and PR creation failures.
+- Implementation Follow-up loop changes require integration coverage for:
+  re-activation of the originating item when its generated PR gains a new open
+  published finding or a new human PR review comment; no re-activation from
+  already-resolved findings, an unpublished draft, an active run, a terminal
+  item, a merged/closed PR, or a disabled/not-allow-listed repository; follow-up
+  delivery that pushes to the existing PR branch and updates the same generated PR
+  without opening a second pull request (including the duplicate-create defense);
+  follow-up worktree preparation that stacks on the existing PR head and retains
+  prior commits; prompt feedback that includes the generated PR's open findings,
+  their `suggestionReplacement` text, and the new human PR comments; the
+  follow-up round cap stopping the loop with operator-visible state; loop
+  quiescence when the review is clean; and loop termination on operator `approve`
+  of the originating item.
 - Git delivery tests must use fake Git and fake GitHub adapters before any
   credentialed smoke test. They must verify that delivery uses Oratorio-owned
   GitHub App credentials, not agent-owned or ambient local credentials.

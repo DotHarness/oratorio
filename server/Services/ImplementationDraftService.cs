@@ -544,6 +544,12 @@ public sealed class ImplementationDraftService(
         string prBody,
         CancellationToken ct)
     {
+        var existingGeneratedPr = await FindExistingOpenGeneratedPrAsync(item, route, ct);
+        if (existingGeneratedPr is not null)
+        {
+            return await UpdateExistingReviewTargetAsync(item, draft, round, route, existingGeneratedPr, branchName, commitSha, ct);
+        }
+
         var baseBranch = await ResolveBaseBranchAsync(item, route, ct);
         if (route.Provider == "github")
         {
@@ -560,7 +566,21 @@ public sealed class ImplementationDraftService(
             var write = await GetOrCreateDeliveryWriteAsync(item, draft, round, route, SourceWriteKind.PullRequestCreation, "implementationPullRequestCreate", request, ct);
             AddTimeline(item, round, run, TimelineEventKind.SourceWriteQueued, ActorKind.Source, "GitHub", "Pull request creation queued", request.Title, clock.UtcNow);
 
-            var created = await gitHub.CreatePullRequestAsync(route.GitHubRepository!, request.Title, request.Head, request.Base, request.Body, draft: false, ct);
+            GitHubPullRequestCreateResponse created;
+            try
+            {
+                created = await gitHub.CreatePullRequestAsync(route.GitHubRepository!, request.Title, request.Head, request.Base, request.Body, draft: false, ct);
+            }
+            catch (HttpRequestException ex) when (IsPullRequestAlreadyExists(ex))
+            {
+                var existing = await FindOpenGitHubPullRequestByHeadAsync(route.GitHubRepository!, request.Head, ct)
+                    ?? throw OratorioApiException.Conflict(
+                        "pullRequestAlreadyExists",
+                        "A pull request already exists for this branch but could not be resolved for linking.",
+                        new Dictionary<string, object?> { ["head"] = request.Head });
+                created = new GitHubPullRequestCreateResponse(existing.Id, existing.Number, existing.HtmlUrl, existing.Title, existing.Head, existing.Base);
+            }
+
             MarkWriteSucceeded(write, $"pr:{route.GitHubRepository!.FullName}#{created.Number}", created.HtmlUrl, JsonSerializer.Serialize(created, JsonOptions), clock.UtcNow);
             var prItem = UpsertGeneratedPrItem(item, draft, created, route.GitHubRepository, request.Head, commitSha, clock.UtcNow);
             return new DeliveryReviewTarget(prItem, created.HtmlUrl, write);
@@ -585,6 +605,51 @@ public sealed class ImplementationDraftService(
         var mrItem = UpsertGeneratedMrItem(item, draft, createdMr, route, mrRequest.SourceBranch, commitSha, clock.UtcNow);
         return new DeliveryReviewTarget(mrItem, createdMr.WebUrl, mrWrite);
     }
+
+    private async Task<OratorioItem?> FindExistingOpenGeneratedPrAsync(OratorioItem item, DeliveryRoute route, CancellationToken ct) =>
+        await db.Items
+            .Where(x =>
+                x.ParentItemId == item.ItemId &&
+                x.Kind == ItemKind.PullRequest &&
+                x.Source == route.Provider &&
+                x.SourceState == SourceState.Open &&
+                x.State != ItemState.Archived)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+    private async Task<DeliveryReviewTarget> UpdateExistingReviewTargetAsync(
+        OratorioItem item,
+        OratorioImplementationDraft draft,
+        OratorioRound round,
+        DeliveryRoute route,
+        OratorioItem existingPr,
+        string branchName,
+        string commitSha,
+        CancellationToken ct)
+    {
+        var now = clock.UtcNow;
+        var request = new PullRequestUpdateRequest(branchName, commitSha, existingPr.ExternalId);
+        var write = await GetOrCreateDeliveryWriteAsync(item, draft, round, route, SourceWriteKind.PullRequestUpdate, "implementationBranchUpdate", request, ct);
+        existingPr.HeadSha = commitSha;
+        existingPr.Branch = branchName;
+        existingPr.SourceState = SourceState.Open;
+        existingPr.SourceUpdatedAt = now;
+        existingPr.SourceDetailsStatus = SourceDetailsStatus.Stale;
+        existingPr.UpdatedAt = now;
+        MarkWriteSucceeded(write, existingPr.ExternalId, existingPr.ExternalUrl, JsonSerializer.Serialize(new { existingPr.ExternalId, branchName, commitSha }, JsonOptions), now);
+        return new DeliveryReviewTarget(existingPr, existingPr.ExternalUrl, write);
+    }
+
+    private async Task<GitHubPullRequest?> FindOpenGitHubPullRequestByHeadAsync(GitHubRepositoryRef repository, string head, CancellationToken ct)
+    {
+        var headRef = head.Contains(':', StringComparison.Ordinal) ? head[(head.IndexOf(':', StringComparison.Ordinal) + 1)..] : head;
+        var open = await gitHub.ListPullRequestsAsync(repository, GitHubListState.Open, ct);
+        return open.FirstOrDefault(pr => string.Equals(pr.Head.Ref, headRef, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsPullRequestAlreadyExists(HttpRequestException ex) =>
+        ex.StatusCode == System.Net.HttpStatusCode.UnprocessableEntity &&
+        ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase);
 
     private async Task<OratorioSourceWriteLog?> FindDeliveryWriteAsync(OratorioImplementationDraft draft, SourceWriteKind kind, string intent, SourceWriteStatus status, CancellationToken ct) =>
         await db.SourceWriteLogs
@@ -919,7 +984,7 @@ public sealed class ImplementationDraftService(
     }
 
     public static bool IsImplementationDeliveryIntent(string? intent) =>
-        intent is "implementationCommit" or "implementationBranchPush" or "implementationPullRequestCreate" or "implementationMergeRequestCreate";
+        intent is "implementationCommit" or "implementationBranchPush" or "implementationPullRequestCreate" or "implementationMergeRequestCreate" or "implementationBranchUpdate";
 
     private static bool TryDeserialize<T>(string? json, out T value)
     {
@@ -980,4 +1045,5 @@ public sealed class ImplementationDraftService(
     private sealed record BranchPushRequest(string BranchName, string CommitSha);
     private sealed record GitHubPullRequestDeliveryRequest(string Title, string Head, string Base, string Body);
     private sealed record GitLabMergeRequestDeliveryRequest(string Title, string SourceBranch, string TargetBranch, string Description);
+    private sealed record PullRequestUpdateRequest(string BranchName, string CommitSha, string ExternalId);
 }

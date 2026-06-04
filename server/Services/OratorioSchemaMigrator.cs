@@ -76,6 +76,7 @@ public sealed class OratorioSchemaMigrator(OratorioDbContext db)
         await EnsureGitLabSyncTablesAsync(ct);
         await EnsureSourceSyncSchedulesTableAsync(ct);
         await EnsureAutoReviewStateTablesAsync(ct);
+        await EnsureImplementationFollowUpStateTableAsync(ct);
         await NormalizeSourceSnapshotsAsync(ct);
         await BackfillSourceDetailsStatusAsync(ct);
         await BackfillCommentPurposeAsync(ct);
@@ -640,6 +641,39 @@ public sealed class OratorioSchemaMigrator(OratorioDbContext db)
             ct);
         await db.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS ix_auto_review_item_states_last_queued_run_id ON auto_review_item_states (last_queued_run_id)",
+            ct);
+    }
+
+    private async Task EnsureImplementationFollowUpStateTableAsync(CancellationToken ct)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS implementation_follow_up_item_states (
+                originating_item_id TEXT NOT NULL CONSTRAINT pk_implementation_follow_up_item_states PRIMARY KEY,
+                generated_pr_item_id TEXT NULL,
+                repository TEXT NOT NULL,
+                last_observed_findings_key TEXT NULL,
+                last_observed_comment_at INTEGER NULL,
+                last_queued_head_sha TEXT NULL,
+                last_queued_round_id TEXT NULL,
+                last_queued_run_id TEXT NULL,
+                follow_up_round_count INTEGER NOT NULL DEFAULT 0,
+                last_error_code TEXT NULL,
+                last_error_message TEXT NULL,
+                last_error_at INTEGER NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                CONSTRAINT fk_implementation_follow_up_item_states_items_originating_item_id FOREIGN KEY (originating_item_id) REFERENCES items (item_id) ON DELETE CASCADE,
+                CONSTRAINT fk_implementation_follow_up_item_states_items_generated_pr_item_id FOREIGN KEY (generated_pr_item_id) REFERENCES items (item_id) ON DELETE SET NULL,
+                CONSTRAINT fk_implementation_follow_up_item_states_runs_last_queued_run_id FOREIGN KEY (last_queued_run_id) REFERENCES runs (run_id) ON DELETE SET NULL
+            );
+            """,
+            ct);
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS ix_implementation_follow_up_item_states_repository_updated_at ON implementation_follow_up_item_states (repository, updated_at)",
+            ct);
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS ix_implementation_follow_up_item_states_generated_pr_item_id ON implementation_follow_up_item_states (generated_pr_item_id)",
             ct);
     }
 
