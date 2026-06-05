@@ -5329,6 +5329,7 @@ internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) :
 {
     public FakeAppServerOutcome Outcome { get; set; } = outcome;
     public AppServerThreadStartRequest? LastThreadStartRequest { get; private set; }
+    public AppBindingConnectionConnectRequest? LastAppConnectionConnectRequest { get; private set; }
     public List<AppServerThreadStartRequest> ThreadStartRequests { get; } = [];
     public List<AppServerThreadResumeRequest> ThreadResumeRequests { get; } = [];
     public List<AppBindingContextBlockUpsertRequest> AppBindingContextBlockUpsertRequests { get; } = [];
@@ -5378,6 +5379,7 @@ internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) :
             () => SupportsRuntimeAdditionalContext,
             () => UseMismatchedToolThreadId,
             () => ConnectionStatus,
+            request => LastAppConnectionConnectRequest = request,
             request => AppBindingContextBlockUpsertRequests.Add(request),
             result =>
             {
@@ -5397,6 +5399,7 @@ internal sealed class FakeAppServerClient(
     Func<bool> supportsRuntimeAdditionalContext,
     Func<bool> useMismatchedToolThreadId,
     Func<AppBindingConnectionStatus> getConnectionStatus,
+    Action<AppBindingConnectionConnectRequest> captureConnectionConnect,
     Action<AppBindingContextBlockUpsertRequest> upsertContextBlock,
     Action<AppServerDynamicToolResult> captureToolResult) : IDotCraftAppServerClient
 {
@@ -5799,12 +5802,15 @@ internal sealed class FakeAppServerClient(
             "test-user",
             DateTimeOffset.UtcNow.AddMinutes(10)));
 
-    public Task<AppBindingConnectionStatus> CompleteAppConnectionAsync(AppBindingConnectionConnectRequest request, CancellationToken ct) =>
-        Task.FromResult(new AppBindingConnectionStatus(
+    public Task<AppBindingConnectionStatus> CompleteAppConnectionAsync(AppBindingConnectionConnectRequest request, CancellationToken ct)
+    {
+        captureConnectionConnect(request);
+        return Task.FromResult(new AppBindingConnectionStatus(
             request.AppId,
             "connected",
             ConnectedAt: DateTimeOffset.UtcNow,
             AccountLabel: request.AccountLabel));
+    }
 
     public Task<AppBindingConnectionStatus> GetAppConnectionStatusAsync(AppBindingConnectionStatusRequest request, CancellationToken ct) =>
         Task.FromResult(getConnectionStatus());

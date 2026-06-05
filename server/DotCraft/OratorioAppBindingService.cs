@@ -116,7 +116,7 @@ public sealed class OratorioAppBindingService(
         return new OratorioAppBindingInspection(handoff.Operation, Connection: null, binding);
     }
 
-    public async Task<OratorioAppBindingApprovalResult> ApproveAsync(string handoffUrl, CancellationToken ct)
+    public async Task<OratorioAppBindingApprovalResult> ApproveAsync(string handoffUrl, string? surfaceBaseUrl, CancellationToken ct)
     {
         var handoff = OratorioAppBindingHandoff.FromUrl(handoffUrl);
         var client = await ConnectAsync(handoff, ct);
@@ -125,7 +125,7 @@ public sealed class OratorioAppBindingService(
         {
             try
             {
-                var status = await CompleteConnectionAsync(client, handoff, ct);
+                var status = await CompleteConnectionAsync(client, handoff, surfaceBaseUrl, ct);
                 return new OratorioAppBindingApprovalResult(handoff.Operation, status.State, BindingId: null);
             }
             finally
@@ -149,6 +149,7 @@ public sealed class OratorioAppBindingService(
     private async Task<AppBindingConnectionStatus> CompleteConnectionAsync(
         IDotCraftAppServerClient client,
         OratorioAppBindingHandoff handoff,
+        string? surfaceBaseUrl,
         CancellationToken ct)
     {
         var request = await client.GetAppConnectionRequestAsync(
@@ -169,7 +170,8 @@ public sealed class OratorioAppBindingService(
                     workspaceLabel = request.WorkspaceLabel,
                     mode = "deepLink",
                     completedAt = DateTimeOffset.UtcNow
-                }),
+                },
+                PublicMetadata: BuildPublicConnectionMetadata(surfaceBaseUrl)),
             ct);
         RememberConnectedStatus(status);
 
@@ -438,6 +440,44 @@ public sealed class OratorioAppBindingService(
             "error" => "DotCraft reported an App Binding connection error.",
             _ => "DotCraft has not connected Oratorio."
         };
+    }
+
+    private static object? BuildPublicConnectionMetadata(string? surfaceBaseUrl)
+    {
+        if (!TryNormalizeLoopbackBaseUrl(surfaceBaseUrl, out var normalizedBaseUrl))
+        {
+            return null;
+        }
+
+        return new
+        {
+            displayName = "Oratorio",
+            message = "Oratorio board surfaces are available from this local desktop session.",
+            surfaceEndpoints = new
+            {
+                apiBase = $"{normalizedBaseUrl}/api/v1"
+            }
+        };
+    }
+
+    private static bool TryNormalizeLoopbackBaseUrl(string? value, out string normalized)
+    {
+        normalized = string.Empty;
+        if (string.IsNullOrWhiteSpace(value) ||
+            !Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri) ||
+            uri.Scheme is not ("http" or "https") ||
+            !uri.IsLoopback)
+        {
+            return false;
+        }
+
+        normalized = new UriBuilder(uri)
+        {
+            Path = string.Empty,
+            Query = string.Empty,
+            Fragment = string.Empty
+        }.Uri.GetLeftPart(UriPartial.Authority).TrimEnd('/');
+        return true;
     }
 }
 

@@ -1121,6 +1121,12 @@ function OratorioApp() {
   }, [t])
 
   const inspectAppBindingHandoff = useCallback(async (url: string) => {
+    const openRoute = routeFromOratorioOpenDeepLink(url)
+    if (openRoute) {
+      navigate(openRoute)
+      return
+    }
+
     const bindingHandoff = isDotCraftBindingHandoff(url)
     if (!bindingHandoff) {
       setAppBindingDialog({ status: 'loading', url })
@@ -1148,7 +1154,7 @@ function OratorioApp() {
       }
       showNotice(t('common:shell.notices.dotCraftRequestFailed', { message: errorMessage(error) }), 'error')
     }
-  }, [markDotCraftAppBindingConnected, refreshAppBindingStatus, showNotice, t])
+  }, [markDotCraftAppBindingConnected, navigate, refreshAppBindingStatus, showNotice, t])
 
   const drainPendingAppBindingHandoffs = useCallback(async () => {
     if (!canUseBackend || drainingAppBindingHandoffsRef.current) {
@@ -2804,6 +2810,35 @@ function isDotCraftBindingHandoff(url: string): boolean {
     return parsed.protocol === 'oratorio:' && parsed.hostname === 'dotcraft' && parsed.pathname.replace(/^\/+/, '') === 'bind'
   } catch {
     return url.includes('oratorio://dotcraft/bind')
+  }
+}
+
+function routeFromOratorioOpenDeepLink(url: string): string | null {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'oratorio:' || parsed.hostname !== 'open') {
+      return null
+    }
+
+    const segments = parsed.pathname.split('/').filter(Boolean).map((segment) => decodeURIComponent(segment))
+    const kind = segments[0]?.toLowerCase() ?? 'board'
+    if (kind === 'board') {
+      return '/projects/default'
+    }
+
+    if (kind === 'task') {
+      const taskId = segments[1]?.trim()
+      return taskId ? `/projects/default/tasks/${encodeURIComponent(taskId)}` : '/projects/default'
+    }
+
+    if (kind === 'settings') {
+      const section = segments[1]?.trim() || 'general'
+      return `/settings/${encodeURIComponent(normalizeSettingsSection(section))}`
+    }
+
+    return '/projects/default'
+  } catch {
+    return null
   }
 }
 

@@ -122,7 +122,8 @@ public sealed record AppBindingConnectionConnectRequest(
     string AppId,
     string? AccountLabel = null,
     DateTimeOffset? ExpiresAt = null,
-    object? ConnectionProof = null);
+    object? ConnectionProof = null,
+    object? PublicMetadata = null);
 
 public sealed record AppBindingConnectionStatusRequest(string AppId);
 

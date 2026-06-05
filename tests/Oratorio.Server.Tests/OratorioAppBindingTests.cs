@@ -285,6 +285,15 @@ public sealed class OratorioAppBindingTests
         Assert.True(status.Connected);
         Assert.Equal("connected", status.State);
         Assert.Equal("Oratorio", status.AccountLabel);
+
+        var connectRequest = Assert.IsType<AppBindingConnectionConnectRequest>(
+            fakeAppServer.LastAppConnectionConnectRequest);
+        using var metadata = JsonDocument.Parse(JsonSerializer.Serialize(
+            connectRequest.PublicMetadata,
+            JsonOptions));
+        Assert.Equal("Oratorio", metadata.RootElement.GetProperty("displayName").GetString());
+        var endpoints = metadata.RootElement.GetProperty("surfaceEndpoints");
+        Assert.Equal("http://localhost/api/v1", endpoints.GetProperty("apiBase").GetString());
     }
 
     [Fact]

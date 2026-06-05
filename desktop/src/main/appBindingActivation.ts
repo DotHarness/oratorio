@@ -23,8 +23,14 @@ export function appBindingOperation(value: string): string | null {
       return null
     }
 
-    const pathOperation = url.pathname.replace(/^\/+|\/+$/g, '').toLowerCase()
-    return pathOperation || url.hostname.toLowerCase() || null
+    const hostOperation = url.hostname.toLowerCase()
+    if (hostOperation === 'open') {
+      return hostOperation
+    }
+
+    const pathSegments = url.pathname.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean)
+    const pathOperation = pathSegments[0]?.toLowerCase() ?? ''
+    return pathOperation || hostOperation || null
   } catch {
     return null
   }

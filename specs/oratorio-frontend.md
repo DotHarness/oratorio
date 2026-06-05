@@ -113,6 +113,11 @@ Deep-link behavior:
 - `oratorio://dotcraft/bind` must be handled silently when Oratorio is already
   running. It may deliver the handoff to the renderer, but it must not focus or
   foreground the window during DotCraft Welcome first-turn binding.
+- `oratorio://open/board`, `oratorio://open/task/{itemIdOrShortId}`, and
+  `oratorio://open/settings/{section}` may be opened from trusted DotCraft
+  Desktop extensions. These links foreground Oratorio, wait for the local server
+  when needed, and navigate to the closest implemented route. Unknown tasks
+  fall back to the board with a visible failure notice.
 - Deep links received during cold start or local server startup must be queued
   until the Desktop server URL is available; Oratorio must not inspect or approve
   App Binding requests before the server API can be reached.
@@ -133,6 +138,21 @@ The App Binding consent dialog must follow Oratorio modal and density language:
 - loading, error, cancel, and approving states remain visible and accessible;
 - success, failure, and follow-up messages use the shared Oratorio notice/toast
   style.
+
+### 2.3 DotCraft Embedded Board Surface
+
+DotCraft Desktop may embed a lightweight Oratorio board extension when the
+Oratorio plugin is installed and the Oratorio App Binding connection is active.
+The embedded board is a read-only command and status surface. It may show board
+columns, compact task cards, connection/setup states, search, refresh, a compact
+selected-card peek, and explicit handoff actions back to Oratorio Desktop or to
+an existing DotCraft thread.
+
+The embedded board must not duplicate Oratorio Desktop settings, the full Task
+Drawer, Task Detail, source write audit, review decisions, comments, drafts, or
+run execution surfaces. Those remain Oratorio Desktop and DotCraft Desktop
+responsibilities. Mutations continue to use App Binding tools, Oratorio Desktop
+forms, or future explicitly specified embedded actions.
 
 ---
 

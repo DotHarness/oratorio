@@ -23,6 +23,7 @@ describe('App Binding activation policy', () => {
     expect(appBindingOperation('oratorio://dotcraft/connect?request=req_1&token=token_1')).toBe('connect')
     expect(appBindingOperation('oratorio://dotcraft/bind?request=req_2&token=token_2')).toBe('bind')
     expect(appBindingOperation('oratorio://bind?request=req_3&token=token_3')).toBe('bind')
+    expect(appBindingOperation('oratorio://open/task/ORA-1')).toBe('open')
   })
 
   it('keeps bind handoffs silent when Oratorio is already running', () => {
@@ -34,6 +35,9 @@ describe('App Binding activation policy', () => {
   it('activates for connect, unknown, and invalid URLs as the safer policy', () => {
     expect(shouldActivateWindowForAppBindingUrls([
       'oratorio://dotcraft/connect?request=req_1&token=token_1'
+    ])).toBe(true)
+    expect(shouldActivateWindowForAppBindingUrls([
+      'oratorio://open/task/ORA-1'
     ])).toBe(true)
     expect(shouldActivateWindowForAppBindingUrls([
       'oratorio://dotcraft/unknown?request=req_1&token=token_1'

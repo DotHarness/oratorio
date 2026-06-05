@@ -328,10 +328,12 @@ public static class OratorioEndpoints
 
         group.MapPost("/dotcraft/app-binding/approve", async (
             DotCraftAppBindingHandoffRequest request,
+            HttpContext httpContext,
             OratorioAppBindingService service,
             CancellationToken ct) =>
         {
-            var result = await service.ApproveAsync(request.Url, ct);
+            var surfaceBaseUrl = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}";
+            var result = await service.ApproveAsync(request.Url, surfaceBaseUrl, ct);
             return Results.Ok(result);
         });
 
