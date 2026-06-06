@@ -5209,6 +5209,16 @@ textarea::placeholder {
   border-top: 0;
 }
 
+.draft-suggestion-line.removed {
+  border-top-color: color-mix(in srgb, var(--danger) 12%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: color-mix(in srgb, var(--danger) 48%, var(--text-primary));
+}
+
+.draft-suggestion-line.removed .draft-suggestion-marker {
+  color: color-mix(in srgb, var(--danger) 68%, var(--text-secondary));
+}
+
 .draft-suggestion-marker,
 .draft-suggestion-number {
   padding: 2px 7px;

@@ -429,6 +429,7 @@ public sealed class OratorioDbContext(DbContextOptions<OratorioDbContext> option
         entity.Property(x => x.Side).HasColumnName("side").IsRequired();
         entity.Property(x => x.StartLine).HasColumnName("start_line");
         entity.Property(x => x.StartSide).HasColumnName("start_side");
+        entity.Property(x => x.SuggestionOriginal).HasColumnName("suggestion_original");
         entity.Property(x => x.SuggestionReplacement).HasColumnName("suggestion_replacement");
         entity.Property(x => x.CommentOnlyReason).HasColumnName("comment_only_reason");
         entity.Property(x => x.Status).HasColumnName("status").HasConversion<string>().IsRequired();

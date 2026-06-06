@@ -367,6 +367,7 @@ public sealed record ReviewDraftCommentDto(
     string Side,
     int? StartLine,
     string? StartSide,
+    string? SuggestionOriginal,
     string? SuggestionReplacement,
     string? CommentOnlyReason,
     ReviewDraftCommentStatus Status,
@@ -386,12 +387,23 @@ public sealed record ReviewDraftCommentRequest(
     string? Title,
     string? Body,
     string? Path,
+    ReviewDraftSuggestionRequest? Suggestion,
+    ReviewDraftCommentOnlyRequest? CommentOnly,
+    int? Line = null,
+    string? Side = null,
+    int? StartLine = null,
+    string? StartSide = null,
+    string? SuggestionReplacement = null,
+    string? CommentOnlyReason = null);
+
+public sealed record ReviewDraftSuggestionRequest(string? OldText, string? NewText);
+
+public sealed record ReviewDraftCommentOnlyRequest(
     int Line,
     string? Side,
     int? StartLine,
     string? StartSide,
-    string? SuggestionReplacement,
-    string? CommentOnlyReason);
+    string? Reason);
 
 public sealed record SubmitReviewDraftResponse(string DraftId, int AcceptedCount, int WarningCount, IReadOnlyList<string> Warnings);
 

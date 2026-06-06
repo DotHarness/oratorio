@@ -300,6 +300,7 @@ public sealed class OratorioReviewDraftComment
     public string Side { get; set; } = "RIGHT";
     public int? StartLine { get; set; }
     public string? StartSide { get; set; }
+    public string? SuggestionOriginal { get; set; }
     public string? SuggestionReplacement { get; set; }
     public string? CommentOnlyReason { get; set; }
     public ReviewDraftCommentStatus Status { get; set; } = ReviewDraftCommentStatus.Accepted;

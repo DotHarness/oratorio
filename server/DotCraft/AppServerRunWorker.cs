@@ -460,7 +460,7 @@ public sealed class AppServerRunWorker(
                             {
                                 majorCount = new { type = "integer" },
                                 minorCount = new { type = "integer" },
-                                suggestionCount = new { type = "integer", description = "Accepted concrete code suggestions only. Oratorio derives the persisted value from accepted comments with suggestionReplacement." },
+                                suggestionCount = new { type = "integer", description = "Accepted concrete code suggestions only. Oratorio derives the persisted value from accepted comments with suggestion.oldText/newText." },
                                 body = new { type = "string" }
                             },
                             required = new[] { "body" }
@@ -477,23 +477,42 @@ public sealed class AppServerRunWorker(
                                     title = new { type = "string" },
                                     body = new { type = "string" },
                                     path = new { type = "string", description = "Repository-relative path from the PR/MR diff." },
-                                    line = new { type = "integer", description = "Commentable changed/context line in the PR/MR diff, not an arbitrary full-file line." },
-                                    side = new { type = "string", description = "RIGHT for new-side anchors or LEFT for deletions/old-side anchors." },
-                                    startLine = new { type = "integer", description = "Optional start of a same-side commentable range in the PR/MR diff." },
-                                    startSide = new { type = "string", description = "Optional start side for ranged comments; must match a commentable diff side." },
-                                    suggestionReplacement = new { type = "string", description = "Exact replacement text for a GitHub/GitLab suggested change. Use only when the finding is safely fixable on a RIGHT-side changed line or range." },
-                                    commentOnlyReason = new
+                                    suggestion = new
                                     {
-                                        type = "string",
-                                        @enum = new[] { "needsHumanDecision", "requiresLargerChange", "cannotAnchorSafely", "investigateOnly", "leftSideOrDeletion" },
-                                        description = "Required when no suggestionReplacement is provided. Explains why the finding is prose-only and cannot be published as an applicable code suggestion."
+                                        type = "object",
+                                        description = "Exact replace-based code suggestion. Oratorio finds oldText in the PR/MR right-side diff and derives the source review anchor.",
+                                        properties = new
+                                        {
+                                            oldText = new { type = "string", description = "Exact current right-side diff text to replace. Include enough contiguous lines to be unique." },
+                                            newText = new { type = "string", description = "Exact replacement text to publish inside the native suggestion block." }
+                                        },
+                                        required = new[] { "oldText", "newText" }
+                                    },
+                                    commentOnly = new
+                                    {
+                                        type = "object",
+                                        description = "Explicit anchor and reason for prose-only findings that cannot be safely published as an applicable code suggestion.",
+                                        properties = new
+                                        {
+                                            line = new { type = "integer", description = "Commentable changed/context line in the PR/MR diff, not an arbitrary full-file line." },
+                                            side = new { type = "string", description = "RIGHT for new-side anchors or LEFT for deletions/old-side anchors." },
+                                            startLine = new { type = "integer", description = "Optional start of a same-side commentable range in the PR/MR diff." },
+                                            startSide = new { type = "string", description = "Optional start side for ranged comments; must match a commentable diff side." },
+                                            reason = new
+                                            {
+                                                type = "string",
+                                                @enum = new[] { "needsHumanDecision", "requiresLargerChange", "cannotAnchorSafely", "investigateOnly", "leftSideOrDeletion" },
+                                                description = "Explains why the finding is prose-only and cannot be published as an applicable code suggestion."
+                                            }
+                                        },
+                                        required = new[] { "line", "reason" }
                                     }
                                 },
-                                required = new[] { "title", "body", "path", "line" },
-                                anyOf = new object[]
+                                required = new[] { "title", "body", "path" },
+                                oneOf = new object[]
                                 {
-                                    new { required = new[] { "suggestionReplacement" } },
-                                    new { required = new[] { "commentOnlyReason" } }
+                                    new { required = new[] { "suggestion" } },
+                                    new { required = new[] { "commentOnly" } }
                                 }
                             }
                         }

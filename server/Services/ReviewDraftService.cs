@@ -112,13 +112,23 @@ public sealed class ReviewDraftService(
                 comment.Body = update.Body.Trim();
             }
 
-            if (!string.IsNullOrWhiteSpace(update.SuggestionReplacement))
+            if (update.SuggestionReplacement is not null)
             {
-                comment.SuggestionReplacement = update.SuggestionReplacement.TrimEnd();
+                if (!HasCodeSuggestion(comment))
+                {
+                    throw new OratorioApiException(
+                        StatusCodes.Status400BadRequest,
+                        "reviewDraftSuggestionRequired",
+                        "Existing comment-only findings cannot be converted to code suggestions without suggestion.oldText.",
+                        new Dictionary<string, object?> { ["draftCommentId"] = comment.DraftCommentId });
+                }
+
+                comment.SuggestionReplacement = NormalizeSuggestionSnippet(update.SuggestionReplacement);
                 comment.CommentOnlyReason = null;
             }
             else if (!string.IsNullOrWhiteSpace(update.CommentOnlyReason))
             {
+                comment.SuggestionOriginal = null;
                 comment.SuggestionReplacement = null;
                 comment.CommentOnlyReason = NormalizeCommentOnlyReason(update.CommentOnlyReason);
             }
@@ -208,7 +218,7 @@ public sealed class ReviewDraftService(
         draft.UpdatedAt = now;
         AddTimeline(draft.Item, draft.Round, null, TimelineEventKind.SourceWriteQueued, $"{sourceActor} review draft publish queued", null, now);
 
-        var blocked = enforceAutoPublishGates ? AutoPublishBlockReason(draft) : null;
+        var blocked = PublishBlockReason(draft, enforceAutoPublishGates);
         if (blocked is not null)
         {
             MarkPublishFailed(draft, write, blocked.Value.Code, blocked.Value.Message);
@@ -351,8 +361,19 @@ public sealed class ReviewDraftService(
         };
     }
 
-    private static (string Code, string Message)? AutoPublishBlockReason(OratorioReviewDraft draft)
+    private static (string Code, string Message)? PublishBlockReason(OratorioReviewDraft draft, bool enforceAutoPublishGates)
     {
+        var unsafeSuggestion = DraftSuggestionSafetyBlockReason(draft);
+        if (unsafeSuggestion is not null)
+        {
+            return unsafeSuggestion;
+        }
+
+        if (!enforceAutoPublishGates)
+        {
+            return null;
+        }
+
         var warnings = ReadWarnings(draft.WarningsJson);
         if (warnings.Count > 0 ||
             draft.Comments.Any(x => x.Status == ReviewDraftCommentStatus.Skipped || !string.IsNullOrWhiteSpace(x.Warning)))
@@ -371,6 +392,26 @@ public sealed class ReviewDraftService(
             !string.Equals(runBaseSha, currentHeadSha, StringComparison.OrdinalIgnoreCase))
         {
             return ("stalePullRequestHead", $"Automatic review publication is blocked because the run analyzed {runBaseSha}, but the current review target head is {currentHeadSha}.");
+        }
+
+        return null;
+    }
+
+    private static (string Code, string Message)? DraftSuggestionSafetyBlockReason(OratorioReviewDraft draft)
+    {
+        foreach (var comment in draft.Comments.Where(x => x.Status == ReviewDraftCommentStatus.Accepted && HasCodeSuggestion(x)))
+        {
+            if (comment.Line <= 0 || comment.Side != "RIGHT")
+            {
+                return ("reviewDraftSuggestionRangeMismatch", $"Review suggestion for {comment.Path} does not have a resolved RIGHT-side publish range.");
+            }
+
+            if (comment.SuggestionOriginal is null &&
+                IsMultiLine(comment.SuggestionReplacement ?? "") &&
+                !comment.StartLine.HasValue)
+            {
+                return ("reviewDraftSuggestionRangeMismatch", $"Legacy multi-line review suggestion for {comment.Path}:{comment.Line} cannot be published because it has no resolved multi-line range.");
+            }
         }
 
         return null;
@@ -448,38 +489,84 @@ public sealed class ReviewDraftService(
             {
                 throw OratorioApiException.Validation("Each inline comment must include a path.", new Dictionary<string, object?> { ["field"] = "comments.path" });
             }
-            if (input.Line <= 0 || (input.StartLine.HasValue && (input.StartLine.Value <= 0 || input.StartLine.Value > input.Line)))
+
+            if (HasLegacyInlineFields(input))
             {
-                throw OratorioApiException.Validation("Inline comment line anchors must be positive and startLine must be <= line.", new Dictionary<string, object?> { ["field"] = "comments.line" });
+                throw new OratorioApiException(
+                    StatusCodes.Status400BadRequest,
+                    "reviewDraftLegacySuggestionFields",
+                    "Inline review comments must use suggestion.oldText/newText or commentOnly; top-level line/startLine/suggestionReplacement/commentOnlyReason fields are no longer accepted for new drafts.",
+                    new Dictionary<string, object?> { ["field"] = "comments" });
             }
 
             var path = NormalizePath(input.Path);
-            var side = NormalizeSide(input.Side ?? "RIGHT");
-            var startLine = input.StartLine == input.Line ? null : input.StartLine;
-            var startSide = startLine.HasValue ? NormalizeSide(input.StartSide ?? side) : null;
+            var hasSuggestion = input.Suggestion is not null;
+            var hasCommentOnly = input.CommentOnly is not null;
+            if (hasSuggestion == hasCommentOnly)
+            {
+                throw new OratorioApiException(
+                    StatusCodes.Status400BadRequest,
+                    "reviewDraftSuggestionRequired",
+                    "Each inline comment must include exactly one of suggestion.oldText/newText or commentOnly.",
+                    new Dictionary<string, object?> { ["field"] = "comments.suggestion" });
+            }
+
+            if (input.Suggestion is not null)
+            {
+                var oldText = NormalizeSuggestionSnippet(input.Suggestion.OldText ?? "");
+                if (oldText.Length == 0)
+                {
+                    throw new OratorioApiException(
+                        StatusCodes.Status400BadRequest,
+                        "reviewDraftSuggestionRequired",
+                        "suggestion.oldText is required for concrete code suggestions.",
+                        new Dictionary<string, object?> { ["field"] = "comments.suggestion.oldText" });
+                }
+
+                if (input.Suggestion.NewText is null)
+                {
+                    throw new OratorioApiException(
+                        StatusCodes.Status400BadRequest,
+                        "reviewDraftSuggestionRequired",
+                        "suggestion.newText is required for concrete code suggestions.",
+                        new Dictionary<string, object?> { ["field"] = "comments.suggestion.newText" });
+                }
+
+                return new OratorioReviewDraftComment
+                {
+                    Severity = string.Equals(input.Severity, "RED", StringComparison.OrdinalIgnoreCase) ? "RED" : "YELLOW",
+                    Title = input.Title.Trim(),
+                    Body = input.Body.Trim(),
+                    Path = path,
+                    Line = 0,
+                    Side = "RIGHT",
+                    SuggestionOriginal = oldText,
+                    SuggestionReplacement = NormalizeSuggestionSnippet(input.Suggestion.NewText)
+                };
+            }
+
+            var commentOnly = input.CommentOnly!;
+            if (commentOnly.Line <= 0 || (commentOnly.StartLine.HasValue && (commentOnly.StartLine.Value <= 0 || commentOnly.StartLine.Value > commentOnly.Line)))
+            {
+                throw OratorioApiException.Validation("Comment-only line anchors must be positive and startLine must be <= line.", new Dictionary<string, object?> { ["field"] = "comments.commentOnly.line" });
+            }
+
+            var side = NormalizeSide(commentOnly.Side ?? "RIGHT");
+            var startLine = commentOnly.StartLine == commentOnly.Line ? null : commentOnly.StartLine;
+            var startSide = startLine.HasValue ? NormalizeSide(commentOnly.StartSide ?? side) : null;
             if (startSide is not null && startSide != side)
             {
-                throw OratorioApiException.Validation("Multi-line inline comments must stay on a single diff side.", new Dictionary<string, object?> { ["field"] = "comments.startSide" });
+                throw OratorioApiException.Validation("Multi-line inline comments must stay on a single diff side.", new Dictionary<string, object?> { ["field"] = "comments.commentOnly.startSide" });
             }
 
-            var suggestionReplacement = string.IsNullOrWhiteSpace(input.SuggestionReplacement) ? null : input.SuggestionReplacement.TrimEnd();
-            var commentOnlyReason = string.IsNullOrWhiteSpace(input.CommentOnlyReason) ? null : NormalizeCommentOnlyReason(input.CommentOnlyReason);
-            if (string.IsNullOrWhiteSpace(suggestionReplacement) && string.IsNullOrWhiteSpace(commentOnlyReason))
+            var commentOnlyReason = string.IsNullOrWhiteSpace(commentOnly.Reason) ? null : NormalizeCommentOnlyReason(commentOnly.Reason);
+            if (commentOnlyReason is null)
             {
                 throw new OratorioApiException(
                     StatusCodes.Status400BadRequest,
                     "reviewDraftSuggestionRequired",
-                    "Each inline comment must include suggestionReplacement for concrete code suggestions or commentOnlyReason for comment-only findings.",
-                    new Dictionary<string, object?> { ["field"] = "comments.commentOnlyReason" });
-            }
-
-            if (!string.IsNullOrWhiteSpace(suggestionReplacement) && !string.IsNullOrWhiteSpace(commentOnlyReason))
-            {
-                throw new OratorioApiException(
-                    StatusCodes.Status400BadRequest,
-                    "reviewDraftSuggestionRequired",
-                    "Inline comments must include either suggestionReplacement or commentOnlyReason, not both.",
-                    new Dictionary<string, object?> { ["field"] = "comments.suggestionReplacement" });
+                    "Comment-only findings must include commentOnly.reason.",
+                    new Dictionary<string, object?> { ["field"] = "comments.commentOnly.reason" });
             }
 
             return new OratorioReviewDraftComment
@@ -488,14 +575,21 @@ public sealed class ReviewDraftService(
                 Title = input.Title.Trim(),
                 Body = input.Body.Trim(),
                 Path = path,
-                Line = input.Line,
+                Line = commentOnly.Line,
                 Side = side,
                 StartLine = startLine,
                 StartSide = startSide,
-                SuggestionReplacement = suggestionReplacement,
                 CommentOnlyReason = commentOnlyReason
             };
         }).ToList();
+
+    private static bool HasLegacyInlineFields(ReviewDraftCommentRequest input) =>
+        input.Line.HasValue ||
+        input.Side is not null ||
+        input.StartLine.HasValue ||
+        input.StartSide is not null ||
+        input.SuggestionReplacement is not null ||
+        input.CommentOnlyReason is not null;
 
     private static string NormalizePath(string path)
     {
@@ -538,7 +632,7 @@ public sealed class ReviewDraftService(
             string? warning = null;
             if (anchorMap.Diagnostics.Any(IsDiffUnavailableDiagnostic))
             {
-                warning = $"Skipped inline comment for {comment.Path}:{comment.Line} because diff validation is unavailable.";
+                warning = $"Skipped inline comment for {CommentLocation(comment)} because diff validation is unavailable.";
             }
             else if (!anchorMap.ContainsChangedPath(comment.Path))
             {
@@ -551,9 +645,26 @@ public sealed class ReviewDraftService(
             }
             else if (anchorMap.IsPatchUnavailable(comment.Path))
             {
-                warning = $"Skipped inline comment for {comment.Path}:{comment.Line} because provider diff patch data is unavailable for that file.";
+                warning = $"Skipped inline comment for {CommentLocation(comment)} because provider diff patch data is unavailable for that file.";
             }
-            else if (!anchorMap.TryGetAnchors(comment.Path, out var fileAnchors) || !fileAnchors.Has(comment.Side, comment.Line))
+            else if (!anchorMap.TryGetAnchors(comment.Path, out var fileAnchors))
+            {
+                anchorFailures.Add(BuildAnchorFailure(
+                    comment,
+                    "lineNotCommentable",
+                    "The file has no commentable diff anchors.",
+                    fileAnchors));
+                continue;
+            }
+            else if (HasCodeSuggestion(comment))
+            {
+                ResolveSuggestionAnchor(comment, fileAnchors);
+                if (SameSuggestionText(comment.SuggestionOriginal!, comment.SuggestionReplacement ?? ""))
+                {
+                    warning = $"reviewDraftNoOpSuggestion: Skipped inline suggestion for {comment.Path}:{comment.Line} because suggestion.newText matches suggestion.oldText.";
+                }
+            }
+            else if (!fileAnchors.Has(comment.Side, comment.Line))
             {
                 anchorFailures.Add(BuildAnchorFailure(
                     comment,
@@ -570,21 +681,6 @@ public sealed class ReviewDraftService(
                     "The requested range is not commentable.",
                     fileAnchors));
                 continue;
-            }
-            else if (!string.IsNullOrWhiteSpace(comment.SuggestionReplacement) && comment.Side != "RIGHT")
-            {
-                anchorFailures.Add(BuildAnchorFailure(
-                    comment,
-                    "suggestionRequiresRightSide",
-                    "suggestionReplacement can only target RIGHT-side diff anchors.",
-                    fileAnchors));
-                continue;
-            }
-            else if (!string.IsNullOrWhiteSpace(comment.SuggestionReplacement) &&
-                fileAnchors.TryGetRightTextRange(comment.StartLine ?? comment.Line, comment.Line, out var currentText) &&
-                SameSuggestionText(currentText, comment.SuggestionReplacement))
-            {
-                warning = $"reviewDraftNoOpSuggestion: Skipped inline suggestion for {comment.Path}:{comment.Line} because suggestionReplacement matches the current diff text.";
             }
 
             if (warning is null)
@@ -605,6 +701,51 @@ public sealed class ReviewDraftService(
         }
 
         return new AnchorValidation(comments, acceptedCount);
+    }
+
+    private static void ResolveSuggestionAnchor(OratorioReviewDraftComment comment, ReviewDiffFileAnchors fileAnchors)
+    {
+        var matches = fileAnchors.FindRightTextMatches(comment.SuggestionOriginal!);
+        if (matches.Count == 0)
+        {
+            throw SuggestionTextFailure(
+                comment,
+                "reviewDraftSuggestionTextNotFound",
+                "suggestion.oldText was not found exactly once in the PR/MR right-side diff. Re-read the diff and include the exact current text to replace.",
+                fileAnchors);
+        }
+
+        if (matches.Count > 1)
+        {
+            throw SuggestionTextFailure(
+                comment,
+                "reviewDraftSuggestionTextAmbiguous",
+                "suggestion.oldText matched multiple right-side diff ranges. Include more surrounding context so the replacement target is unique.",
+                fileAnchors);
+        }
+
+        var match = matches[0];
+        comment.Line = match.EndLine;
+        comment.Side = "RIGHT";
+        comment.StartLine = match.StartLine == match.EndLine ? null : match.StartLine;
+        comment.StartSide = comment.StartLine.HasValue ? "RIGHT" : null;
+    }
+
+    private static OratorioApiException SuggestionTextFailure(
+        OratorioReviewDraftComment comment,
+        string code,
+        string message,
+        ReviewDiffFileAnchors anchors)
+    {
+        var details = new Dictionary<string, object?>
+        {
+            ["title"] = comment.Title,
+            ["path"] = comment.Path,
+            ["reason"] = code,
+            ["message"] = message,
+            ["rightCommentableRanges"] = FormatLineRanges(anchors.Right)
+        };
+        return new OratorioApiException(StatusCodes.Status400BadRequest, code, message, details);
     }
 
     private static AnchorFailure BuildAnchorFailure(
@@ -800,9 +941,9 @@ public sealed class ReviewDraftService(
             $"**{SeverityIcon(comment.Severity)} {comment.Title.Trim()}**",
             comment.Body.Trim()
         };
-        if (!string.IsNullOrWhiteSpace(comment.SuggestionReplacement))
+        if (HasCodeSuggestion(comment))
         {
-            sections.Add(string.Join("\n", SuggestionFenceStart(comment, gitLab), comment.SuggestionReplacement.TrimEnd(), "```"));
+            sections.Add(string.Join("\n", SuggestionFenceStart(comment, gitLab), (comment.SuggestionReplacement ?? "").TrimEnd('\n'), "```"));
         }
 
         sections.Add(ReviewFindingMarker.Build(comment.DraftCommentId));
@@ -836,8 +977,8 @@ public sealed class ReviewDraftService(
         if (!CommentOnlyReasons.Contains(normalized))
         {
             throw OratorioApiException.Validation(
-                "commentOnlyReason must be one of needsHumanDecision, requiresLargerChange, cannotAnchorSafely, investigateOnly, or leftSideOrDeletion.",
-                new Dictionary<string, object?> { ["field"] = "comments.commentOnlyReason" });
+                "commentOnly.reason must be one of needsHumanDecision, requiresLargerChange, cannotAnchorSafely, investigateOnly, or leftSideOrDeletion.",
+                new Dictionary<string, object?> { ["field"] = "comments.commentOnly.reason" });
         }
 
         return normalized;
@@ -847,25 +988,34 @@ public sealed class ReviewDraftService(
     {
         foreach (var comment in comments)
         {
-            if (string.IsNullOrWhiteSpace(comment.SuggestionReplacement) && string.IsNullOrWhiteSpace(comment.CommentOnlyReason))
+            if (!HasCodeSuggestion(comment) && string.IsNullOrWhiteSpace(comment.CommentOnlyReason))
             {
                 throw new OratorioApiException(
                     StatusCodes.Status400BadRequest,
                     "reviewDraftSuggestionRequired",
-                    "Each inline comment must include suggestionReplacement for concrete code suggestions or commentOnlyReason for comment-only findings.",
+                    "Each inline comment must include suggestion.oldText/newText for concrete code suggestions or commentOnly.reason for comment-only findings.",
                     new Dictionary<string, object?> { ["draftCommentId"] = comment.DraftCommentId });
             }
         }
     }
 
     private static bool IsAcceptedCodeSuggestion(OratorioReviewDraftComment comment) =>
-        comment.Status == ReviewDraftCommentStatus.Accepted && !string.IsNullOrWhiteSpace(comment.SuggestionReplacement);
+        comment.Status == ReviewDraftCommentStatus.Accepted && HasCodeSuggestion(comment);
+
+    private static bool HasCodeSuggestion(OratorioReviewDraftComment comment) =>
+        comment.SuggestionOriginal is not null || comment.SuggestionReplacement is not null;
 
     private static bool SameSuggestionText(string currentText, string suggestionReplacement) =>
-        NormalizeSuggestionText(currentText) == NormalizeSuggestionText(suggestionReplacement);
+        NormalizeSuggestionSnippet(currentText) == NormalizeSuggestionSnippet(suggestionReplacement);
 
-    private static string NormalizeSuggestionText(string value) =>
-        value.Replace("\r\n", "\n").Replace('\r', '\n').TrimEnd();
+    private static string NormalizeSuggestionSnippet(string value) =>
+        value.Replace("\r\n", "\n").Replace('\r', '\n').TrimEnd('\n');
+
+    private static bool IsMultiLine(string value) =>
+        NormalizeSuggestionSnippet(value).Contains('\n', StringComparison.Ordinal);
+
+    private static string CommentLocation(OratorioReviewDraftComment comment) =>
+        comment.Line > 0 ? $"{comment.Path}:{comment.Line}" : comment.Path;
 
     private static GitLabMergeRequestDiff? FindGitLabDiff(IEnumerable<GitLabMergeRequestDiff> diffs, string path) =>
         diffs.FirstOrDefault(diff =>

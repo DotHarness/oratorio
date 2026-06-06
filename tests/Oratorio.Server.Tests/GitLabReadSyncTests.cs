@@ -686,6 +686,13 @@ public sealed class GitLabReadSyncTests
             new DispatchRequest("appServer", "Prepare GitLab MR review suggestions.", null, null));
         var reviewed = await WaitForItemByIdAsync(client, mr.ItemId!, x => x.Item.State == ItemState.AwaitingReview && x.ReviewDrafts.Count == 1);
         var draft = Assert.Single(reviewed.ReviewDrafts);
+        var suggestion = Assert.Single(draft.Comments);
+        Assert.Equal("        return token;\n        return refreshed;", suggestion.SuggestionOriginal);
+        Assert.Equal("        return refreshed;\n        return token;", suggestion.SuggestionReplacement);
+        Assert.Equal(87, suggestion.StartLine);
+        Assert.Equal(88, suggestion.Line);
+        Assert.Equal("RIGHT", suggestion.StartSide);
+        Assert.Equal("RIGHT", suggestion.Side);
 
         var published = await PostAsync<ItemDetailResponse>(client, $"/api/v1/review-drafts/{draft.DraftId}/publish", new { });
 
@@ -1271,7 +1278,7 @@ public sealed class GitLabReadSyncTests
             new(
                 "src/Auth/RefreshTokenStore.cs",
                 "src/Auth/RefreshTokenStore.cs",
-                "@@ -86,4 +86,4 @@\n line86\n line87\n-return staleToken;\n+return freshToken;\n line89\n",
+                "@@ -86,3 +86,4 @@\n line86\n+        return token;\n+        return refreshed;\n line89\n",
                 false,
                 false,
                 false),

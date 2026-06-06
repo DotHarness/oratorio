@@ -202,6 +202,7 @@ export type ReviewDraftCommentDto = {
   side: string
   startLine: number | null
   startSide: string | null
+  suggestionOriginal: string | null
   suggestionReplacement: string | null
   commentOnlyReason: string | null
   status: ReviewDraftCommentStatus

@@ -280,6 +280,7 @@ public sealed class OratorioSchemaMigrator(OratorioDbContext db)
                 side TEXT NOT NULL,
                 start_line INTEGER NULL,
                 start_side TEXT NULL,
+                suggestion_original TEXT NULL,
                 suggestion_replacement TEXT NULL,
                 comment_only_reason TEXT NULL,
                 status TEXT NOT NULL,
@@ -288,6 +289,7 @@ public sealed class OratorioSchemaMigrator(OratorioDbContext db)
             );
             """,
             ct);
+        await EnsureReviewDraftCommentColumnAsync("suggestion_original", "TEXT NULL", ct);
         await EnsureReviewDraftCommentColumnAsync("comment_only_reason", "TEXT NULL", ct);
         await db.Database.ExecuteSqlRawAsync(
             """

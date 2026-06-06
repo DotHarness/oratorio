@@ -388,4 +388,49 @@ public sealed class ReviewDiffFileAnchors
         text = string.Join("\n", lines);
         return true;
     }
+
+    public IReadOnlyList<ReviewDiffTextMatch> FindRightTextMatches(string text)
+    {
+        var lines = text.Split('\n');
+        if (lines.Length == 0)
+        {
+            return [];
+        }
+
+        var rightLines = _rightText
+            .OrderBy(x => x.Key)
+            .Select(x => (Line: x.Key, Text: x.Value))
+            .ToArray();
+        var matches = new List<ReviewDiffTextMatch>();
+        for (var index = 0; index < rightLines.Length; index++)
+        {
+            if (rightLines[index].Text != lines[0])
+            {
+                continue;
+            }
+
+            var startLine = rightLines[index].Line;
+            var matched = true;
+            for (var offset = 1; offset < lines.Length; offset++)
+            {
+                var nextIndex = index + offset;
+                if (nextIndex >= rightLines.Length ||
+                    rightLines[nextIndex].Line != startLine + offset ||
+                    rightLines[nextIndex].Text != lines[offset])
+                {
+                    matched = false;
+                    break;
+                }
+            }
+
+            if (matched)
+            {
+                matches.Add(new ReviewDiffTextMatch(startLine, startLine + lines.Length - 1));
+            }
+        }
+
+        return matches;
+    }
 }
+
+public sealed record ReviewDiffTextMatch(int StartLine, int EndLine);

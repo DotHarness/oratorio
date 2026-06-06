@@ -3037,6 +3037,146 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
+    public async Task AppServerReviewDraftTool_RejectsLegacyTopLevelSuggestionReplacement()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitLegacyReviewDraft);
+        await using var app = new TestOratorioApp(services =>
+        {
+            services.RemoveAll<IGitHubApiClient>();
+            services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+            services.RemoveAll<IDotCraftAppServerProcessManager>();
+            services.RemoveAll<IDotCraftAppServerClientFactory>();
+            services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+            services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+        });
+        var client = app.CreateClient();
+
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Submit a legacy structured PR review draft.", null, null));
+
+        var failed = await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.Failed);
+        Assert.Empty(failed.ReviewDrafts);
+        Assert.NotNull(fakeAppServer.LastToolResult);
+        Assert.False(fakeAppServer.LastToolResult!.Success);
+        Assert.Equal("reviewDraftLegacySuggestionFields", fakeAppServer.LastToolResult.ErrorCode);
+    }
+
+    [Fact]
+    public async Task AppServerReviewDraftTool_RejectsMissingSuggestionOldText()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitMissingSuggestionOldTextReviewDraft);
+        await using var app = new TestOratorioApp(services =>
+        {
+            services.RemoveAll<IGitHubApiClient>();
+            services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+            services.RemoveAll<IDotCraftAppServerProcessManager>();
+            services.RemoveAll<IDotCraftAppServerClientFactory>();
+            services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+            services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+        });
+        var client = app.CreateClient();
+
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Submit a review draft without oldText.", null, null));
+
+        var failed = await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.Failed);
+        Assert.Empty(failed.ReviewDrafts);
+        Assert.NotNull(fakeAppServer.LastToolResult);
+        Assert.False(fakeAppServer.LastToolResult!.Success);
+        Assert.Equal("reviewDraftSuggestionRequired", fakeAppServer.LastToolResult.ErrorCode);
+    }
+
+    [Fact]
+    public async Task AppServerReviewDraftTool_RejectsSuggestionOldTextNotFound()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitSuggestionTextNotFoundReviewDraft);
+        await using var app = new TestOratorioApp(services =>
+        {
+            services.RemoveAll<IGitHubApiClient>();
+            services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+            services.RemoveAll<IDotCraftAppServerProcessManager>();
+            services.RemoveAll<IDotCraftAppServerClientFactory>();
+            services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+            services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+        });
+        var client = app.CreateClient();
+
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Submit a review draft with unmatched oldText.", null, null));
+
+        var failed = await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.Failed);
+        Assert.Empty(failed.ReviewDrafts);
+        Assert.NotNull(fakeAppServer.LastToolResult);
+        Assert.False(fakeAppServer.LastToolResult!.Success);
+        Assert.Equal("reviewDraftSuggestionTextNotFound", fakeAppServer.LastToolResult.ErrorCode);
+    }
+
+    [Fact]
+    public async Task AppServerReviewDraftTool_RejectsAmbiguousSuggestionOldText()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        fakeGitHub.PullRequestFiles[0] = fakeGitHub.PullRequestFiles[0] with
+        {
+            Patch = """
+@@ -84,6 +84,7 @@ public sealed class RefreshTokenStore
+     public string Refresh(string token)
+     {
++        return refreshed;
++        return refreshed;
+     }
+ }
+"""
+        };
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitAmbiguousSuggestionTextReviewDraft);
+        await using var app = new TestOratorioApp(services =>
+        {
+            services.RemoveAll<IGitHubApiClient>();
+            services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+            services.RemoveAll<IDotCraftAppServerProcessManager>();
+            services.RemoveAll<IDotCraftAppServerClientFactory>();
+            services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+            services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+        });
+        var client = app.CreateClient();
+
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Submit a review draft with ambiguous oldText.", null, null));
+
+        var failed = await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.Failed);
+        Assert.Empty(failed.ReviewDrafts);
+        Assert.NotNull(fakeAppServer.LastToolResult);
+        Assert.False(fakeAppServer.LastToolResult!.Success);
+        Assert.Equal("reviewDraftSuggestionTextAmbiguous", fakeAppServer.LastToolResult.ErrorCode);
+    }
+
+    [Fact]
     public async Task AppServerReviewDraftTool_FailsCorrectableInvalidAnchorsWithoutPersistingDraft()
     {
         var fakeGitHub = new FakeGitHubApiClient();
@@ -3075,7 +3215,7 @@ public sealed class OratorioApiTests
         using var structured = JsonDocument.Parse(JsonSerializer.Serialize(toolResult.StructuredResult, JsonOptions));
         var invalidComments = structured.RootElement.GetProperty("error").GetProperty("details").GetProperty("invalidComments");
         Assert.Contains(invalidComments.EnumerateArray(), comment => comment.GetProperty("path").GetString() == "missing/File.cs" && comment.GetProperty("reason").GetString() == "fileNotInDiff");
-        Assert.Contains(invalidComments.EnumerateArray(), comment => comment.GetProperty("path").GetString() == "src/Auth/RefreshTokenStore.cs" && comment.GetProperty("reason").GetString() == "suggestionRequiresRightSide");
+        Assert.Contains(invalidComments.EnumerateArray(), comment => comment.GetProperty("path").GetString() == "src/Auth/RefreshTokenStore.cs" && comment.GetProperty("reason").GetString() == "lineNotCommentable");
     }
 
     [Fact]
@@ -3326,6 +3466,13 @@ public sealed class OratorioApiTests
         Assert.Equal(1, draft.MajorCount);
         Assert.Equal(1, draft.MinorCount);
         Assert.Equal("Found 2 issues.", draft.SummaryBody);
+        var suggestion = Assert.Single(draft.Comments, comment => comment.SuggestionReplacement is not null);
+        Assert.Equal("        return refreshed;", suggestion.SuggestionOriginal);
+        Assert.Equal("        return token;", suggestion.SuggestionReplacement);
+        Assert.Equal(87, suggestion.Line);
+        Assert.Null(suggestion.StartLine);
+        Assert.Equal("RIGHT", suggestion.Side);
+        Assert.Null(suggestion.StartSide);
     }
 
     [Fact]
@@ -3412,7 +3559,7 @@ public sealed class OratorioApiTests
         Assert.Equal(0, draft.MajorCount);
         Assert.Equal(1, draft.MinorCount);
         Assert.Equal("Found 1 issue.", draft.SummaryBody);
-        Assert.Contains(draft.Warnings, warning => warning.Contains("src/Auth/RefreshTokenStore.cs:88", StringComparison.Ordinal));
+        Assert.Contains(draft.Warnings, warning => warning.Contains("src/Auth/RefreshTokenStore.cs", StringComparison.Ordinal));
         Assert.Contains(draft.Warnings, warning => warning.Contains("reviewDraftSuggestionCountMismatch", StringComparison.Ordinal));
         Assert.Contains(draft.Comments, comment => comment.Status == ReviewDraftCommentStatus.Accepted && comment.Path == "src/Auth/JwtMiddleware.cs");
         Assert.Contains(draft.Comments, comment => comment.Status == ReviewDraftCommentStatus.Skipped && comment.Path == "src/Auth/RefreshTokenStore.cs");
@@ -3821,7 +3968,7 @@ public sealed class OratorioApiTests
         Assert.Equal("Edited summary.", review.Body);
         Assert.Equal("abc123", review.CommitId);
         Assert.Equal(2, review.Comments.Count);
-        Assert.Contains(review.Comments, comment => comment.Path == "src/Auth/RefreshTokenStore.cs" && comment.Line == 88 && comment.Side == "RIGHT");
+        Assert.Contains(review.Comments, comment => comment.Path == "src/Auth/RefreshTokenStore.cs" && comment.Line == 87 && comment.Side == "RIGHT");
         Assert.DoesNotContain(review.Comments, comment => comment.Path == "missing/File.cs");
         Assert.DoesNotContain(review.Comments, comment => comment.Side == "LEFT");
         Assert.Contains(review.Comments, comment => comment.Body.StartsWith("**🔴 Missing refresh guard**", StringComparison.Ordinal) && comment.Body.Contains("```suggestion", StringComparison.Ordinal) && comment.Body.Contains("return editedToken;", StringComparison.Ordinal));
@@ -5205,6 +5352,10 @@ internal enum FakeAppServerOutcome
     SubmitCleanReviewDraft,
     SubmitSummaryOnlyReviewDraft,
     SubmitInvalidReviewDraft,
+    SubmitLegacyReviewDraft,
+    SubmitMissingSuggestionOldTextReviewDraft,
+    SubmitSuggestionTextNotFoundReviewDraft,
+    SubmitAmbiguousSuggestionTextReviewDraft,
     SubmitMismatchedSuggestionCountReviewDraft,
     SubmitMultiLineReviewDraft,
     SubmitNoOpReviewDraft,
@@ -5453,7 +5604,7 @@ internal sealed class FakeAppServerClient(
             _notifications.Writer.TryWrite(Notification("turn/completed", new { threadId, turnId, summary = "DotCraft analysis complete." }));
             _notifications.Writer.TryComplete();
         }
-        else if (outcome is FakeAppServerOutcome.SubmitReviewDraft or FakeAppServerOutcome.SubmitDef208BadAnchorReviewDraft or FakeAppServerOutcome.SubmitRetryAnchorReviewDraft or FakeAppServerOutcome.SubmitCleanReviewDraft or FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft or FakeAppServerOutcome.SubmitInvalidReviewDraft or FakeAppServerOutcome.SubmitMismatchedSuggestionCountReviewDraft or FakeAppServerOutcome.SubmitMultiLineReviewDraft or FakeAppServerOutcome.SubmitNoOpReviewDraft)
+        else if (outcome is FakeAppServerOutcome.SubmitReviewDraft or FakeAppServerOutcome.SubmitDef208BadAnchorReviewDraft or FakeAppServerOutcome.SubmitRetryAnchorReviewDraft or FakeAppServerOutcome.SubmitCleanReviewDraft or FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft or FakeAppServerOutcome.SubmitInvalidReviewDraft or FakeAppServerOutcome.SubmitLegacyReviewDraft or FakeAppServerOutcome.SubmitMissingSuggestionOldTextReviewDraft or FakeAppServerOutcome.SubmitSuggestionTextNotFoundReviewDraft or FakeAppServerOutcome.SubmitAmbiguousSuggestionTextReviewDraft or FakeAppServerOutcome.SubmitMismatchedSuggestionCountReviewDraft or FakeAppServerOutcome.SubmitMultiLineReviewDraft or FakeAppServerOutcome.SubmitNoOpReviewDraft)
         {
             _ = Task.Run(async () =>
             {
@@ -5479,9 +5630,12 @@ internal sealed class FakeAppServerClient(
                                     title = "DEF-208 anchor drift",
                                     body = "This finding is initially anchored to a full-file line that is not commentable in the diff.",
                                     path = "src/DotCraft.Core/Tools/RipgrepFileSearcher.cs",
-                                    line = 129,
-                                    side = "RIGHT",
-                                    commentOnlyReason = "requiresLargerChange"
+                                    commentOnly = new
+                                    {
+                                        line = 129,
+                                        side = "RIGHT",
+                                        reason = "requiresLargerChange"
+                                    }
                                 }
                             }
                         }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
@@ -5505,9 +5659,12 @@ internal sealed class FakeAppServerClient(
                                     title = "DEF-208 anchor drift",
                                     body = "This finding was re-anchored to a commentable diff line.",
                                     path = "src/DotCraft.Core/Tools/RipgrepFileSearcher.cs",
-                                    line = 255,
-                                    side = "RIGHT",
-                                    commentOnlyReason = "requiresLargerChange"
+                                    commentOnly = new
+                                    {
+                                        line = 255,
+                                        side = "RIGHT",
+                                        reason = "requiresLargerChange"
+                                    }
                                 }
                             }
                         }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
@@ -5525,10 +5682,65 @@ internal sealed class FakeAppServerClient(
                             {
                                 severity = "YELLOW",
                                 title = "Missing contract field",
-                                body = "This inline finding intentionally lacks both suggestionReplacement and commentOnlyReason.",
-                                path = "src/Auth/JwtMiddleware.cs",
-                                line = 22,
-                                side = "RIGHT"
+                                body = "This inline finding intentionally lacks both suggestion and commentOnly.",
+                                path = "src/Auth/JwtMiddleware.cs"
+                            }
+                        },
+                        FakeAppServerOutcome.SubmitLegacyReviewDraft => new object[]
+                        {
+                            new
+                            {
+                                severity = "RED",
+                                title = "Legacy suggestion contract",
+                                body = "This payload intentionally uses the retired top-level suggestionReplacement field.",
+                                path = "src/Auth/RefreshTokenStore.cs",
+                                line = 87,
+                                side = "RIGHT",
+                                suggestionReplacement = "        return token;"
+                            }
+                        },
+                        FakeAppServerOutcome.SubmitMissingSuggestionOldTextReviewDraft => new object[]
+                        {
+                            new
+                            {
+                                severity = "RED",
+                                title = "Missing suggestion old text",
+                                body = "This payload intentionally omits suggestion.oldText.",
+                                path = "src/Auth/RefreshTokenStore.cs",
+                                suggestion = new
+                                {
+                                    newText = "        return token;"
+                                }
+                            }
+                        },
+                        FakeAppServerOutcome.SubmitSuggestionTextNotFoundReviewDraft => new object[]
+                        {
+                            new
+                            {
+                                severity = "RED",
+                                title = "Missing suggestion text",
+                                body = "This suggestion intentionally references text that is not in the right-side diff.",
+                                path = "src/Auth/RefreshTokenStore.cs",
+                                suggestion = new
+                                {
+                                    oldText = "        return missing;",
+                                    newText = "        return token;"
+                                }
+                            }
+                        },
+                        FakeAppServerOutcome.SubmitAmbiguousSuggestionTextReviewDraft => new object[]
+                        {
+                            new
+                            {
+                                severity = "RED",
+                                title = "Ambiguous suggestion text",
+                                body = "This suggestion intentionally references a repeated right-side snippet.",
+                                path = "src/Auth/RefreshTokenStore.cs",
+                                suggestion = new
+                                {
+                                    oldText = "        return refreshed;",
+                                    newText = "        return token;"
+                                }
                             }
                         },
                         FakeAppServerOutcome.SubmitMultiLineReviewDraft => new object[]
@@ -5539,10 +5751,11 @@ internal sealed class FakeAppServerClient(
                                 title = "Refresh order is reversed",
                                 body = "The refreshed value should be returned before falling back to the original token.",
                                 path = "src/Auth/RefreshTokenStore.cs",
-                                startLine = 87,
-                                line = 88,
-                                side = "RIGHT",
-                                suggestionReplacement = "        return refreshed;\n        return token;"
+                                suggestion = new
+                                {
+                                    oldText = "        return token;\n        return refreshed;",
+                                    newText = "        return refreshed;\n        return token;"
+                                }
                             }
                         },
                         FakeAppServerOutcome.SubmitNoOpReviewDraft => new object[]
@@ -5553,9 +5766,11 @@ internal sealed class FakeAppServerClient(
                                 title = "No-op replacement",
                                 body = "This suggestion intentionally matches the current diff text.",
                                 path = "src/Auth/RefreshTokenStore.cs",
-                                line = 87,
-                                side = "RIGHT",
-                                suggestionReplacement = "        return refreshed;"
+                                suggestion = new
+                                {
+                                    oldText = "        return refreshed;",
+                                    newText = "        return refreshed;"
+                                }
                             }
                         },
                         FakeAppServerOutcome.SubmitDef208BadAnchorReviewDraft => new object[]
@@ -5566,9 +5781,12 @@ internal sealed class FakeAppServerClient(
                                 title = "DEF-208 anchor drift",
                                 body = "This finding is anchored to a full-file line that is not commentable in the diff.",
                                 path = "src/DotCraft.Core/Tools/RipgrepFileSearcher.cs",
-                                line = 129,
-                                side = "RIGHT",
-                                commentOnlyReason = "requiresLargerChange"
+                                commentOnly = new
+                                {
+                                    line = 129,
+                                    side = "RIGHT",
+                                    reason = "requiresLargerChange"
+                                }
                             }
                         },
                         FakeAppServerOutcome.SubmitCleanReviewDraft or FakeAppServerOutcome.SubmitMismatchedSuggestionCountReviewDraft => new object[]
@@ -5579,9 +5797,11 @@ internal sealed class FakeAppServerClient(
                                 title = "Missing refresh guard",
                                 body = "The refresh path can return the stale token.",
                                 path = "src/Auth/RefreshTokenStore.cs",
-                                line = 88,
-                                side = "RIGHT",
-                                suggestionReplacement = "return token;"
+                                suggestion = new
+                                {
+                                    oldText = "        return refreshed;",
+                                    newText = "        return token;"
+                                }
                             },
                             new
                             {
@@ -5589,9 +5809,12 @@ internal sealed class FakeAppServerClient(
                                 title = "Validate middleware setup",
                                 body = "The middleware should validate before invoking the next step.",
                                 path = "src/Auth/JwtMiddleware.cs",
-                                line = 22,
-                                side = "RIGHT",
-                                commentOnlyReason = "needsHumanDecision"
+                                commentOnly = new
+                                {
+                                    line = 22,
+                                    side = "RIGHT",
+                                    reason = "needsHumanDecision"
+                                }
                             }
                         },
                         _ => new object[]
@@ -5602,9 +5825,11 @@ internal sealed class FakeAppServerClient(
                                 title = "Missing refresh guard",
                                 body = "The refresh path can return the stale token.",
                                 path = "src/Auth/RefreshTokenStore.cs",
-                                line = 88,
-                                side = "RIGHT",
-                                suggestionReplacement = "return token;"
+                                suggestion = new
+                                {
+                                    oldText = "        return refreshed;",
+                                    newText = "        return token;"
+                                }
                             },
                             new
                             {
@@ -5612,9 +5837,12 @@ internal sealed class FakeAppServerClient(
                                 title = "Validate middleware setup",
                                 body = "The middleware should validate before invoking the next step.",
                                 path = "src/Auth/JwtMiddleware.cs",
-                                line = 22,
-                                side = "RIGHT",
-                                commentOnlyReason = "needsHumanDecision"
+                                commentOnly = new
+                                {
+                                    line = 22,
+                                    side = "RIGHT",
+                                    reason = "needsHumanDecision"
+                                }
                             },
                             new
                             {
@@ -5622,19 +5850,25 @@ internal sealed class FakeAppServerClient(
                                 title = "Missing file",
                                 body = "This path is not in the PR diff.",
                                 path = "missing/File.cs",
-                                line = 5,
-                                side = "RIGHT",
-                                commentOnlyReason = "cannotAnchorSafely"
+                                commentOnly = new
+                                {
+                                    line = 5,
+                                    side = "RIGHT",
+                                    reason = "cannotAnchorSafely"
+                                }
                             },
                             new
                             {
                                 severity = "RED",
-                                title = "Left side suggestion",
-                                body = "Suggestions cannot target deleted lines.",
+                                title = "Bad comment anchor",
+                                body = "This line is not commentable on the right side.",
                                 path = "src/Auth/RefreshTokenStore.cs",
-                                line = 87,
-                                side = "LEFT",
-                                suggestionReplacement = "return deleted;"
+                                commentOnly = new
+                                {
+                                    line = 999,
+                                    side = "RIGHT",
+                                    reason = "cannotAnchorSafely"
+                                }
                             }
                         }
                     };

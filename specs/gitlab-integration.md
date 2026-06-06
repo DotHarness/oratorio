@@ -438,13 +438,14 @@ Publication rules:
 - summary-only drafts publish as one merge request note;
 - each accepted inline finding creates one GitLab-visible discussion or draft
   note;
-- suggestion replacements are emitted only when GitLab can render them safely
-  and the target anchor is on the new side of the diff;
+- replace-based suggestions are emitted only when Oratorio has resolved
+  `suggestion.oldText` to an exact, unique new-side diff range that GitLab can
+  render safely;
 - multi-line suggestion replacements use GitLab's offset-aware suggestion fence
   form (`suggestion:-N+M`) so a discussion anchored at the final new-side line
   can cover preceding changed lines;
 - accepted comment-only findings omit suggestion fences and carry their
-  `commentOnlyReason` in Oratorio for operator audit;
+  `commentOnly.reason` in Oratorio for operator audit;
 - every source write links back to the Oratorio draft;
 - successful publication makes the draft immutable;
 - failed publication leaves the draft retryable.

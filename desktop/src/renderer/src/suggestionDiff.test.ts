@@ -23,15 +23,24 @@ describe('draftSuggestionDiffLines', () => {
     ])
   })
 
-  it('preserves a trailing blank line', () => {
+  it('trims final trailing newlines', () => {
     expect(draftSuggestionDiffLines('first\n', 12)).toEqual([
       { marker: '+', lineNumber: 12, text: 'first' },
-      { marker: '+', lineNumber: 13, text: '' },
     ])
   })
 
-  it('does not render empty or whitespace-only replacements', () => {
+  it('renders whitespace-only replacement lines without trimming spaces', () => {
     expect(draftSuggestionDiffLines('', 1)).toEqual([])
-    expect(draftSuggestionDiffLines('  \n\t', 1)).toEqual([])
+    expect(draftSuggestionDiffLines('  \n\t', 1)).toEqual([
+      { marker: '+', lineNumber: 1, text: '  ' },
+      { marker: '+', lineNumber: 2, text: '\t' },
+    ])
+  })
+
+  it('renders original and replacement lines together', () => {
+    expect(draftSuggestionDiffLines('new line', 41, 'old line')).toEqual([
+      { marker: '-', lineNumber: 41, text: 'old line' },
+      { marker: '+', lineNumber: 41, text: 'new line' },
+    ])
   })
 })

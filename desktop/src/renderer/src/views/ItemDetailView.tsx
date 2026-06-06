@@ -166,8 +166,9 @@ function ReviewDraftMarkdownBlock({ value, className, compact = false }: { value
 }
 
 function DraftSuggestionPreview({ comment }: { comment: ReviewDraftComment }) {
-  const lines = comment.suggestionReplacement
-    ? draftSuggestionDiffLines(comment.suggestionReplacement, comment.startLine ?? comment.line)
+  const hasSuggestion = hasCodeSuggestion(comment)
+  const lines = hasSuggestion
+    ? draftSuggestionDiffLines(comment.suggestionReplacement ?? '', comment.startLine ?? comment.line, comment.suggestionOriginal)
     : []
 
   if (lines.length === 0) {
@@ -187,7 +188,7 @@ function DraftSuggestionPreview({ comment }: { comment: ReviewDraftComment }) {
       </div>
       <div className="draft-suggestion-diff" aria-label={i18n.t('itemDetail:suggestion.diffAria')}>
         {lines.map((line, index) => (
-          <div className="draft-suggestion-line" key={`${line.lineNumber ?? 'line'}-${index}`}>
+          <div className={`draft-suggestion-line ${line.marker === '-' ? 'removed' : 'added'}`} key={`${line.lineNumber ?? 'line'}-${index}`}>
             <span className="draft-suggestion-marker" aria-hidden="true">{line.marker}</span>
             <span className="draft-suggestion-number" aria-hidden="true">{line.lineNumber ?? ''}</span>
             <code className="draft-suggestion-code">{line.text || ' '}</code>
@@ -196,6 +197,10 @@ function DraftSuggestionPreview({ comment }: { comment: ReviewDraftComment }) {
       </div>
     </div>
   )
+}
+
+function hasCodeSuggestion(comment: ReviewDraftComment) {
+  return comment.suggestionOriginal !== null || comment.suggestionReplacement !== null
 }
 
 function CommentOnlyReasonBadge({ reason }: { reason: string }) {
@@ -779,7 +784,7 @@ export function ItemDetailView({
                 <div className="review-draft-list">
                   {selectedItem.reviewDrafts.map((draft) => {
                     const publishDisabled = isBusy || draft.status !== 'draft' || !draft.summaryBody.trim() || Boolean(reviewDraftPublishDisabledReason)
-                    const commentOnlyCount = draft.comments.filter((comment) => comment.status === 'accepted' && !comment.suggestionReplacement && comment.commentOnlyReason).length
+                    const commentOnlyCount = draft.comments.filter((comment) => comment.status === 'accepted' && !hasCodeSuggestion(comment) && comment.commentOnlyReason).length
                     const publishButton = (
                       <button className="primary-button inline" onClick={() => void publishReviewDraft(draft.draftId)} disabled={publishDisabled}>
                         <Send size={15} />

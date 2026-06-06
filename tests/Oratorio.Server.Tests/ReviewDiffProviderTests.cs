@@ -30,6 +30,32 @@ public sealed class ReviewDiffProviderTests
     }
 
     [Fact]
+    public void FindRightTextMatches_ResolvesWholeMultiLinePythonCall()
+    {
+        var anchors = ReviewDiffProvider.BuildAnchorsFromPatch("""
+@@ -81,7 +81,7 @@ jobs:
+         if package_version and package_version != version:
+-            print(
+-                f"::warning title=Version mismatch::package.json is {package_version}, "
+-            )
++            print(
++                f"::warning title=Version mismatch::package.json is {package_version}, "
++            )
+         emit_release_notes()
+""");
+
+        var matches = anchors.FindRightTextMatches("""
+            print(
+                f"::warning title=Version mismatch::package.json is {package_version}, "
+            )
+""");
+
+        var match = Assert.Single(matches);
+        Assert.Equal(82, match.StartLine);
+        Assert.Equal(84, match.EndLine);
+    }
+
+    [Fact]
     public async Task BuildAnchorMapAsync_PreservesRenamePreviousPathAsChanged()
     {
         var gitHub = new FakeGitHubApiClient();

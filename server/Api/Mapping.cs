@@ -256,6 +256,7 @@ public static class Mapping
             comment.Side,
             comment.StartLine,
             comment.StartSide,
+            comment.SuggestionOriginal,
             comment.SuggestionReplacement,
             comment.CommentOnlyReason,
             comment.Status,

@@ -39,11 +39,11 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
     private const string ReviewDraftDiffInstructions = """
         - Do not treat git show HEAD or HEAD^..HEAD as the complete PR/MR review range.
         - For large PRs/MRs, inspect local git diff shards such as file lists, stats, and focused per-path diffs instead of relying on a single full diff.
-        - Prioritize high-risk changed files and submit only high-confidence inline findings with precise repository-relative paths and changed-line anchors.
-        - Inline findings must anchor to a commentable changed/context line in the PR/MR diff, not an arbitrary full-file line number.
-        - For each fixable RIGHT-side inline finding, include an exact suggestionReplacement that can be published as a native GitHub/GitLab suggested change.
-        - For non-suggestion findings, omit suggestionReplacement and provide commentOnlyReason as one of: needsHumanDecision, requiresLargerChange, cannotAnchorSafely, investigateOnly, leftSideOrDeletion.
-        - If oratorio.SubmitReviewDraft fails with reviewDraftAnchorNotCommentable, choose a valid line from the returned commentable ranges and call oratorio.SubmitReviewDraft again before your final response.
+        - Prioritize high-risk changed files and submit only high-confidence inline findings with precise repository-relative paths.
+        - For each fixable RIGHT-side inline finding, provide suggestion.oldText and suggestion.newText. oldText must be the exact current contiguous right-side diff text to replace, including enough surrounding lines to be unique; Oratorio derives the GitHub/GitLab review anchor.
+        - Do not submit top-level line/startLine/suggestionReplacement fields for code suggestions.
+        - For non-suggestion findings, provide commentOnly with a commentable changed/context line and reason as one of: needsHumanDecision, requiresLargerChange, cannotAnchorSafely, investigateOnly, leftSideOrDeletion.
+        - If oratorio.SubmitReviewDraft fails with reviewDraftSuggestionRequired, reviewDraftAnchorNotCommentable, reviewDraftSuggestionTextNotFound, or reviewDraftSuggestionTextAmbiguous, repair the suggestion/commentOnly payload and call oratorio.SubmitReviewDraft again before your final response.
         - Count only accepted concrete code suggestions in suggestionCount; do not count prose-only findings or follow-up ideas as suggestions.
         - Do not place machine-readable review JSON in the final answer.
         """;

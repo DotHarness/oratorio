@@ -437,21 +437,21 @@ GitHub PR review automation where possible:
 - `title`;
 - `body`;
 - `path`;
-- `line`;
-- `side`;
-- `startLine`;
-- `startSide`;
-- `suggestionReplacement`;
-- `commentOnlyReason`.
+- exactly one of:
+  - `suggestion`: object with `oldText` and `newText`;
+  - `commentOnly`: object with `line`, `side`, optional `startLine` /
+    `startSide`, and `reason`.
 
 Each inline comment must be either a concrete code suggestion or a
 comment-only finding:
 
-- concrete code suggestions must provide `suggestionReplacement`, an exact
-  replacement body that can be rendered as a native GitHub/GitLab suggested
-  change;
-- comment-only findings must omit `suggestionReplacement` and provide
-  `commentOnlyReason` as one of `needsHumanDecision`,
+- concrete code suggestions must provide `suggestion.oldText`, the exact
+  current right-side diff text to replace, and `suggestion.newText`, the exact
+  replacement body to render as a native GitHub/GitLab suggested change.
+  Oratorio resolves `oldText` against the provider diff and derives
+  `line`/`startLine` for publication;
+- comment-only findings must omit `suggestion` and provide
+  `commentOnly.reason` as one of `needsHumanDecision`,
   `requiresLargerChange`, `cannotAnchorSafely`, `investigateOnly`, or
   `leftSideOrDeletion`.
 
@@ -474,9 +474,9 @@ Review Draft copy requirements:
   failure mode and why it matters, with a short suggested direction when useful;
 - published inline comment titles are prefixed with `🔴` for `RED` findings and
   `🟡` for `YELLOW` findings; stored draft titles remain unprefixed;
-- `suggestionReplacement` is used only for exact, small, right-side code
-  changes that can be safely published as native suggestions;
-- `commentOnlyReason` is used for investigation-only findings, larger
+- `suggestion.oldText`/`suggestion.newText` is used only for exact, small,
+  right-side code changes that can be safely published as native suggestions;
+- `commentOnly.reason` is used for investigation-only findings, larger
   refactors, unsafe anchors, human decisions, and left-side or deletion notes;
 - `RED` means a likely bug affecting correctness, security, data loss, or a
   broken workflow; `YELLOW` means an investigation flag, maintainability risk,
@@ -486,8 +486,8 @@ Review Draft copy requirements:
 
 `summary.suggestionCount` means accepted concrete code suggestions only. The
 server derives and persists this value from accepted inline comments with
-`suggestionReplacement`; if the agent-submitted count differs, Oratorio stores
-the derived value and records a warning.
+resolved `suggestion.oldText`/`suggestion.newText`; if the agent-submitted
+count differs, Oratorio stores the derived value and records a warning.
 
 Successful `SubmitReviewDraft` output must include:
 
@@ -497,26 +497,36 @@ Successful `SubmitReviewDraft` output must include:
   round, such as unavailable provider diff data.
 
 Correctable agent anchor errors, including paths outside the diff,
-non-commentable line or range anchors, or side mismatches, must fail the dynamic
-tool with `reviewDraftAnchorNotCommentable`. The failed result must include the
-invalid comment metadata and available commentable ranges so the agent can
-repair the anchor and call `SubmitReviewDraft` again in the same DotCraft
-round. Invalid items must not cause Oratorio to publish a partial GitHub review
+non-commentable comment-only line or range anchors, or side mismatches, must
+fail the dynamic tool with `reviewDraftAnchorNotCommentable`. Suggestion
+`oldText` that is absent from the right-side diff must fail with
+`reviewDraftSuggestionTextNotFound`; `oldText` that matches multiple right-side
+diff ranges must fail with `reviewDraftSuggestionTextAmbiguous`. Failed results
+must include enough metadata and available commentable ranges for the agent to
+repair the draft and call `SubmitReviewDraft` again in the same DotCraft round.
+Invalid items must not cause Oratorio to publish a partial GitHub review
 silently.
 
 Validation requirements:
 
 - summary body is required;
 - paths must be repository-relative and must not contain traversal;
-- `line` and `startLine` must be positive when present;
-- `startLine` must be less than or equal to `line`;
-- `side` and `startSide` must be `RIGHT` or `LEFT`;
-- suggestion replacements are valid only on `RIGHT` anchors;
-- inline comments must provide exactly one of `suggestionReplacement` or
-  `commentOnlyReason`; otherwise the dynamic tool returns the stable
+- code suggestions must provide non-empty `suggestion.oldText` and present
+  `suggestion.newText`; missing values return `reviewDraftSuggestionRequired`;
+- `suggestion.oldText` must match exactly one contiguous right-side
+  changed/context diff range after line-ending normalization;
+- comment-only `line` and `startLine` must be positive when present;
+- comment-only `startLine` must be less than or equal to `line`;
+- comment-only `side` and `startSide` must be `RIGHT` or `LEFT`;
+- inline comments must provide exactly one of `suggestion` or `commentOnly`;
+  otherwise the dynamic tool returns the stable
   validation error `reviewDraftSuggestionRequired`;
-- no-op replacements that exactly match the target diff range should be skipped
-  with a `reviewDraftNoOpSuggestion` warning;
+- legacy top-level `line`, `startLine`, `side`, `startSide`,
+  `suggestionReplacement`, or `commentOnlyReason` fields are rejected for new
+  submissions with `reviewDraftLegacySuggestionFields`;
+- no-op replacements whose `suggestion.newText` exactly matches
+  `suggestion.oldText` should be skipped with a
+  `reviewDraftNoOpSuggestion` warning;
 - changed file and diff anchor validation must fail correctable invalid agent
   anchors with `reviewDraftAnchorNotCommentable` and must not persist a draft
   for that tool call;
@@ -1134,9 +1144,10 @@ Validation expectations:
   `SubmitReviewDraft` contract tests first, GitHub review payload tests second,
   and run-level AppServer Dynamic Tool integration tests third.
 - `SubmitReviewDraft` contract tests must cover valid drafts, multiple inline
-  suggestions, comment-only findings, invalid paths, invalid line or side
-  values, missing summaries, missing `suggestionReplacement`/`commentOnlyReason`
-  pairs, no-op replacements, summary-only drafts that do not read diffs, and
+  suggestions, comment-only findings, invalid paths, invalid comment-only line
+  or side values, missing summaries, missing `suggestion`/`commentOnly` pairs,
+  legacy top-level suggestion fields, missing and ambiguous `suggestion.oldText`,
+  no-op replacements, summary-only drafts that do not read diffs, and
   server-derived `suggestionCount`.
 - GitHub payload tests must cover one review with multiple comments, suggestion
   block rendering, comment-only prose comments, server-derived
