@@ -43,6 +43,7 @@ public interface IDotCraftAppServerClient : IAsyncDisposable
     Task<AppBindingConnectionRequestInfo> GetAppConnectionRequestAsync(AppBindingConnectionRequestGetRequest request, CancellationToken ct);
     Task<AppBindingConnectionStatus> GetAppConnectionStatusAsync(AppBindingConnectionStatusRequest request, CancellationToken ct);
     Task<AppBindingConnectionStatus> CompleteAppConnectionAsync(AppBindingConnectionConnectRequest request, CancellationToken ct);
+    Task<AppBindingConnectionStatus> RefreshAppConnectionMetadataAsync(AppBindingConnectionMetadataRefreshRequest request, CancellationToken ct);
     Task<AppBindingRequestInfo> GetAppBindingRequestAsync(AppBindingRequestGetRequest request, CancellationToken ct);
     Task<AppBindingAcceptResponse> AcceptAppBindingAsync(AppBindingAcceptRequest request, CancellationToken ct);
     Task<AppBindingAttachToolsResponse> AttachAppBindingToolsAsync(AppBindingAttachToolsRequest request, CancellationToken ct);
@@ -126,6 +127,11 @@ public sealed record AppBindingConnectionConnectRequest(
     object? PublicMetadata = null);
 
 public sealed record AppBindingConnectionStatusRequest(string AppId);
+
+public sealed record AppBindingConnectionMetadataRefreshRequest(
+    string AppId,
+    object ConnectionProof,
+    object PublicMetadata);
 
 public sealed record AppBindingConnectionStatus(
     string AppId,
@@ -371,6 +377,14 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
         AppBindingConnectionConnectRequest request,
         CancellationToken ct) =>
         client.AppBindings.ConnectAsync<AppBindingConnectionStatus>(request, ct);
+
+    public Task<AppBindingConnectionStatus> RefreshAppConnectionMetadataAsync(
+        AppBindingConnectionMetadataRefreshRequest request,
+        CancellationToken ct) =>
+        client.RequestAsync<AppBindingConnectionStatus>(
+            "app/connection/refreshMetadata",
+            request,
+            ct);
 
     public Task<AppBindingConnectionStatus> GetAppConnectionStatusAsync(
         AppBindingConnectionStatusRequest request,

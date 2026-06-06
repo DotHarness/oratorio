@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'child_process'
-import { existsSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import net from 'net'
-import { join, resolve } from 'path'
+import { dirname, join, resolve } from 'path'
 import { EventEmitter } from 'events'
 import type { App } from 'electron'
 import { resolveDesktopConfigPath, resolveDesktopStateRoot } from './desktopPaths'
@@ -28,6 +28,7 @@ export interface ResolvedServerExecutable {
 }
 
 const DEV_SERVER_URL = 'http://127.0.0.1:5087'
+const DESKTOP_SERVER_FILE = 'desktop-server.json'
 const HEALTH_TIMEOUT_MS = 30_000
 const HEALTH_POLL_MS = 250
 const SHUTDOWN_GRACE_MS = 1_500
@@ -73,7 +74,7 @@ export class OratorioServerManager extends EventEmitter {
 
     try {
       const serverUrl = this.app.isPackaged
-        ? `http://127.0.0.1:${await findAvailableLoopbackPort()}`
+        ? `http://127.0.0.1:${await this.resolveLoopbackPort()}`
         : normalizeBaseUrl(this.env.ORATORIO_DESKTOP_SERVER_URL ?? DEV_SERVER_URL)
 
       if (!this.app.isPackaged && await isHealthy(serverUrl)) {
@@ -243,6 +244,52 @@ export class OratorioServerManager extends EventEmitter {
   private resolveStateRoot(): string {
     return this.env.ORATORIO_STATE_ROOT?.trim() || resolveDesktopStateRoot(this.app)
   }
+
+  // Reuse the same loopback port across restarts when it is still free, so the
+  // apiBase DotCraft persisted for its App Binding stays valid and the embedded
+  // board reconnects without a manual re-bind. Falls back to a fresh free port
+  // (persisted for next time) only when the remembered port is taken.
+  private async resolveLoopbackPort(): Promise<number> {
+    const portFile = join(this.resolveStateRoot(), DESKTOP_SERVER_FILE)
+    const persisted = readPersistedPort(portFile)
+    if (persisted !== null && (await isPortBindable(persisted))) {
+      return persisted
+    }
+
+    const port = await findAvailableLoopbackPort()
+    writePersistedPort(portFile, port)
+    return port
+  }
+}
+
+export function readPersistedPort(file: string): number | null {
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as { loopbackPort?: unknown }
+    const port = typeof parsed.loopbackPort === 'number' ? parsed.loopbackPort : Number.NaN
+    return Number.isInteger(port) && port > 0 && port < 65_536 ? port : null
+  } catch {
+    return null
+  }
+}
+
+export function writePersistedPort(file: string, port: number): void {
+  try {
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(file, JSON.stringify({ loopbackPort: port }, null, 2))
+  } catch {
+    // Best-effort: failing to persist only means the next launch may pick a new
+    // port, which the startup re-announce will reconcile.
+  }
+}
+
+function isPortBindable(port: number): Promise<boolean> {
+  return new Promise((resolveBindable) => {
+    const server = net.createServer()
+    server.once('error', () => resolveBindable(false))
+    server.listen(port, '127.0.0.1', () => {
+      server.close(() => resolveBindable(true))
+    })
+  })
 }
 
 export function resolveServerExecutablePath(options: {

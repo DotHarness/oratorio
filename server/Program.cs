@@ -103,6 +103,9 @@ builder.Services.AddHostedService<WorktreeCleanupWorker>();
 var databasePath = ResolveDatabasePath(builder);
 Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
 builder.Services.AddDbContext<OratorioDbContext>(options => options.UseSqlite($"Data Source={databasePath}"));
+builder.Services.AddSingleton(new OratorioDotCraftBindingStore(
+    Path.Combine(Path.GetDirectoryName(databasePath)!, "dotcraft-binding.json")));
+builder.Services.AddHostedService<OratorioAppBindingReannounceWorker>();
 
 var app = builder.Build();
 

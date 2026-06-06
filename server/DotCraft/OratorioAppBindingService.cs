@@ -11,6 +11,7 @@ public sealed class OratorioAppBindingService(
     DotCraftStatusService dotCraftStatusService,
     IServiceScopeFactory scopeFactory,
     IOptions<DotCraftOptions> dotCraftOptions,
+    OratorioDotCraftBindingStore bindingStore,
     ILogger<OratorioAppBindingService> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -158,22 +159,48 @@ public sealed class OratorioAppBindingService(
                 handoff.RequestId,
                 handoff.RequestToken),
             ct);
+
+        // Build the app-owned proof once as a concrete JSON element so the exact
+        // same bytes can be both sent now and replayed on a later silent refresh
+        // (DotCraft matches the stored proof by value).
+        var proof = JsonSerializer.SerializeToElement(
+            new
+            {
+                appId = handoff.AppId,
+                workspaceLabel = request.WorkspaceLabel,
+                mode = "deepLink",
+                completedAt = DateTimeOffset.UtcNow
+            },
+            JsonOptions);
+
         var status = await client.CompleteAppConnectionAsync(
             new AppBindingConnectionConnectRequest(
                 ConnectionRequestId: handoff.RequestId,
                 RequestToken: handoff.RequestToken,
                 AppId: handoff.AppId,
                 AccountLabel: "Oratorio",
-                ConnectionProof: new
-                {
-                    appId = handoff.AppId,
-                    workspaceLabel = request.WorkspaceLabel,
-                    mode = "deepLink",
-                    completedAt = DateTimeOffset.UtcNow
-                },
+                ConnectionProof: proof,
                 PublicMetadata: BuildPublicConnectionMetadata(surfaceBaseUrl)),
             ct);
         RememberConnectedStatus(status);
+
+        // Persist the durable binding so a restart on a new dynamic loopback port
+        // can silently re-announce the refreshed surface endpoint to DotCraft.
+        if (string.Equals(status.State, "connected", StringComparison.Ordinal))
+        {
+            try
+            {
+                bindingStore.Save(new OratorioDotCraftBinding(
+                    AppServerUrl: ResolveAppServerUrl(handoff),
+                    AppId: handoff.AppId,
+                    ConnectionProofJson: proof.GetRawText(),
+                    AccountLabel: "Oratorio"));
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to persist the DotCraft binding for startup re-announce.");
+            }
+        }
 
         logger.LogInformation(
             "Completed Oratorio App Binding connection for {AppId} with state {State}.",
@@ -442,7 +469,7 @@ public sealed class OratorioAppBindingService(
         };
     }
 
-    private static object? BuildPublicConnectionMetadata(string? surfaceBaseUrl)
+    internal static object? BuildPublicConnectionMetadata(string? surfaceBaseUrl)
     {
         if (!TryNormalizeLoopbackBaseUrl(surfaceBaseUrl, out var normalizedBaseUrl))
         {

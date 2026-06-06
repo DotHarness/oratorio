@@ -3,9 +3,30 @@ import { mkdtempSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { describe, expect, it } from 'vitest'
-import { resolveServerExecutablePath } from './OratorioServerManager'
+import { readPersistedPort, resolveServerExecutablePath, writePersistedPort } from './OratorioServerManager'
 
 const exeName = process.platform === 'win32' ? 'Oratorio.Server.exe' : 'Oratorio.Server'
+
+describe('loopback port persistence', () => {
+  it('round-trips a persisted port so it is reused across restarts', () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'oratorio-port-')), 'desktop-server.json')
+    writePersistedPort(file, 49321)
+    expect(readPersistedPort(file)).toBe(49321)
+  })
+
+  it('returns null for a missing file, malformed json, or out-of-range port', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oratorio-port-'))
+    expect(readPersistedPort(join(dir, 'absent.json'))).toBeNull()
+
+    const garbage = join(dir, 'garbage.json')
+    writeFileSync(garbage, 'not json')
+    expect(readPersistedPort(garbage)).toBeNull()
+
+    const outOfRange = join(dir, 'range.json')
+    writeFileSync(outOfRange, JSON.stringify({ loopbackPort: 70000 }))
+    expect(readPersistedPort(outOfRange)).toBeNull()
+  })
+})
 
 describe('resolveServerExecutablePath', () => {
   it('prefers the packaged server under resources', () => {

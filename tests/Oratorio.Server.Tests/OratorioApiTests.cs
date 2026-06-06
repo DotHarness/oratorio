@@ -5812,6 +5812,9 @@ internal sealed class FakeAppServerClient(
             AccountLabel: request.AccountLabel));
     }
 
+    public Task<AppBindingConnectionStatus> RefreshAppConnectionMetadataAsync(AppBindingConnectionMetadataRefreshRequest request, CancellationToken ct) =>
+        Task.FromResult(new AppBindingConnectionStatus(request.AppId, "connected"));
+
     public Task<AppBindingConnectionStatus> GetAppConnectionStatusAsync(AppBindingConnectionStatusRequest request, CancellationToken ct) =>
         Task.FromResult(getConnectionStatus());
 
