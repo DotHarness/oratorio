@@ -276,15 +276,7 @@
       "health": "健康状况",
       "healthDescription": "当前 AppServer 可达性。",
       "endpoint": "端点",
-      "noEndpoint": "未配置端点。",
-      "approvalPolicy": "审批策略",
-      "approvalPolicyDescription": "用于 AppServer 运行的提示守护策略。",
-      "runTimeout": "运行超时",
-      "runTimeoutDescription": "AppServer 运行的最大时长。",
-      "hubDiscovery": "Hub 发现",
-      "hubDiscoveryDescription": "Oratorio 是否可通过 Hub 发现 AppServer 端点。",
-      "enabled": "已启用",
-      "disabled": "已禁用"
+      "noEndpoint": "未配置端点。"
     },
     "connection": {
       "title": "智能体连接",
@@ -469,11 +461,6 @@
     "nextInMin_other": "{{count}} 分钟后",
     "nextInHr_one": "{{count}} 小时后",
     "nextInHr_other": "{{count}} 小时后"
-  },
-  "durationFormat": {
-    "hr": "{{value}} 小时",
-    "min": "{{value}} 分钟",
-    "sec": "{{value}} 秒"
   },
   "relativeTime": {
     "justNow": "刚刚",

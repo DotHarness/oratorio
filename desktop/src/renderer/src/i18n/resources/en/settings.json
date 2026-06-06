@@ -276,15 +276,7 @@
       "health": "Health",
       "healthDescription": "Current AppServer reachability.",
       "endpoint": "Endpoint",
-      "noEndpoint": "No endpoint configured.",
-      "approvalPolicy": "Approval policy",
-      "approvalPolicyDescription": "Prompt guard policy used for AppServer runs.",
-      "runTimeout": "Run timeout",
-      "runTimeoutDescription": "Maximum AppServer run duration.",
-      "hubDiscovery": "Hub discovery",
-      "hubDiscoveryDescription": "Whether Oratorio may discover AppServer endpoints through Hub.",
-      "enabled": "Enabled",
-      "disabled": "Disabled"
+      "noEndpoint": "No endpoint configured."
     },
     "connection": {
       "title": "Agent connection",
@@ -469,11 +461,6 @@
     "nextInMin_other": "next in {{count}} min",
     "nextInHr_one": "next in {{count}} hr",
     "nextInHr_other": "next in {{count}} hr"
-  },
-  "durationFormat": {
-    "hr": "{{value}} hr",
-    "min": "{{value}} min",
-    "sec": "{{value}} sec"
   },
   "relativeTime": {
     "justNow": "just now",

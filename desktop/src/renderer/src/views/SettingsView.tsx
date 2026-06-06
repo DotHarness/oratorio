@@ -725,9 +725,6 @@ export function SettingsView({
   const diagnosticsGitLab = diagnostics?.gitLab
   const dotcraftEndpoint = diagnosticsDotcraft?.endpoint || formatEndpoint(dotcraftStatus.endpoint) || t('agents.bridge.noEndpoint')
   const dotcraftEndpointSource = diagnosticsDotcraft?.endpointSource ?? dotcraftStatus.endpointSource ?? 'configuration'
-  const dotcraftApprovalPolicy = diagnosticsDotcraft?.approvalPolicy ?? dotcraftStatus.approvalPolicy
-  const dotcraftRunTimeoutSeconds = diagnosticsDotcraft?.runTimeoutSeconds ?? dotcraftStatus.runTimeoutSeconds
-  const dotcraftHubDiscoveryEnabled = diagnosticsDotcraft?.hubDiscoveryEnabled ?? configDraft?.dotCraft.hubDiscoveryEnabled ?? false
   const githubAuthenticationLabel = diagnosticsGitHub?.authentication ? authLabel(diagnosticsGitHub.authentication) : githubStatus.configured ? t('credentials.authLabel.configured') : t('credentials.authLabel.none')
   const gitLabConfig = normalizeGitLabConfig(configDraft?.gitLab)
   const persistedGitLabConfig = normalizeGitLabConfig(serverConfig?.configuration.gitLab)
@@ -934,7 +931,7 @@ export function SettingsView({
             <span className="settings-page-header-actions">
               <SettingsAutosaveStatus saveState={configSaveState} onRetry={retryServerConfigurationAutosave} />
               <ActionIcon className="icon-button settings-refresh-action" label={isRefreshing ? t('refreshing') : t('refresh')} title={isRefreshing ? t('refreshing') : t('refresh')} onClick={() => void refreshSettings()} disabled={isRefreshing}>
-                <RefreshCw size={15} />
+                <RefreshCw size={15} className={isRefreshing ? 'spin-icon' : undefined} />
               </ActionIcon>
             </span>
           </header>
@@ -1127,9 +1124,6 @@ export function SettingsView({
                   control={<StatusPill tone={dotcraftStatus.connected ? 'ok' : dotcraftStatus.configured ? 'warn' : 'muted'} label={healthLabel(dotcraftStatus.health)} />}
                 />
                 <SettingsRow icon={Code2} label={t('agents.bridge.endpoint')} description={dotcraftEndpoint} control={<ValuePill>{dotcraftEndpointSource}</ValuePill>} />
-                <SettingsRow icon={ShieldCheck} label={t('agents.bridge.approvalPolicy')} description={t('agents.bridge.approvalPolicyDescription')} control={<ValuePill>{dotcraftApprovalPolicy}</ValuePill>} />
-                <SettingsRow icon={Activity} label={t('agents.bridge.runTimeout')} description={t('agents.bridge.runTimeoutDescription')} control={<ValuePill>{formatSecondsDuration(dotcraftRunTimeoutSeconds)}</ValuePill>} />
-                <SettingsRow icon={GitPullRequest} label={t('agents.bridge.hubDiscovery')} description={t('agents.bridge.hubDiscoveryDescription')} control={<StatusPill tone={dotcraftHubDiscoveryEnabled ? 'ok' : 'muted'} label={dotcraftHubDiscoveryEnabled ? t('agents.bridge.enabled') : t('agents.bridge.disabled')} />} />
               </SettingsGroup>
               <SettingsGroup title={t('agents.connection.title')} description={serverConfig?.writable ? t('agents.connection.restartDescription') : serverConfig?.disabledReason ?? t('common.readOnly')}>
                 <SettingsRow icon={Code2} label={t('agents.connection.appServerUrl')} description={t('agents.connection.appServerUrlDescription')} control={<TextControl value={configDraft?.dotCraft.appServerUrl ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateDotCraftConfig({ appServerUrl: value }, 'immediate')} />} />
@@ -2682,12 +2676,6 @@ function formatEndpoint(endpoint: string) {
   } catch {
     return endpoint.split('?')[0]
   }
-}
-
-function formatSecondsDuration(seconds: number) {
-  if (seconds % 3600 === 0) return i18n.t('settings:durationFormat.hr', { value: seconds / 3600 })
-  if (seconds % 60 === 0) return i18n.t('settings:durationFormat.min', { value: seconds / 60 })
-  return i18n.t('settings:durationFormat.sec', { value: seconds })
 }
 
 function relativeTime(value: string) {
