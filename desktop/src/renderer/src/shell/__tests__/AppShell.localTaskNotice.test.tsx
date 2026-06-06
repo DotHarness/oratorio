@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   serverConfigurationFixture,
@@ -542,8 +542,15 @@ describe('AppShell local task created notice', () => {
       )
     })
     expect(screen.queryByRole('dialog', { name: 'Bind DotCraft thread' })).not.toBeInTheDocument()
-    expect(await screen.findByText('DotCraft tools enabled for this thread.')).toBeInTheDocument()
+    const enabledNotice = await screen.findByText('DotCraft tools enabled for this thread.')
     expect(await screen.findByRole('img', { name: /Connected to DotCraft/ })).toBeInTheDocument()
+
+    const noticeCard = enabledNotice.closest('.ui-notice')
+    expect(noticeCard).not.toBeNull()
+    fireEvent.click(within(noticeCard as HTMLElement).getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() =>
+      expect(screen.queryByText('DotCraft tools enabled for this thread.')).not.toBeInTheDocument(),
+    )
   })
 
   it('uses the launch query theme before stored renderer theme on the first desktop render', () => {

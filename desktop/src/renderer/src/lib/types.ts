@@ -910,6 +910,12 @@ export type UiNotice = {
   onAction?: () => void
 }
 
+/** A queued notice with the identity + lifetime the stacked toast host needs. */
+export type NoticeEntry = UiNotice & {
+  id: string
+  durationMs: number
+}
+
 export type ActionIconProps = {
   active?: boolean
   children: ReactNode

@@ -5,10 +5,8 @@ import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
   ChevronRight,
-  CheckCircle2,
   Info,
   TriangleAlert,
-  type LucideIcon,
 } from 'lucide-react'
 import '../App.css'
 import i18n from '../i18n'
@@ -28,6 +26,7 @@ import { BoardView, type BoardViewMode } from '../views/BoardView'
 import { TaskDrawer } from '../views/TaskDrawer'
 import { TaskStatusPanel } from '../views/drawer/TaskStatusPanel'
 import { CelebrationBurst } from '../components/feedback/CelebrationBurst'
+import { NoticeToastHost } from '../components/feedback/NoticeToastHost'
 import { OnboardingTour } from '../components/onboarding/OnboardingTour'
 import { markOnboardingSeen, shouldShowOnboarding } from '../lib/onboarding'
 import { useBoardStream } from '../hooks/useBoardStream'
@@ -66,6 +65,7 @@ import type {
   SourceSyncProjectRun,
   TaskListResponse,
   UiNotice,
+  NoticeEntry,
   WorkItem,
 } from '../lib/types'
 import {
@@ -127,6 +127,7 @@ const activeTaskStateQuery = 'discovered,dispatching,running,failed,awaitingRevi
 const closedTaskPageSize = 50
 const DEFAULT_RUN_TIMEOUT_SECONDS = 30 * 60
 const INITIAL_LAUNCH_REVEAL_MS = 360
+const MAX_VISIBLE_NOTICES = 5
 const initialLaunchStartingMessage = () => i18n.t('common:shell.launch.starting')
 const initialLaunchPreparingMessage = () => i18n.t('common:shell.launch.preparing')
 const DEFAULT_APP_BINDING_STATUS: DotCraftAppBindingStatusResponse = {
@@ -311,7 +312,7 @@ function OratorioApp() {
   const [initialLaunchPhase, setInitialLaunchPhase] = useState<InitialLaunchPhase>('loading')
   const [initialLaunchMessage, setInitialLaunchMessage] = useState(initialLaunchStartingMessage)
   const [error, setError] = useState<string | null>(null)
-  const [uiNotice, setUiNotice] = useState<UiNotice | null>(null)
+  const [notices, setNotices] = useState<NoticeEntry[]>([])
   const [appBindingDialog, setAppBindingDialog] = useState<AppBindingDialogState | null>(null)
   const [pendingServerRestart, setPendingServerRestart] = useState<PendingServerRestart | null>(null)
   const [serverRestartState, setServerRestartState] = useState<ServerRestartState>('idle')
@@ -323,7 +324,7 @@ function OratorioApp() {
   const selectedIdRef = useRef<string | null>(null)
   const selectedDetailRef = useRef<WorkItem | null>(null)
   const initialRefreshStartedRef = useRef(false)
-  const noticeTimerRef = useRef<number | null>(null)
+  const noticeIdRef = useRef(0)
   const celebrationTimerRef = useRef<number | null>(null)
   const githubSyncStatusRef = useRef<string | null>(null)
   const sourceSyncStatusesRef = useRef<Record<string, string | null>>({})
@@ -1067,9 +1068,6 @@ function OratorioApp() {
 
   useEffect(() => {
     return () => {
-      if (noticeTimerRef.current !== null) {
-        window.clearTimeout(noticeTimerRef.current)
-      }
       if (celebrationTimerRef.current !== null) {
         window.clearTimeout(celebrationTimerRef.current)
       }
@@ -1095,15 +1093,16 @@ function OratorioApp() {
   }, [actionMenuItemId])
 
   const showNotice = useCallback((message: string, tone: UiNotice['tone'] = 'success', action?: Pick<UiNotice, 'actionLabel' | 'onAction'>) => {
-    if (noticeTimerRef.current !== null) {
-      window.clearTimeout(noticeTimerRef.current)
-    }
+    const id = `notice-${noticeIdRef.current++}`
+    const durationMs = tone === 'error' ? 6000 : 4200
+    setNotices((current) => {
+      const next = [...current, { id, message, tone, durationMs, ...action }]
+      return next.length > MAX_VISIBLE_NOTICES ? next.slice(next.length - MAX_VISIBLE_NOTICES) : next
+    })
+  }, [])
 
-    setUiNotice({ message, tone, ...action })
-    noticeTimerRef.current = window.setTimeout(() => {
-      setUiNotice(null)
-      noticeTimerRef.current = null
-    }, 3200)
+  const dismissNotice = useCallback((id: string) => {
+    setNotices((current) => current.filter((notice) => notice.id !== id))
   }, [])
 
   const markDotCraftAppBindingConnected = useCallback(() => {
@@ -1240,9 +1239,7 @@ function OratorioApp() {
     void refreshAll({ background: true })
     const repositoryRuns = githubSyncJob?.repositories ?? []
     const failedRuns = repositoryRuns.filter((run) => run.status === 'failed')
-    if (status === 'succeeded') {
-      showNotice(t('common:shell.notices.githubSyncFinished', { names: formatRepositoryNames(repositoryRuns) }))
-    } else {
+    if (status !== 'succeeded') {
       showNotice(t('common:shell.notices.githubSyncFinishedWithFailures', { names: formatRepositoryNames(failedRuns, t('common:shell.syncFallback.failedRepositories')) }), 'error')
     }
   }, [githubSyncJob, refreshAll, showNotice, t])
@@ -1270,9 +1267,7 @@ function OratorioApp() {
       const projectRuns = job?.projects ?? []
       const failedRuns = projectRuns.filter((run) => run.status === 'failed')
       const providerName = providerLabel(provider)
-      if (status === 'succeeded') {
-        showNotice(t('common:shell.notices.sourceSyncFinished', { provider: providerName, names: formatSourceProjectNames(projectRuns) }))
-      } else {
+      if (status !== 'succeeded') {
         showNotice(t('common:shell.notices.sourceSyncFinishedWithFailures', { provider: providerName, names: formatSourceProjectNames(failedRuns, t('common:shell.syncFallback.failedProjects')) }), 'error')
       }
     }
@@ -1471,9 +1466,7 @@ function OratorioApp() {
       await refreshItems()
       await refreshCurrentListView()
       closeLocalTaskForm()
-      if (taskFormMode === 'edit') {
-        showNotice(t('common:shell.notices.localTaskUpdated'))
-      } else {
+      if (taskFormMode !== 'edit') {
         showNotice(t('common:shell.notices.taskCreated', { title: nextItem.title }), 'success', {
           actionLabel: t('common:shell.notices.viewDetails'),
           onAction: () => openCreatedTaskNotice(nextItem),
@@ -1562,7 +1555,6 @@ function OratorioApp() {
       await refreshDetail(selectedItem)
       await refreshItems()
       await refreshCurrentListView()
-      showNotice(t('common:shell.notices.itemRefreshed'), 'info')
     } catch (reason) {
       setError(errorMessage(reason))
     } finally {
@@ -1874,7 +1866,6 @@ function OratorioApp() {
       const nextItem = detailToWorkItem(detail)
       setSelectedDetail(nextItem)
       setItems((current) => replaceMatchingItemWithDetail(current, nextItem))
-      showNotice(t('common:shell.notices.followUpDraftUpdated'))
     } catch (reason) {
       setError(errorMessage(reason))
     } finally {
@@ -1898,7 +1889,6 @@ function OratorioApp() {
       const nextItem = detailToWorkItem(detail)
       setSelectedDetail(nextItem)
       setItems((current) => replaceMatchingItemWithDetail(current, nextItem))
-      showNotice(t('common:shell.notices.reviewDraftSummaryUpdated'))
     } catch (reason) {
       setError(errorMessage(reason))
     } finally {
@@ -1938,7 +1928,6 @@ function OratorioApp() {
         })
         if (ok && selectedItem) {
           setReviewStageByItem((current) => ({ ...current, [selectedItem.id]: 'analysis' }))
-          showNotice(t('common:shell.notices.mockRoundDispatched'))
         }
         return
       }
@@ -1949,7 +1938,6 @@ function OratorioApp() {
       })
       if (ok && selectedItem) {
         setReviewStageByItem((current) => ({ ...current, [selectedItem.id]: 'analysis' }))
-        showNotice(t('common:shell.notices.dotCraftRoundDispatched'))
       }
     })()
   }
@@ -1967,7 +1955,6 @@ function OratorioApp() {
       const ok = await mutateSelected('/rereview', {})
       if (ok) {
         setReviewStageByItem((current) => ({ ...current, [selectedItem.id]: 'analysis' }))
-        showNotice(t('common:shell.notices.reReviewDispatched', { kind: selectedItem.sourceKey === 'gitlab' ? 'MR' : 'PR' }))
       }
     })()
   }
@@ -2006,7 +1993,6 @@ function OratorioApp() {
       })
       if (ok && selectedItem) {
         setReviewStageByItem((current) => ({ ...current, [selectedItem.id]: 'analysis' }))
-        showNotice(deliveryPolicy === 'autoPr' ? t('common:shell.notices.autoPrImplementationDispatched') : t('common:shell.notices.implementationRoundDispatched'))
       }
     })()
   }
@@ -2018,7 +2004,6 @@ function OratorioApp() {
       const job = await apiPost<GitHubSyncJob>('/sources/github/sync-jobs', { mode })
       setGithubSyncJob(job)
       await refreshAll()
-      showNotice(mode === 'full' ? t('common:shell.notices.githubFullRepairSyncStarted') : t('common:shell.notices.githubSyncStarted'))
     } catch (reason) {
       setError(errorMessage(reason))
       await refreshGitHubStatus()
@@ -2037,7 +2022,6 @@ function OratorioApp() {
     try {
       const job = await apiPost<GitHubSyncJob>('/sources/github/sync-jobs', { mode: 'incremental', repositories })
       setGithubSyncJob(job)
-      showNotice(t('common:shell.notices.githubRetrySyncStarted'))
     } catch (reason) {
       setError(errorMessage(reason))
       await refreshGitHubStatus()
@@ -2064,9 +2048,6 @@ function OratorioApp() {
       const job = await apiPost<SourceSyncJob>(`/sources/${encodeURIComponent(provider)}/sync-jobs`, { mode, projects })
       setSourceSyncJobs((current) => ({ ...current, [provider]: job }))
       await refreshAll()
-      showNotice(mode === 'full'
-        ? t('common:shell.notices.sourceFullRepairSyncStarted', { provider: providerLabel(provider) })
-        : t('common:shell.notices.sourceSyncStarted', { provider: providerLabel(provider) }))
     } catch (reason) {
       const message = errorMessage(reason)
       setError(message)
@@ -2157,20 +2138,6 @@ function OratorioApp() {
   function openItemFromQueue(item: WorkItem) {
     setSelectedId(item.id)
     navigate(`/projects/${encodeURIComponent(workspaceId || 'default')}/tasks/${encodeURIComponent(item.shortId ?? item.itemId ?? item.id)}`)
-  }
-
-  function activateUiNotice() {
-    if (!uiNotice?.onAction) {
-      return
-    }
-
-    if (noticeTimerRef.current !== null) {
-      window.clearTimeout(noticeTimerRef.current)
-      noticeTimerRef.current = null
-    }
-    const action = uiNotice.onAction
-    setUiNotice(null)
-    action()
   }
 
   function closeTaskDrawer() {
@@ -2322,9 +2289,7 @@ function OratorioApp() {
         '--drawer-width': `${drawerWidth}px`,
       } as CSSProperties}
     >
-      <div className="ui-notice-region" aria-live="polite" aria-atomic="true">
-        {uiNotice ? <UiNoticeToast notice={uiNotice} onActivate={activateUiNotice} /> : null}
-      </div>
+      <NoticeToastHost notices={notices} onDismiss={dismissNotice} />
       <CelebrationBurst key={taskCreateCelebrationKey} origin={taskCreateCelebrationOrigin} />
       {isSettingsRoute ? (
         <aside className="unified-sidebar settings-sidebar-mode" aria-label={t('common:shell.settingsNavigation')}>
@@ -2530,42 +2495,6 @@ function OratorioApp() {
       {shell}
     </div>
   ) : shell
-}
-
-const noticeIconByTone: Record<UiNotice['tone'], LucideIcon> = {
-  success: CheckCircle2,
-  info: Info,
-  error: TriangleAlert,
-}
-
-function UiNoticeToast({ notice, onActivate }: { notice: UiNotice; onActivate: () => void }) {
-  const Icon = noticeIconByTone[notice.tone]
-  const content = (
-    <>
-      <span className="ui-notice-icon" aria-hidden="true">
-        <Icon size={15} />
-      </span>
-      <span className="ui-notice-content">
-        <span className="ui-notice-message">{notice.message}</span>
-        {notice.actionLabel ? <span className="ui-notice-action">{notice.actionLabel}</span> : null}
-      </span>
-    </>
-  )
-
-  if (notice.onAction) {
-    return (
-      <button
-        className={`ui-notice ${notice.tone} actionable`}
-        type="button"
-        onClick={onActivate}
-        aria-label={notice.actionLabel ? `${notice.message} ${notice.actionLabel}` : notice.message}
-      >
-        {content}
-      </button>
-    )
-  }
-
-  return <div className={`ui-notice ${notice.tone}`}>{content}</div>
 }
 
 function PendingServerRestartBanner({

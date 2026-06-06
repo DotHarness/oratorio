@@ -155,6 +155,34 @@ export function BoardView({
     ? t('board:sync.syncTitle')
     : githubStatus.configured ? pullGitHubLabel : githubStatus.message
 
+  const syncing = isSyncing || githubSyncActive
+  const [refreshing, setRefreshing] = useState(false)
+  const [justSynced, setJustSynced] = useState(false)
+  const previousSyncingRef = useRef(syncing)
+
+  // Pulse the pull control in place when a sync finishes, replacing the old
+  // "sync finished" toast with a quiet on-card acknowledgement.
+  useEffect(() => {
+    if (previousSyncingRef.current && !syncing) {
+      setJustSynced(true)
+      const timer = window.setTimeout(() => setJustSynced(false), 900)
+      previousSyncingRef.current = syncing
+      return () => window.clearTimeout(timer)
+    }
+    previousSyncingRef.current = syncing
+  }, [syncing])
+
+  // Spin the refresh icon in place (no toast) for at least one beat so the
+  // action reads as "working" even when the underlying fetch resolves fast.
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true)
+    const startedAt = Date.now()
+    void Promise.resolve(isActiveView ? refreshAll() : refreshClosedItems()).finally(() => {
+      const elapsed = Date.now() - startedAt
+      window.setTimeout(() => setRefreshing(false), Math.max(0, 500 - elapsed))
+    })
+  }, [isActiveView, refreshAll, refreshClosedItems])
+
   useEffect(() => {
     if (!closedLoading) {
       requestedClosedCursorRef.current = null
@@ -251,11 +279,17 @@ export function BoardView({
           <ActionIcon label={t('board:actions.newLocalTask')} onClick={openCreateLocalTask} dataTour="new-task">
             <Plus size={16} />
           </ActionIcon>
-          <ActionIcon label={pullGitHubLabel} title={pullGitHubTitle} onClick={() => void syncGitHubSource()} disabled={!canPullGitHub}>
-            {isSyncing || githubSyncActive ? <RefreshCw size={16} className="spin-icon" /> : <Download size={16} />}
+          <ActionIcon
+            label={pullGitHubLabel}
+            title={pullGitHubTitle}
+            className={`icon-button${justSynced ? ' icon-button--pulse' : ''}`}
+            onClick={() => void syncGitHubSource()}
+            disabled={!canPullGitHub}
+          >
+            {syncing ? <RefreshCw size={16} className="spin-icon" /> : <Download size={16} />}
           </ActionIcon>
-          <ActionIcon label={t('board:actions.refresh')} onClick={() => void (isActiveView ? refreshAll() : refreshClosedItems())}>
-            <RefreshCw size={16} />
+          <ActionIcon label={t('board:actions.refresh')} onClick={handleRefresh}>
+            <RefreshCw size={16} className={refreshing ? 'spin-icon' : undefined} />
           </ActionIcon>
           <ActionIcon label={t('board:actions.settings')} onClick={openSettings} dataTour="settings-gear">
             <Settings size={16} />
