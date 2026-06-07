@@ -33,4 +33,4 @@ if [ "$#" -gt 0 ]; then
 fi
 
 cd /opt/oratorio
-exec ./Oratorio.Server
+exec ./oratorio-server

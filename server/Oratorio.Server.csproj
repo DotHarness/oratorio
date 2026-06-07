@@ -4,6 +4,12 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Publish a clean, single standalone executable named oratorio-server(.exe),
+         matching DotCraft's convention. The C# namespace stays Oratorio.Server. -->
+    <AssemblyName>oratorio-server</AssemblyName>
+    <RootNamespace>Oratorio.Server</RootNamespace>
+    <!-- Headless API: no static web assets, so skip the .staticwebassets.*.json manifest. -->
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
     <AssemblyVersion>0.1.1</AssemblyVersion>
     <Version>0.1.1</Version>
   </PropertyGroup>

@@ -8,9 +8,8 @@
   },
   "sections": {
     "general": { "label": "General", "description": "Local preferences" },
-    "sources": { "label": "Sources", "description": "Provider sync and status" },
-    "projects": { "label": "Projects", "description": "Project workspace routing" },
-    "credentials": { "label": "Credentials", "description": "Source auth presence" },
+    "github": { "label": "GitHub", "description": "Connection, routing, sync" },
+    "gitlab": { "label": "GitLab", "description": "Connection, routing, sync" },
     "agents": { "label": "Agents", "description": "AppServer connection" },
     "worktree": { "label": "Worktree", "description": "Dispatch and cleanup" },
     "review": { "label": "Review", "description": "PR/MR review policy" }
@@ -59,9 +58,8 @@
     "scheduleSaveFailed": "Scheduled sync settings could not be saved."
   },
   "sectionCopy": {
-    "sources": "Inspect source provider status, capabilities, sync progress, and recent failures.",
-    "projects": "Map each GitHub repository or GitLab project to the DotCraft workspace it should run against.",
-    "credentials": "Manage source identity and secret presence without exposing plaintext.",
+    "github": "Manage the GitHub connection, project routing, and sync in one place.",
+    "gitlab": "Manage the GitLab connection, project routing, and sync in one place.",
     "agents": "Configure DotCraft bridge health, AppServer discovery, and agent guardrails.",
     "worktree": "Tune managed worktrees, scheduling, retries, cleanup, and implementation dispatch.",
     "review": "Configure source project-level PR/MR review triggers and draft publication.",
@@ -69,6 +67,10 @@
   },
   "sources": {
     "groupTitle": "Source providers",
+    "connectionTitle": "Connection",
+    "syncGroupTitle": "Sync & schedule",
+    "syncGroupDescription": "Scheduled pull and the latest sync result.",
+    "needsSetupHint": "Connect {{provider}} to enable project routing and sync.",
     "providerCount": "{{configured}}/{{total}} providers configured",
     "noProviders": "No source providers configured.",
     "card": {
@@ -93,6 +95,7 @@
       "routeProjects": "Route projects",
       "syncFailed": "Sync failed",
       "fullRepair": "Full repair",
+      "moreActions": "More actions",
       "starting": "Starting",
       "syncing": "Syncing",
       "syncNow": "Sync now",
@@ -203,7 +206,7 @@
   },
   "credentials": {
     "github": {
-      "title": "GitHub credentials",
+      "title": "GitHub",
       "description": "Secrets are submitted once and never echoed back.",
       "endpoint": "Endpoint",
       "endpointDescription": "GitHub API base URL.",
@@ -269,14 +272,10 @@
   },
   "agents": {
     "bridge": {
-      "title": "DotCraft bridge",
-      "defaultMessage": "DotCraft bridge status.",
       "startServer": "Start server",
       "starting": "Starting...",
       "health": "Health",
-      "healthDescription": "Current AppServer reachability.",
-      "endpoint": "Endpoint",
-      "noEndpoint": "No endpoint configured."
+      "healthDescription": "Current AppServer reachability."
     },
     "connection": {
       "title": "Agent connection",

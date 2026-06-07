@@ -6368,6 +6368,19 @@ textarea:focus-visible {
   font-weight: 650;
 }
 
+/* Group title that leads with a provider glyph (Credentials → GitHub/GitLab). */
+.settings-group-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-group-title-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
 .settings-group-header p {
   margin-top: 4px;
   color: var(--text-dimmed);
@@ -7161,6 +7174,168 @@ textarea:focus-visible {
   row-gap: 8px;
 }
 
+/* ── Provider-centric settings pages (GitHub / GitLab) ── */
+.provider-settings {
+  gap: 16px;
+}
+
+.provider-settings-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 2px 4px;
+}
+
+.provider-settings-id {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.provider-settings-glyph {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+.provider-settings-id h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 680;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.provider-settings-id small {
+  display: block;
+  margin-top: 1px;
+  color: var(--text-dimmed);
+  font-size: 12px;
+}
+
+.provider-settings-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.provider-health {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  padding: 11px 14px;
+  background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
+}
+
+.provider-health-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.provider-health-item strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.provider-health-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+}
+
+.provider-health-dot.ok {
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent);
+}
+
+.provider-health-dot.warn {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 18%, transparent);
+}
+
+.provider-health-dot.muted {
+  background: var(--text-dimmed);
+}
+
+.provider-health-meta {
+  margin-left: auto;
+  color: var(--text-dimmed);
+  font-size: 12px;
+}
+
+.provider-needs-setup {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--border-default));
+  border-radius: 10px;
+  padding: 11px 14px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  font-size: 12.5px;
+}
+
+.provider-overflow {
+  position: relative;
+  display: inline-flex;
+}
+
+.provider-overflow-trigger {
+  border-color: var(--border-default);
+}
+
+.provider-overflow-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 190px;
+  padding: 5px;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 10px;
+  background: var(--glass-surface-strong);
+  box-shadow: var(--glass-shadow-soft);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.provider-overflow-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.provider-overflow-menu button:hover {
+  background: var(--bg-tertiary);
+}
+
+.provider-overflow-menu button svg {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+}
+
+.repository-add-row.provider-add-row {
+  grid-template-columns: minmax(220px, 1.3fr) minmax(200px, 1fr) auto;
+}
+
 .source-provider-card-list {
   display: grid;
   gap: 12px;
@@ -7460,7 +7635,21 @@ textarea:focus-visible {
   gap: 12px;
 }
 
-.repository-card-header > span:first-child {
+.repository-card-heading {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.repository-card-provider-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+.repository-card-heading-copy {
   display: grid;
   min-width: 0;
   gap: 4px;

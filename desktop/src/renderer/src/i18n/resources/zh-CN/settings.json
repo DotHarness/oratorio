@@ -8,9 +8,8 @@
   },
   "sections": {
     "general": { "label": "通用", "description": "本地偏好" },
-    "sources": { "label": "来源", "description": "提供方同步与状态" },
-    "projects": { "label": "项目", "description": "项目工作区路由" },
-    "credentials": { "label": "凭据", "description": "来源认证状态" },
+    "github": { "label": "GitHub", "description": "连接 · 路由 · 同步" },
+    "gitlab": { "label": "GitLab", "description": "连接 · 路由 · 同步" },
     "agents": { "label": "智能体", "description": "AppServer 连接" },
     "worktree": { "label": "工作树", "description": "派发与清理" },
     "review": { "label": "评审", "description": "PR/MR 评审策略" }
@@ -59,9 +58,8 @@
     "scheduleSaveFailed": "无法保存定时同步设置。"
   },
   "sectionCopy": {
-    "sources": "查看来源提供方的状态、能力、同步进度及最近的失败记录。",
-    "projects": "将每个 GitHub 仓库或 GitLab 项目映射到其应运行的 DotCraft 工作区。",
-    "credentials": "在不暴露明文的前提下管理来源身份与密钥状态。",
+    "github": "在同一处管理 GitHub 的连接、项目路由与同步。",
+    "gitlab": "在同一处管理 GitLab 的连接、项目路由与同步。",
     "agents": "配置 DotCraft 桥接健康状况、AppServer 发现及智能体防护策略。",
     "worktree": "调整托管工作树、调度、重试、清理及实现派发。",
     "review": "配置来源项目级别的 PR/MR 评审触发与草稿发布。",
@@ -69,6 +67,10 @@
   },
   "sources": {
     "groupTitle": "来源提供方",
+    "connectionTitle": "连接",
+    "syncGroupTitle": "同步与计划",
+    "syncGroupDescription": "定时拉取与最近一次同步结果。",
+    "needsSetupHint": "连接 {{provider}} 后即可路由项目并同步。",
     "providerCount": "已配置 {{configured}}/{{total}} 个提供方",
     "noProviders": "未配置来源提供方。",
     "card": {
@@ -93,6 +95,7 @@
       "routeProjects": "路由项目",
       "syncFailed": "同步失败项",
       "fullRepair": "完整修复",
+      "moreActions": "更多操作",
       "starting": "启动中",
       "syncing": "同步中",
       "syncNow": "立即同步",
@@ -203,7 +206,7 @@
   },
   "credentials": {
     "github": {
-      "title": "GitHub 凭据",
+      "title": "GitHub",
       "description": "密钥仅提交一次，且不会回显。",
       "endpoint": "端点",
       "endpointDescription": "GitHub API 基础 URL。",
@@ -269,14 +272,10 @@
   },
   "agents": {
     "bridge": {
-      "title": "DotCraft 桥接",
-      "defaultMessage": "DotCraft 桥接状态。",
       "startServer": "启动服务器",
       "starting": "启动中...",
       "health": "健康状况",
-      "healthDescription": "当前 AppServer 可达性。",
-      "endpoint": "端点",
-      "noEndpoint": "未配置端点。"
+      "healthDescription": "当前 AppServer 可达性。"
     },
     "connection": {
       "title": "智能体连接",

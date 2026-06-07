@@ -28,11 +28,11 @@
     },
     "connectProject": {
       "title": "Connect your project",
-      "body": "Open Settings → Projects and point Oratorio at the same folder DotCraft is configured for. One connection, one save."
+      "body": "Open Settings → GitHub or GitLab and point Oratorio at the same folder DotCraft is configured for. One connection, one save."
     },
     "credentials": {
       "title": "Pull in real work (optional)",
-      "body": "Connect GitHub or GitLab under Settings → Credentials and Oratorio mirrors your issues, PRs, and MRs as cards. Skip this to just try the board with your own tasks."
+      "body": "Connect a source under Settings → GitHub or GitLab and Oratorio mirrors your issues, PRs, and MRs as cards. Skip this to just try the board with your own tasks."
     },
     "newTask": {
       "title": "Write your first task",

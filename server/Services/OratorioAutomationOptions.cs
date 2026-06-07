@@ -6,8 +6,8 @@ namespace Oratorio.Server.Services;
 public sealed class OratorioAutomationOptions
 {
     public bool AutoDispatchEnabled { get; set; }
-    public string[] AutoDispatchAllowLabels { get; set; } = [];
-    public string[] AutoDispatchBlockLabels { get; set; } = [];
+    public string[] AutoDispatchAllowLabels { get; set; } = ["oratorio:auto"];
+    public string[] AutoDispatchBlockLabels { get; set; } = ["blocked", "on hold", "needs-design", "needs-human"];
     public DeliveryPolicy DeliveryPolicy { get; set; } = DeliveryPolicy.ManualDelivery;
     public int MaxImplementationTurns { get; set; } = 3;
     public string[] AutoReviewRepositories { get; set; } = [];

@@ -69,4 +69,4 @@ fi
 dotnet publish "${PUBLISH_ARGS[@]}"
 
 echo
-echo "Done. Entry point: $OUT/Oratorio.Server"
+echo "Done. Entry point: $OUT/oratorio-server"

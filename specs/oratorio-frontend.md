@@ -68,6 +68,11 @@ Settings route:
 /settings/:section
 ```
 
+Source configuration is provider-centric: the `github` and `gitlab` sections each
+consolidate that provider's connection, project routing, and sync. Legacy section
+paths (`/settings/sources`, `/settings/credentials`, `/settings/projects`) redirect
+to a provider section.
+
 Legacy routes such as `/queue`, `/items/*`, `/sources`, `/agents`, `/rules`,
 and `/integrations` may redirect to the board while compatibility is needed, but
 they are not visible navigation entries.
@@ -476,6 +481,16 @@ consistent with the Discussion composer rule in §4.
 
 Settings is the only non-board navigation destination.
 
+Source settings are organized per provider. GitHub and GitLab each have a single
+Settings section, listed as a distinct top-level navigation entry, that
+consolidates top to bottom: Connection (endpoint, identity, write enablement, and
+write-only credential inputs), Project routing (repository/project → DotCraft
+workspace mappings, GitHub installation profiles, and GitLab per-project profiles),
+and Sync (read status, a primary `Sync now`, scheduled incremental sync with next
+run, `Full repair` and failed-sync retry in an overflow menu, and provider-local
+background failures). There is no separate Sources, Credentials, or Projects
+destination.
+
 Allowed Settings content:
 
 - General local preferences such as theme;
@@ -487,9 +502,10 @@ Allowed Settings content:
 - GitLab project profiles inside Project routing, keyed by canonical
   `gitlab:<instance>/<group[/subgroup]/project>` project keys, with token kind,
   token, webhook secret, signing token, and missing-profile status;
-- Source provider cards that show GitHub/GitLab read status, manual sync,
-  Full repair, scheduled incremental sync, next run, and provider-local
-  background failures;
+- A provider page header per source that shows read/write/webhook health as a
+  compact status line, a primary `Sync now`, scheduled incremental sync with next
+  run, and `Full repair` plus failed-sync retry in an overflow menu; provider-local
+  background failures surface inline;
 - Credentials presence and write-only password-style inputs with show/hide
   controls that never echo stored plaintext;
 - Agents configuration for DotCraft bridge status, AppServer endpoint
@@ -506,9 +522,11 @@ Auto-start command and process argument inputs are not Settings content.
 The legacy global GitHub Installation ID is not Settings content. GitHub
 installation IDs appear only as owner profiles in Project routing.
 Legacy global GitLab token, webhook secret, and signing-token fields are not
-Settings content. GitLab credentials appear only on GitLab Project routing
-cards, and changing the GitLab endpoint host clears old project profiles from
-the draft with restart/impact copy.
+Settings content. GitLab instance connection settings (endpoint, read sync, write
+enablement, webhook verification) live in the GitLab section's Connection; the
+per-project GitLab token, webhook secret, and signing token appear only on that
+section's project-routing cards, and changing the GitLab endpoint host clears old
+project profiles from the draft with restart/impact copy.
 
 Configuration saves that require process restart show a pending restart banner at
 the top of Settings. Desktop builds offer a restart button through the desktop

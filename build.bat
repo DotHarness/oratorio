@@ -79,9 +79,9 @@ echo.
 echo =====================================
 echo  Build completed successfully!
 echo =====================================
-echo  Server: build\release\server\Oratorio.Server.exe
+echo  Server: build\release\server\oratorio-server.exe
 echo  Desktop installers: build\release\*.exe
-echo  Run:    build\release\server\Oratorio.Server.exe
+echo  Run:    build\release\server\oratorio-server.exe
 echo =====================================
 echo.
 pause 

@@ -231,7 +231,7 @@ export class OratorioServerManager extends EventEmitter {
       appPath: this.app.getAppPath()
     })
     if (!resolved.path) {
-      throw new Error('Bundled Oratorio.Server.exe was not found. Rebuild or reinstall Oratorio Desktop.')
+      throw new Error('Bundled oratorio-server.exe was not found. Rebuild or reinstall Oratorio Desktop.')
     }
 
     return resolved.path
@@ -360,7 +360,7 @@ async function findAvailableLoopbackPort(): Promise<number> {
 }
 
 function executableName(): string {
-  return process.platform === 'win32' ? 'Oratorio.Server.exe' : 'Oratorio.Server'
+  return process.platform === 'win32' ? 'oratorio-server.exe' : 'oratorio-server'
 }
 
 function normalizeBaseUrl(value: string): string {

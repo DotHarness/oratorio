@@ -5,7 +5,7 @@ import { join } from 'path'
 import { describe, expect, it } from 'vitest'
 import { readPersistedPort, resolveServerExecutablePath, writePersistedPort } from './OratorioServerManager'
 
-const exeName = process.platform === 'win32' ? 'Oratorio.Server.exe' : 'Oratorio.Server'
+const exeName = process.platform === 'win32' ? 'oratorio-server.exe' : 'oratorio-server'
 
 describe('loopback port persistence', () => {
   it('round-trips a persisted port so it is reused across restarts', () => {

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction, type ReactNode } from 'react'
-import { useNavigate, useParams } from 'react-router'
+import { useParams } from 'react-router'
 import {
   Activity,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -13,6 +14,9 @@ import {
   GitPullRequest,
   KeyRound,
   Languages,
+  ListChecks,
+  MoreHorizontal,
+  Play,
   Plus,
   RefreshCw,
   Search,
@@ -21,12 +25,14 @@ import {
   ShieldCheck,
   SunMoon,
   Trash2,
+  Wrench,
   X,
   XCircle,
   type LucideIcon,
 } from 'lucide-react'
 import { apiGet, apiPut } from '../api'
 import { ActionIcon } from '../components/primitives/ActionIcon'
+import { GithubGlyph, GitlabGlyph } from '../components/primitives/ProviderGlyphs'
 import { DropdownSelect, type DropdownSelectOption } from '../components/primitives/DropdownSelect'
 import { Tooltip } from '../components/primitives/Tooltip'
 import { useTranslation } from 'react-i18next'
@@ -418,7 +424,6 @@ export function SettingsView({
   onReplayOnboarding,
 }: SettingsViewProps) {
   const { section } = useParams()
-  const navigate = useNavigate()
   const { t, i18n: i18nInstance } = useTranslation('settings')
   const currentLocale: AppLocale = (supportedLocales.some((locale) => locale.value === i18nInstance.language) ? i18nInstance.language : 'en') as AppLocale
   const activeSection = normalizeSettingsSection(section)
@@ -432,7 +437,6 @@ export function SettingsView({
   const [workspaceError, setWorkspaceError] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [scheduleSavingProvider, setScheduleSavingProvider] = useState<string | null>(null)
-  const [newProjectProvider, setNewProjectProvider] = useState<SourceProviderId>('github')
   const [newProjectPath, setNewProjectPath] = useState('')
   const [newWorkspacePath, setNewWorkspacePath] = useState('')
   const [repositoryAllowlistModal, setRepositoryAllowlistModal] = useState<RepositoryAllowlistKind | null>(null)
@@ -720,11 +724,8 @@ export function SettingsView({
     })
   }
 
-  const diagnosticsDotcraft = diagnostics?.dotCraft
   const diagnosticsGitHub = diagnostics?.gitHub ?? diagnostics?.github
   const diagnosticsGitLab = diagnostics?.gitLab
-  const dotcraftEndpoint = diagnosticsDotcraft?.endpoint || formatEndpoint(dotcraftStatus.endpoint) || t('agents.bridge.noEndpoint')
-  const dotcraftEndpointSource = diagnosticsDotcraft?.endpointSource ?? dotcraftStatus.endpointSource ?? 'configuration'
   const githubAuthenticationLabel = diagnosticsGitHub?.authentication ? authLabel(diagnosticsGitHub.authentication) : githubStatus.configured ? t('credentials.authLabel.configured') : t('credentials.authLabel.none')
   const gitLabConfig = normalizeGitLabConfig(configDraft?.gitLab)
   const persistedGitLabConfig = normalizeGitLabConfig(serverConfig?.configuration.gitLab)
@@ -766,13 +767,6 @@ export function SettingsView({
   const deliveryDescription = hasGitLabProject
     ? t('worktree.automation.deliveryWithGitlab')
     : t('worktree.automation.deliveryDefault')
-  const sourceProjectPlaceholder = newProjectProvider === 'gitlab' ? t('projects.gitlabPlaceholder') : t('projects.githubPlaceholder')
-  const sourceProjectEmptyLabel = providerCards.length ? t('projects.emptyNoProjects') : t('projects.emptyNoProviders')
-  const providerCountCopy = providerCards.length
-    ? t('sources.providerCount', { configured: providerCards.filter((provider) => provider.configured).length, total: providerCards.length })
-    : t('sources.noProviders')
-  const routeStatusTone = projectCards.length ? 'ok' : providerCards.length ? 'warn' : 'muted'
-  const routeStatusLabel = projectCards.length ? t('projects.routeStatusProjects', { count: projectCards.length }) : providerCards.length ? t('projects.routeStatusNoProjects') : t('projects.routeStatusNoProviders')
   const syncSource = syncSourceProvider ?? (async (provider: string, mode: SourceSyncMode = 'incremental') => {
     if (provider === 'github') {
       await (mode === 'full' ? syncGitHubFullRepair() : syncGitHubSource())
@@ -798,8 +792,6 @@ export function SettingsView({
       setScheduleSavingProvider(null)
     }
   }
-  const goToCredentials = () => navigate('/settings/credentials')
-  const goToProjects = () => navigate('/settings/projects')
   const addProjectDisabled = !serverConfig?.writable || !newProjectPath.trim()
   const implementationAutoDispatchDescription = hasGitLabProject
     ? t('worktree.automation.autoDispatchWithGitlab')
@@ -818,12 +810,17 @@ export function SettingsView({
   const reviewTargetTerm = hasGitLabProject ? t('review.term.prmr') : t('review.term.pr')
   const publishRouteTerm = hasGitLabProject ? t('review.term.providerRoutes') : t('review.term.githubComment')
   const reviewSourceSupports = hasGitLabProject ? t('review.reviewSupportsWithGitlab') : t('review.reviewSupportsDefault')
-  const sourceWriteFailureSummary = diagnosticsGitLab?.recentSourceWriteFailures?.[0] ?? diagnosticsGitLab?.recentSyncFailures?.[0] ?? null
   const diagnosticsGitLabWriteLabel = (diagnosticsGitLab?.writeConfigured ?? gitLabTokenConfiguredCount > 0) ? gitLabTokenConfiguredCount && gitLabTokenConfiguredCount < gitLabConfig.projects.length ? t('credentials.gitlabWriteLabel.partial') : t('credentials.gitlabWriteLabel.configured') : t('credentials.gitlabWriteLabel.missingToken')
 
   const shouldShowStartServer = !dotcraftStatus.connected || Boolean(workspaceInventory?.workspaces?.some((workspace) => !workspace.connected))
   const bridgeActions = shouldShowStartServer ? (
-    <button className="secondary-button inline compact-row-action settings-action-button" type="button" disabled={isStartingAppServer} onClick={() => void startAndRefreshDotCraftAppServer()}>
+    <button
+      type="button"
+      className="secondary-button inline compact-row-action settings-action-button"
+      disabled={isStartingAppServer}
+      onClick={() => void startAndRefreshDotCraftAppServer()}
+    >
+      {isStartingAppServer ? <RefreshCw size={14} className="spin-icon" /> : <Play size={14} />}
       {isStartingAppServer ? t('agents.bridge.starting') : t('agents.bridge.startServer')}
     </button>
   ) : null
@@ -866,8 +863,8 @@ export function SettingsView({
   const removeProjectCard = (index: number) => {
     updateServerConfiguration((current) => applyProjectCardRemoval(current, index))
   }
-  const addProjectCard = () => {
-    updateServerConfiguration((current) => applyProjectCardAdd(current, newProjectProvider, newProjectPath, newWorkspacePath))
+  const addProjectCard = (provider: SourceProviderId) => {
+    updateServerConfiguration((current) => applyProjectCardAdd(current, provider, newProjectPath, newWorkspacePath))
     setNewProjectPath('')
     setNewWorkspacePath('')
   }
@@ -918,6 +915,157 @@ export function SettingsView({
       autoFollowUpEnabled: filtered.length > 0,
       autoFollowUpRepositories: filtered,
     })
+  }
+
+  const renderProviderSettings = (providerId: 'github' | 'gitlab') => {
+    const provider = providerCards.find((card) => card.provider === providerId) ?? null
+    const job = sourceSyncJobs[providerId] ?? null
+    const schedule = sourceSyncSchedules[providerId] ?? null
+    const Glyph = providerId === 'gitlab' ? GitlabGlyph : GithubGlyph
+    const name = providerId === 'gitlab' ? 'GitLab' : 'GitHub'
+    const endpoint = provider ? formatEndpoint(provider.endpoint) || t('sources.card.noEndpoint') : ''
+    const configured = provider?.configured ?? false
+    const active = isActiveSourceSyncJob(job)
+    const failedRuns = job?.projects.filter((run) => run.status === 'failed') ?? []
+    const canSync = Boolean(provider?.readCapability.available) && !active && !isSyncing && !serverRestartPending
+    const stateTone: 'ok' | 'warn' | 'muted' = configured ? 'ok' : provider?.readCapability.available ? 'warn' : 'muted'
+    const stateLabel = configured ? t('sources.card.stateConfigured') : provider?.readCapability.available ? t('sources.card.stateReady') : t('sources.card.stateNeedsSetup')
+    const projectTerm = providerId === 'gitlab' ? t('sources.card.termProjects') : t('sources.card.termRepositories')
+    const reviewTargetTerm = providerId === 'gitlab' ? t('sources.card.reviewMRs') : t('sources.card.reviewPRs')
+    const metaText = provider
+      ? `${t('sources.card.configuredProjects', { count: provider.configuredProjectCount, term: projectTerm })} · ${provider.lastSyncAt ? t('sources.card.lastSync', { time: relativeTime(provider.lastSyncAt) }) : t('sources.card.noSyncYet')}`
+      : ''
+    const latestFailure = provider?.recentSourceWriteFailures?.[0] ?? provider?.recentSyncFailures?.[0] ?? job?.errorMessage ?? provider?.diagnostic ?? null
+    const overflowItems = [
+      ...(configured ? [{ key: 'fullRepair', label: t('sources.card.fullRepair'), icon: <Wrench size={15} />, onSelect: () => void syncSource(providerId, 'full') }] : []),
+      ...(failedRuns.length ? [{ key: 'retry', label: t('sources.card.syncFailed'), icon: <RotateCcw size={15} />, onSelect: () => void retrySourceProjects(providerId, failedRuns.map((run) => run.sourceProjectKey || run.projectPath)) }] : []),
+    ]
+
+    return (
+      <div className="settings-stack provider-settings">
+        <header className="provider-settings-header">
+          <span className="provider-settings-id">
+            <span className="provider-settings-glyph" aria-hidden="true"><Glyph size={18} /></span>
+            <small>{endpoint || name}</small>
+          </span>
+          <span className="provider-settings-actions">
+            <StatusPill tone={stateTone} label={stateLabel} />
+            {configured ? (
+              <button className="primary-button inline compact-row-action settings-action-button" type="button" disabled={!canSync} onClick={() => void syncSource(providerId, 'incremental')}>
+                <RefreshCw size={14} className={active || isSyncing ? 'spin-icon' : undefined} />
+                {isSyncing ? t('sources.card.starting') : active ? t('sources.card.syncing') : t('sources.card.syncNow')}
+              </button>
+            ) : null}
+            <ProviderOverflowMenu disabled={active || isSyncing} items={overflowItems} />
+          </span>
+        </header>
+
+        {configured && provider ? (
+          <ProviderHealthLine provider={provider} metaText={metaText} />
+        ) : (
+          <p className="provider-needs-setup">{t('sources.needsSetupHint', { provider: name })}</p>
+        )}
+
+        <SettingsGroup title={t('sources.connectionTitle')} description={providerId === 'gitlab' ? t('credentials.gitlab.description') : t('credentials.github.description')}>
+          {providerId === 'github' ? (
+            <>
+              <SettingsRow icon={Code2} label={t('credentials.github.endpoint')} description={t('credentials.github.endpointDescription')} control={<TextControl value={configDraft?.gitHub.endpoint ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateGitHubConfig({ endpoint: value }, 'immediate')} />} />
+              <SettingsRow icon={KeyRound} label={t('credentials.github.appId')} description={t('credentials.github.appIdDescription')} control={<TextControl value={configDraft?.gitHub.appId ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateGitHubConfig({ appId: emptyToNull(value) }, 'immediate')} />} />
+              <SettingsRow icon={ShieldCheck} label={t('credentials.github.authentication')} description={t('credentials.github.authenticationDescription')} control={<ValuePill>{githubAuthenticationLabel}</ValuePill>} />
+              <SettingsRow icon={CheckCircle2} label={t('credentials.github.writes')} description={t('credentials.github.writesDescription')} control={<button className="toggle-button" aria-pressed={configDraft?.gitHub.writesEnabled ?? false} disabled={!serverConfig?.writable} onClick={() => updateGitHubConfig({ writesEnabled: !(configDraft?.gitHub.writesEnabled ?? false) })}>{configDraft?.gitHub.writesEnabled ? t('common.on') : t('common.off')}</button>} />
+              <SecretSettingsRow icon={KeyRound} label={t('credentials.github.token')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).token} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('token', next)} />
+              <SecretSettingsRow icon={KeyRound} label={t('credentials.github.privateKey')} multiline field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKey} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('privateKey', next)} />
+              <SecretSettingsRow icon={KeyRound} label={t('credentials.github.privateKeyPath')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKeyPath} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('privateKeyPath', next)} />
+              <SecretSettingsRow icon={KeyRound} label={t('credentials.github.webhookSecret')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).webhookSecret} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('webhookSecret', next)} />
+            </>
+          ) : (
+            <>
+              <SettingsRow icon={CheckCircle2} label={t('credentials.gitlab.readSync')} description={t('credentials.gitlab.readSyncDescription')} control={<button className="toggle-button" aria-pressed={gitLabConfig.enabled} disabled={!serverConfig?.writable} onClick={() => updateGitLabConfig({ enabled: !gitLabConfig.enabled })}>{gitLabConfig.enabled ? t('common.on') : t('common.off')}</button>} />
+              <SettingsRow icon={GitPullRequest} label={t('credentials.gitlab.writes')} description={t('credentials.gitlab.writesDescription')} control={<button className="toggle-button" aria-pressed={gitLabConfig.writesEnabled} disabled={!serverConfig?.writable} onClick={() => updateGitLabConfig({ writesEnabled: !gitLabConfig.writesEnabled })}>{gitLabConfig.writesEnabled ? t('common.on') : t('common.off')}</button>} />
+              <SettingsRow icon={Code2} label={t('credentials.gitlab.endpoint')} description={gitLabEndpointDescription} control={<TextControl value={gitLabConfig.endpoint} disabled={!serverConfig?.writable} onChange={(value) => updateGitLabConfig({ endpoint: value }, 'immediate')} />} />
+              <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.authentication')} description={t('credentials.gitlab.authenticationDescription')} control={<ValuePill>{gitLabAuthenticationLabel}</ValuePill>} />
+              <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.writeCredentials')} description={t('credentials.gitlab.writeCredentialsDescription')} control={<ValuePill>{diagnosticsGitLabWriteLabel}</ValuePill>} />
+              <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.webhookVerification')} description={t('credentials.gitlab.webhookVerificationDescription')} control={<ValuePill>{gitLabWebhookLabel}</ValuePill>} />
+              <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.localBypass')} description={t('credentials.gitlab.localBypassDescription')} control={<button className="toggle-button" aria-pressed={gitLabConfig.allowLocalDevelopmentUnsafeWebhooks} disabled={!serverConfig?.writable} onClick={() => updateGitLabConfig({ allowLocalDevelopmentUnsafeWebhooks: !gitLabConfig.allowLocalDevelopmentUnsafeWebhooks })}>{gitLabConfig.allowLocalDevelopmentUnsafeWebhooks ? t('common.on') : t('common.off')}</button>} />
+            </>
+          )}
+        </SettingsGroup>
+
+        <SettingsGroup title={t('projects.groupTitle')} description={serverConfig?.writable ? t('common.overlay', { path: serverConfig.overlayPath }) : serverConfig?.disabledReason ?? t('common.readOnly')}>
+            <div className="repository-card-list">
+              {projectCards.some((card) => card.provider === providerId) ? (
+                projectCards.map((card, index) => (card.provider !== providerId ? null : (
+                  <ProjectRouteCard
+                    key={`${card.canonicalKey || 'empty'}-${index}`}
+                    card={card}
+                    gitLabProfile={card.provider === 'gitlab' ? gitLabProfileForCard(gitLabConfig, card) : null}
+                    sourceProject={card.provider === 'gitlab' ? sourceProjectByKey.get(card.canonicalKey.toLowerCase()) ?? null : null}
+                    disabled={!serverConfig?.writable}
+                    onProviderChange={(value) => updateProjectCard(index, { provider: value as SourceProviderId })}
+                    onProjectPathChange={(projectPath) => updateProjectCard(index, { projectPath }, 'immediate')}
+                    onWorkspacePathChange={(workspacePath) => updateProjectCard(index, { workspacePath }, 'immediate')}
+                    onGitLabProfileTokenKindChange={(tokenKind) => updateGitLabProjectProfileTokenKind(card, tokenKind)}
+                    onGitLabProfileSecretChange={(key, next) => updateGitLabProjectProfileSecret(card, key, next)}
+                    canBrowseWorkspace={Boolean(window.oratorioDesktop?.selectDirectory)}
+                    onBrowseWorkspace={() => void selectWorkspaceDirectory(card.workspacePath, (workspacePath) => updateProjectCard(index, { workspacePath }))}
+                    onRemove={() => removeProjectCard(index)}
+                  />
+                )))
+              ) : (
+                <div className="empty-settings-card">
+                  <GitPullRequest size={16} />
+                  <span>{t('projects.emptyNoProjects')}</span>
+                </div>
+              )}
+            </div>
+            {providerId === 'github' && gitHubInstallationRows.length ? (
+              <GitHubInstallationProfileList
+                rows={gitHubInstallationRows}
+                disabled={!serverConfig?.writable}
+                onChange={updateGitHubInstallationProfile}
+                onDetect={() => void detectGitHubInstallationsNow()}
+              />
+            ) : null}
+            <div className="repository-add-row provider-add-row">
+              <TextControl placeholder={providerId === 'gitlab' ? t('projects.gitlabPlaceholder') : t('projects.githubPlaceholder')} value={newProjectPath} disabled={!serverConfig?.writable} onChange={setNewProjectPath} commitOnBlur={false} />
+              <WorkspacePathControl
+                value={newWorkspacePath}
+                placeholder={t('projects.workspacePlaceholder')}
+                disabled={!serverConfig?.writable}
+                canBrowse={Boolean(window.oratorioDesktop?.selectDirectory)}
+                onChange={setNewWorkspacePath}
+                onBrowse={() => void selectWorkspaceDirectory(newWorkspacePath, setNewWorkspacePath)}
+                commitOnBlur={false}
+              />
+              <button className="secondary-button inline compact-row-action settings-action-button" disabled={addProjectDisabled} onClick={() => addProjectCard(providerId)}>
+                <Plus size={14} />
+                {t('projects.add')}
+              </button>
+            </div>
+            {workspaceError ? <SettingsNotice tone="error">{workspaceError}</SettingsNotice> : null}
+        </SettingsGroup>
+
+        {provider ? (
+          <SettingsGroup title={t('sources.syncGroupTitle')} description={t('sources.syncGroupDescription')}>
+            <SourceSyncSchedulePanel
+              provider={provider}
+              schedule={schedule}
+              saving={scheduleSavingProvider === providerId}
+              onChange={(request) => void updateProviderSchedule(providerId, request)}
+            />
+            <SourceSyncPanel
+              provider={providerId}
+              projectTerm={projectTerm}
+              reviewTargetTerm={reviewTargetTerm}
+              job={job}
+              pendingRestart={serverRestartPending}
+            />
+          </SettingsGroup>
+        ) : null}
+
+        {latestFailure ? <SettingsNotice tone="error">{latestFailure}</SettingsNotice> : null}
+      </div>
+    )
   }
 
   return (
@@ -991,6 +1139,7 @@ export function SettingsView({
                     description={t('onboarding:replay.description')}
                     control={
                       <button type="button" className="secondary-button inline compact-row-action settings-action-button" onClick={onReplayOnboarding}>
+                        <RotateCcw size={14} />
                         {t('onboarding:replay.button')}
                       </button>
                     }
@@ -1000,137 +1149,24 @@ export function SettingsView({
             </div>
           ) : null}
 
-          {activeSection === 'sources' ? (
-            <div className="settings-stack">
-              <SettingsGroup title={t('sources.groupTitle')} description={providerCountCopy}>
-                <div className="source-provider-card-list">
-                  {providerCards.length ? providerCards.map((provider) => (
-                    <SourceProviderCard
-                      key={provider.provider}
-                      provider={provider}
-                      job={sourceSyncJobs[provider.provider] ?? null}
-                      schedule={sourceSyncSchedules[provider.provider] ?? null}
-                      isStarting={isSyncing}
-                      isSavingSchedule={scheduleSavingProvider === provider.provider}
-                      pendingRestart={serverRestartPending}
-                      onSync={() => void syncSource(provider.provider, 'incremental')}
-                      onFullRepair={() => void syncSource(provider.provider, 'full')}
-                      onRetryFailed={(projects) => void retrySourceProjects(provider.provider, projects)}
-                      onScheduleChange={(request) => void updateProviderSchedule(provider.provider, request)}
-                      onConfigure={goToCredentials}
-                      onRouteProjects={goToProjects}
-                    />
-                  )) : (
-                    <div className="empty-settings-card">
-                      <GitPullRequest size={16} />
-                      <span>{t('sources.noProviders')}</span>
-                    </div>
-                  )}
-                </div>
-                {sourceWriteFailureSummary ? <SettingsNotice tone="error">{sourceWriteFailureSummary}</SettingsNotice> : null}
-              </SettingsGroup>
-            </div>
-          ) : null}
+          {activeSection === 'github' ? renderProviderSettings('github') : null}
 
-          {activeSection === 'projects' ? (
-            <div className="settings-stack">
-              <SettingsGroup title={t('projects.groupTitle')} description={serverConfig?.writable ? t('common.overlay', { path: serverConfig.overlayPath }) : serverConfig?.disabledReason ?? t('common.readOnly')}>
-                <SettingsRow icon={GitPullRequest} label={t('projects.sourceProjects')} description={t('projects.sourceProjectsDescription')} control={<StatusPill tone={routeStatusTone} label={routeStatusLabel} />} />
-                <div className="repository-card-list">
-                  {projectCards.length ? projectCards.map((card, index) => (
-                    <ProjectRouteCard
-                      key={`${card.canonicalKey || 'empty'}-${index}`}
-                      card={card}
-                      gitLabProfile={card.provider === 'gitlab' ? gitLabProfileForCard(gitLabConfig, card) : null}
-                      sourceProject={card.provider === 'gitlab' ? sourceProjectByKey.get(card.canonicalKey.toLowerCase()) ?? null : null}
-                      disabled={!serverConfig?.writable}
-                      onProviderChange={(provider) => updateProjectCard(index, { provider: provider as SourceProviderId })}
-                      onProjectPathChange={(projectPath) => updateProjectCard(index, { projectPath }, 'immediate')}
-                      onWorkspacePathChange={(workspacePath) => updateProjectCard(index, { workspacePath }, 'immediate')}
-                      onGitLabProfileTokenKindChange={(tokenKind) => updateGitLabProjectProfileTokenKind(card, tokenKind)}
-                      onGitLabProfileSecretChange={(key, next) => updateGitLabProjectProfileSecret(card, key, next)}
-                      canBrowseWorkspace={Boolean(window.oratorioDesktop?.selectDirectory)}
-                      onBrowseWorkspace={() => void selectWorkspaceDirectory(card.workspacePath, (workspacePath) => updateProjectCard(index, { workspacePath }))}
-                      onRemove={() => removeProjectCard(index)}
-                    />
-                  )) : (
-                    <div className="empty-settings-card">
-                      <GitPullRequest size={16} />
-                      <span>{sourceProjectEmptyLabel}</span>
-                    </div>
-                  )}
-                </div>
-                {gitHubInstallationRows.length ? (
-                  <GitHubInstallationProfileList
-                    rows={gitHubInstallationRows}
-                    disabled={!serverConfig?.writable}
-                    onChange={updateGitHubInstallationProfile}
-                    onDetect={() => void detectGitHubInstallationsNow()}
-                  />
-                ) : null}
-                <div className="repository-add-row">
-                  <SelectControl label={t('projects.sourceProvider')} value={newProjectProvider} disabled={!serverConfig?.writable} options={sourceProviderOptions} onChange={(value) => setNewProjectProvider(value as SourceProviderId)} />
-                  <TextControl placeholder={sourceProjectPlaceholder} value={newProjectPath} disabled={!serverConfig?.writable} onChange={setNewProjectPath} commitOnBlur={false} />
-                  <WorkspacePathControl
-                    value={newWorkspacePath}
-                    placeholder={t('projects.workspacePlaceholder')}
-                    disabled={!serverConfig?.writable}
-                    canBrowse={Boolean(window.oratorioDesktop?.selectDirectory)}
-                    onChange={setNewWorkspacePath}
-                    onBrowse={() => void selectWorkspaceDirectory(newWorkspacePath, setNewWorkspacePath)}
-                    commitOnBlur={false}
-                  />
-                  <button className="secondary-button inline compact-row-action settings-action-button" disabled={addProjectDisabled} onClick={addProjectCard}>
-                    <Plus size={14} />
-                    {t('projects.add')}
-                  </button>
-                </div>
-                {workspaceError ? <SettingsNotice tone="error">{workspaceError}</SettingsNotice> : null}
-              </SettingsGroup>
-            </div>
-          ) : null}
-
-          {activeSection === 'credentials' ? (
-            <div className="settings-stack">
-              <SettingsGroup title={t('credentials.github.title')} description={t('credentials.github.description')}>
-                <SettingsRow icon={Code2} label={t('credentials.github.endpoint')} description={t('credentials.github.endpointDescription')} control={<TextControl value={configDraft?.gitHub.endpoint ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateGitHubConfig({ endpoint: value }, 'immediate')} />} />
-                <SettingsRow icon={KeyRound} label={t('credentials.github.appId')} description={t('credentials.github.appIdDescription')} control={<TextControl value={configDraft?.gitHub.appId ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateGitHubConfig({ appId: emptyToNull(value) }, 'immediate')} />} />
-                <SettingsRow icon={ShieldCheck} label={t('credentials.github.authentication')} description={t('credentials.github.authenticationDescription')} control={<ValuePill>{githubAuthenticationLabel}</ValuePill>} />
-                <SettingsRow icon={CheckCircle2} label={t('credentials.github.writes')} description={t('credentials.github.writesDescription')} control={<button className="toggle-button" aria-pressed={configDraft?.gitHub.writesEnabled ?? false} disabled={!serverConfig?.writable} onClick={() => updateGitHubConfig({ writesEnabled: !(configDraft?.gitHub.writesEnabled ?? false) })}>{configDraft?.gitHub.writesEnabled ? t('common.on') : t('common.off')}</button>} />
-                <SecretSettingsRow icon={KeyRound} label={t('credentials.github.token')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).token} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('token', next)} />
-                <SecretSettingsRow icon={KeyRound} label={t('credentials.github.privateKey')} multiline field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKey} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('privateKey', next)} />
-                <SecretSettingsRow icon={KeyRound} label={t('credentials.github.privateKeyPath')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKeyPath} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('privateKeyPath', next)} />
-                <SecretSettingsRow icon={KeyRound} label={t('credentials.github.webhookSecret')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).webhookSecret} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('webhookSecret', next)} />
-              </SettingsGroup>
-              <SettingsGroup title={t('credentials.gitlab.title')} description={t('credentials.gitlab.description')}>
-                <SettingsRow icon={CheckCircle2} label={t('credentials.gitlab.readSync')} description={t('credentials.gitlab.readSyncDescription')} control={<button className="toggle-button" aria-pressed={gitLabConfig.enabled} disabled={!serverConfig?.writable} onClick={() => updateGitLabConfig({ enabled: !gitLabConfig.enabled })}>{gitLabConfig.enabled ? t('common.on') : t('common.off')}</button>} />
-                <SettingsRow icon={GitPullRequest} label={t('credentials.gitlab.writes')} description={t('credentials.gitlab.writesDescription')} control={<button className="toggle-button" aria-pressed={gitLabConfig.writesEnabled} disabled={!serverConfig?.writable} onClick={() => updateGitLabConfig({ writesEnabled: !gitLabConfig.writesEnabled })}>{gitLabConfig.writesEnabled ? t('common.on') : t('common.off')}</button>} />
-                <SettingsRow icon={Code2} label={t('credentials.gitlab.endpoint')} description={gitLabEndpointDescription} control={<TextControl value={gitLabConfig.endpoint} disabled={!serverConfig?.writable} onChange={(value) => updateGitLabConfig({ endpoint: value }, 'immediate')} />} />
-                <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.authentication')} description={t('credentials.gitlab.authenticationDescription')} control={<ValuePill>{gitLabAuthenticationLabel}</ValuePill>} />
-                <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.writeCredentials')} description={t('credentials.gitlab.writeCredentialsDescription')} control={<ValuePill>{diagnosticsGitLabWriteLabel}</ValuePill>} />
-                <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.webhookVerification')} description={t('credentials.gitlab.webhookVerificationDescription')} control={<ValuePill>{gitLabWebhookLabel}</ValuePill>} />
-                <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.localBypass')} description={t('credentials.gitlab.localBypassDescription')} control={<button className="toggle-button" aria-pressed={gitLabConfig.allowLocalDevelopmentUnsafeWebhooks} disabled={!serverConfig?.writable} onClick={() => updateGitLabConfig({ allowLocalDevelopmentUnsafeWebhooks: !gitLabConfig.allowLocalDevelopmentUnsafeWebhooks })}>{gitLabConfig.allowLocalDevelopmentUnsafeWebhooks ? t('common.on') : t('common.off')}</button>} />
-              </SettingsGroup>
-            </div>
-          ) : null}
+          {activeSection === 'gitlab' ? renderProviderSettings('gitlab') : null}
 
           {activeSection === 'agents' ? (
             <div className="settings-stack">
-              <SettingsGroup title={t('agents.bridge.title')} description={dotcraftStatus.message ?? t('agents.bridge.defaultMessage')} headerAction={bridgeActions}>
-                <SettingsRow
-                  icon={Code2}
-                  label={t('agents.bridge.health')}
-                  description={t('agents.bridge.healthDescription')}
-                  control={<StatusPill tone={dotcraftStatus.connected ? 'ok' : dotcraftStatus.configured ? 'warn' : 'muted'} label={healthLabel(dotcraftStatus.health)} />}
-                />
-                <SettingsRow icon={Code2} label={t('agents.bridge.endpoint')} description={dotcraftEndpoint} control={<ValuePill>{dotcraftEndpointSource}</ValuePill>} />
-              </SettingsGroup>
-              <SettingsGroup title={t('agents.connection.title')} description={serverConfig?.writable ? t('agents.connection.restartDescription') : serverConfig?.disabledReason ?? t('common.readOnly')}>
+              <SettingsGroup title={t('agents.connection.title')} description={serverConfig?.writable ? t('agents.connection.restartDescription') : serverConfig?.disabledReason ?? t('common.readOnly')} headerAction={bridgeActions}>
                 <SettingsRow icon={Code2} label={t('agents.connection.appServerUrl')} description={t('agents.connection.appServerUrlDescription')} control={<TextControl value={configDraft?.dotCraft.appServerUrl ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateDotCraftConfig({ appServerUrl: value }, 'immediate')} />} />
                 <SettingsRow icon={GitPullRequest} label={t('agents.connection.hubDiscovery')} description={t('agents.connection.hubDiscoveryDescription')} control={<button className="toggle-button" aria-pressed={configDraft?.dotCraft.hubDiscoveryEnabled ?? false} disabled={!serverConfig?.writable} onClick={() => updateDotCraftConfig({ hubDiscoveryEnabled: !(configDraft?.dotCraft.hubDiscoveryEnabled ?? false) })}>{configDraft?.dotCraft.hubDiscoveryEnabled ? t('common.on') : t('common.off')}</button>} />
                 <SettingsRow icon={Code2} label={t('agents.connection.hubLockPath')} description={t('agents.connection.hubLockPathDescription')} control={<TextControl value={configDraft?.dotCraft.hubLockPath ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateDotCraftConfig({ hubLockPath: value }, 'immediate')} />} />
                 <SettingsRow icon={ShieldCheck} label={t('agents.connection.approvalPolicy')} description={t('agents.connection.approvalPolicyDescription')} control={<SelectControl label={t('agents.connection.approvalPolicy')} value={configDraft?.dotCraft.approvalPolicy ?? 'interrupt'} disabled={!serverConfig?.writable} options={approvalPolicyOptions()} onChange={(value) => updateDotCraftConfig({ approvalPolicy: value })} />} />
                 <SettingsRow icon={Activity} label={t('agents.connection.runTimeout')} description={t('agents.connection.runTimeoutDescription')} control={<DurationControl label={t('worktree.stepperLabels.runTimeout')} value={configDraft?.dotCraft.runTimeoutSeconds ?? DEFAULT_RUN_TIMEOUT_SECONDS} disabled={!serverConfig?.writable} min={30} max={7200} units={secondsDurationUnits()} onChange={(value) => updateDotCraftConfig({ runTimeoutSeconds: value })} />} />
+                <SettingsRow
+                  icon={Code2}
+                  label={t('agents.bridge.health')}
+                  description={dotcraftStatus.message ?? t('agents.bridge.healthDescription')}
+                  control={<StatusPill tone={dotcraftStatus.connected ? 'ok' : dotcraftStatus.configured ? 'warn' : 'muted'} label={healthLabel(dotcraftStatus.health)} />}
+                />
               </SettingsGroup>
             </div>
           ) : null}
@@ -1226,12 +1262,15 @@ export function SettingsView({
   )
 }
 
-function SettingsGroup({ title, description, headerAction, children }: { title: string; description?: string; headerAction?: ReactNode; children: ReactNode }) {
+function SettingsGroup({ title, description, icon, headerAction, children }: { title: string; description?: string; icon?: ReactNode; headerAction?: ReactNode; children: ReactNode }) {
   return (
     <section className="settings-group">
       <header className="settings-group-header">
         <div>
-          <strong>{title}</strong>
+          <strong className="settings-group-title">
+            {icon ? <span className="settings-group-title-icon" aria-hidden="true">{icon}</span> : null}
+            {title}
+          </strong>
           {description ? <p>{description}</p> : null}
         </div>
         {headerAction}
@@ -1266,114 +1305,77 @@ type SourceProviderCardModel = SourceProviderStatus & {
   recentSourceWriteFailures?: string[]
 }
 
-function SourceProviderCard({
-  provider,
-  job,
-  schedule,
-  isStarting,
-  isSavingSchedule,
-  pendingRestart,
-  onSync,
-  onFullRepair,
-  onRetryFailed,
-  onScheduleChange,
-  onConfigure,
-  onRouteProjects,
-}: {
-  provider: SourceProviderCardModel
-  job: SourceSyncJob | null
-  schedule: SourceSyncSchedule | null
-  isStarting: boolean
-  isSavingSchedule: boolean
-  pendingRestart: boolean
-  onSync: () => void
-  onFullRepair: () => void
-  onRetryFailed: (projects: string[]) => void
-  onScheduleChange: (request: SourceSyncScheduleUpdateRequest) => void
-  onConfigure: () => void
-  onRouteProjects: () => void
-}) {
+function ProviderHealthLine({ provider, metaText }: { provider: SourceProviderCardModel; metaText: string }) {
   const { t } = useTranslation('settings')
-  const active = isActiveSourceSyncJob(job)
-  const failedRuns = job?.projects.filter((run) => run.status === 'failed') ?? []
-  const canSync = provider.readCapability.available && !active && !isStarting && !pendingRestart
-  const stateTone = provider.configured ? 'ok' : provider.readCapability.available ? 'warn' : 'muted'
-  const stateLabel = provider.configured ? t('sources.card.stateConfigured') : provider.readCapability.available ? t('sources.card.stateReady') : t('sources.card.stateNeedsSetup')
-  const endpoint = formatEndpoint(provider.endpoint) || t('sources.card.noEndpoint')
-  const latestFailure = provider.recentSourceWriteFailures?.[0] ?? provider.recentSyncFailures?.[0] ?? job?.errorMessage ?? provider.diagnostic ?? null
-  const providerLabel = provider.provider === 'gitlab' ? 'GitLab' : provider.provider === 'github' ? 'GitHub' : provider.displayName
-  const projectTerm = provider.provider === 'gitlab' ? t('sources.card.termProjects') : t('sources.card.termRepositories')
-  const reviewTargetTerm = provider.provider === 'gitlab' ? t('sources.card.reviewMRs') : t('sources.card.reviewPRs')
-  const writeLabel = provider.writeCapability.available
-    ? t('sources.card.writesReady')
-    : provider.writeCapability.state === 'disabled'
-      ? t('sources.card.writesOff')
-      : provider.writeCapability.reason ?? t('sources.card.writesUnavailable')
-
+  const dotTone = (capability: SourceProviderStatus['readCapability']) =>
+    capability.available ? 'ok' : capability.state === 'disabled' || capability.state === 'unconfigured' ? 'muted' : 'warn'
+  const items = [
+    { label: t('sources.card.read'), capability: provider.readCapability },
+    { label: t('sources.card.write'), capability: provider.writeCapability },
+    { label: t('sources.card.webhook'), capability: provider.webhookCapability },
+  ]
   return (
-    <section className="source-provider-card">
-      <header className="source-provider-card-header">
-        <span className="source-provider-title">
-          <GitPullRequest size={16} />
-          <span>
-            <strong>{providerLabel}</strong>
-            <small>{endpoint}</small>
-          </span>
+    <div className="provider-health" role="list" aria-label={t('sources.card.capabilities', { provider: providerLabel(provider.provider) })}>
+      {items.map((item) => (
+        <span
+          key={item.label}
+          className="provider-health-item"
+          role="listitem"
+          title={item.capability.available ? undefined : item.capability.reason ?? undefined}
+        >
+          <span className={`provider-health-dot ${dotTone(item.capability)}`} aria-hidden="true" />
+          <strong>{item.label}</strong>
         </span>
-        <StatusPill tone={stateTone} label={stateLabel} />
-      </header>
-      <div className="source-provider-capabilities" role="list" aria-label={t('sources.card.capabilities', { provider: providerLabel })}>
-        <CapabilityPill label={t('sources.card.read')} capability={provider.readCapability} />
-        <CapabilityPill label={t('sources.card.write')} capability={provider.writeCapability} fallback={writeLabel} />
-        <CapabilityPill label={t('sources.card.webhook')} capability={provider.webhookCapability} />
-      </div>
-      <div className="source-provider-meta">
-        <span>{t('sources.card.configuredProjects', { count: provider.configuredProjectCount, term: projectTerm })}</span>
-        <span>{provider.lastSyncAt ? t('sources.card.lastSync', { time: relativeTime(provider.lastSyncAt) }) : t('sources.card.noSyncYet')}</span>
-        <span>{t('sources.card.headShaReReview', { term: reviewTargetTerm })}</span>
-      </div>
-      <SourceSyncSchedulePanel
-        provider={provider}
-        schedule={schedule}
-        saving={isSavingSchedule}
-        onChange={onScheduleChange}
-      />
-      <SourceSyncPanel
-        provider={provider.provider}
-        projectTerm={projectTerm}
-        reviewTargetTerm={reviewTargetTerm}
-        job={job}
-        pendingRestart={pendingRestart}
-      />
-      {latestFailure ? <SettingsNotice tone="error">{latestFailure}</SettingsNotice> : null}
-      <footer className="source-provider-actions">
-        <button className="secondary-button inline compact-row-action settings-action-button" type="button" onClick={onConfigure}>
-          {t('sources.card.configure')}
-        </button>
-        <button className="secondary-button inline compact-row-action settings-action-button" type="button" onClick={onRouteProjects}>
-          {t('sources.card.routeProjects')}
-        </button>
-        {failedRuns.length > 0 ? (
-          <button className="secondary-button inline compact-row-action settings-action-button" type="button" disabled={active || isStarting} onClick={() => onRetryFailed(failedRuns.map((run) => run.sourceProjectKey || run.projectPath))}>
-            {t('sources.card.syncFailed')}
-          </button>
-        ) : null}
-        <button className="secondary-button inline compact-row-action settings-action-button" type="button" onClick={onFullRepair} disabled={active || isStarting || !provider.configured}>
-          {t('sources.card.fullRepair')}
-        </button>
-        <button className="primary-button inline compact-row-action settings-action-button" type="button" onClick={onSync} disabled={!canSync}>
-          {isStarting ? t('sources.card.starting') : active ? t('sources.card.syncing') : t('sources.card.syncNow')}
-        </button>
-      </footer>
-    </section>
+      ))}
+      {metaText ? <span className="provider-health-meta">{metaText}</span> : null}
+    </div>
   )
 }
 
-function CapabilityPill({ label, capability, fallback }: { label: string; capability: SourceProviderStatus['readCapability']; fallback?: string }) {
+function ProviderOverflowMenu({ disabled, items }: { disabled?: boolean; items: Array<{ key: string; label: string; icon: ReactNode; onSelect: () => void }> }) {
   const { t } = useTranslation('settings')
-  const tone = capability.available ? 'ok' : capability.state === 'disabled' || capability.state === 'unconfigured' ? 'muted' : 'warn'
-  const text = capability.available ? t('sources.card.capabilityReady', { label }) : fallback ?? capability.reason ?? t('sources.card.capabilityUnavailable', { label })
-  return <StatusPill tone={tone} label={text} />
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!wrapRef.current?.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    window.addEventListener('pointerdown', handlePointerDown)
+    return () => window.removeEventListener('pointerdown', handlePointerDown)
+  }, [open])
+  if (items.length === 0) {
+    return null
+  }
+  return (
+    <div className="provider-overflow" ref={wrapRef}>
+      <button
+        type="button"
+        className="icon-button provider-overflow-trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={t('sources.card.moreActions')}
+        disabled={disabled}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <MoreHorizontal size={16} />
+      </button>
+      {open ? (
+        <div className="provider-overflow-menu" role="menu">
+          {items.map((item) => (
+            <button key={item.key} type="button" role="menuitem" onClick={() => { setOpen(false); item.onSelect() }}>
+              {item.icon}
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function SourceSyncSchedulePanel({
@@ -1605,9 +1607,14 @@ function ProjectRouteCard({
   return (
     <div className="repository-card">
       <header className="repository-card-header">
-        <span>
-          <strong>{card.projectPath || t('projects.card.newProject', { provider: providerName })}</strong>
-          <small>{card.canonicalKey || t('projects.card.canonicalHint')}</small>
+        <span className="repository-card-heading">
+          <span className="repository-card-provider-icon" aria-hidden="true">
+            {card.provider === 'gitlab' ? <GitlabGlyph size={15} /> : <GithubGlyph size={15} />}
+          </span>
+          <span className="repository-card-heading-copy">
+            <strong>{card.projectPath || t('projects.card.newProject', { provider: providerName })}</strong>
+            <small>{card.canonicalKey || t('projects.card.canonicalHint')}</small>
+          </span>
         </span>
         <span className="settings-actions">
           {gitLabStatus ? <StatusPill tone={gitLabStatus.tone} label={gitLabStatus.label} /> : null}
@@ -1964,6 +1971,7 @@ function RepositoryAllowlistCard({
           <small>{description}</small>
         </span>
         <button className="secondary-button inline compact-row-action settings-action-button" type="button" disabled={manageDisabled} onClick={onManage}>
+          <ListChecks size={14} />
           {t('review.allowlistCard.manage')}
         </button>
       </header>
@@ -2092,6 +2100,7 @@ function RepositoryAllowlistModal({
             {t('review.modal.cancel')}
           </button>
           <button className="primary-button inline compact-row-action settings-action-button" type="submit">
+            <Check size={14} />
             {t('review.modal.apply', { count: draftSelection.length })}
           </button>
         </footer>
@@ -2623,9 +2632,8 @@ function CleanupControl({
 }
 
 function activeSectionCopy(section: SettingsSection) {
-  if (section === 'sources') return i18n.t('settings:sectionCopy.sources')
-  if (section === 'projects') return i18n.t('settings:sectionCopy.projects')
-  if (section === 'credentials') return i18n.t('settings:sectionCopy.credentials')
+  if (section === 'github') return i18n.t('settings:sectionCopy.github')
+  if (section === 'gitlab') return i18n.t('settings:sectionCopy.gitlab')
   if (section === 'agents') return i18n.t('settings:sectionCopy.agents')
   if (section === 'worktree') return i18n.t('settings:sectionCopy.worktree')
   if (section === 'review') return i18n.t('settings:sectionCopy.review')

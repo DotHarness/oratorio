@@ -45,7 +45,7 @@ RUN apt-get update \
 WORKDIR /opt/oratorio
 COPY --from=build /out/ ./
 COPY oratorio/deploy/docker/oratorio-entrypoint.sh /usr/local/bin/oratorio-entrypoint.sh
-RUN chmod +x /usr/local/bin/oratorio-entrypoint.sh /opt/oratorio/Oratorio.Server
+RUN chmod +x /usr/local/bin/oratorio-entrypoint.sh /opt/oratorio/oratorio-server
 
 ENV ASPNETCORE_URLS=http://0.0.0.0:5087 \
     ORATORIO_STATE_ROOT=/data/oratorio \

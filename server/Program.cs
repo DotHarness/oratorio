@@ -14,6 +14,7 @@ using Oratorio.Server.Services;
 using Oratorio.Server.Sources;
 
 var builder = WebApplication.CreateBuilder(args);
+ConfigureDefaultLogging(builder);
 builder.Configuration.AddJsonFile(ResolveServerConfigurationOverlayPath(builder), optional: true, reloadOnChange: false);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -208,6 +209,18 @@ static string NormalizeDisplayAddress(string address)
 
 static string AppendPath(string baseAddress, string path) =>
     $"{baseAddress.TrimEnd('/')}/{path.TrimStart('/')}";
+
+static void ConfigureDefaultLogging(WebApplicationBuilder builder)
+{
+    // Defaults live in code (no appsettings.json) so the published server is a single
+    // self-contained file, matching DotCraft. These keep the headless backend quiet by
+    // default; runtime Oratorio:* options come from the configuration overlay.
+    builder.Logging.SetMinimumLevel(LogLevel.Warning);
+    builder.Logging.AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Information);
+    builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
+    builder.Logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning);
+    builder.Logging.AddFilter("Oratorio.Server", LogLevel.Information);
+}
 
 static string ResolveServerConfigurationOverlayPath(WebApplicationBuilder builder)
 {

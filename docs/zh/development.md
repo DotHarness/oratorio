@@ -77,8 +77,8 @@ release 脚本会发布 ASP.NET Core server 为 Windows x64 self-contained singl
 build/release/
   Oratorio*.exe
   server/
-    Oratorio.Server.exe
+    oratorio-server.exe
     appsettings.json
 ```
 
-运行 packaged desktop executable 会启动本地 Oratorio Desktop。运行 `build/release/server/Oratorio.Server.exe` 只启动 headless backend；console 会打印 `API`、`Health` 和 headless `Mode`。
+运行 packaged desktop executable 会启动本地 Oratorio Desktop。运行 `build/release/server/oratorio-server.exe` 只启动 headless backend；console 会打印 `API`、`Health` 和 headless `Mode`。

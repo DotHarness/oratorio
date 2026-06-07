@@ -26,7 +26,7 @@ cd desktop; npx vitest run path/to/file.test.tsx          # Single renderer test
 .\build.bat                                               # Release: publishes server as Windows x64 self-contained single-file, copies into desktop/resources/server, builds Electron installer
 ```
 
-Release outputs land in `build/release/` (`Oratorio*.exe` installer plus `server/Oratorio.Server.exe`). `build.bat` deletes `build/` and `desktop/resources/server/` at the start — do not leave manual artifacts there.
+Release outputs land in `build/release/` (`Oratorio*.exe` installer plus `server/oratorio-server.exe`). `build.bat` deletes `build/` and `desktop/resources/server/` at the start — do not leave manual artifacts there.
 
 ## Backend Architecture
 
@@ -52,7 +52,7 @@ Secrets in the overlay are encrypted via `ConfigurationSecretProtector`. All sec
 
 `desktop/electron.vite.config.ts` defines three build targets:
 
-- `src/main/index.ts` — Electron main process. Manages window, tray, theme/backdrop, protocol handler for `oratorio://`, and spawns the local `OratorioServerManager` (which runs either the dev `dotnet` build or the packaged `resources/server/Oratorio.Server.exe`).
+- `src/main/index.ts` — Electron main process. Manages window, tray, theme/backdrop, protocol handler for `oratorio://`, and spawns the local `OratorioServerManager` (which runs either the dev `dotnet` build or the packaged `resources/server/oratorio-server.exe`).
 - `src/preload/` — preload bridge.
 - `src/renderer/src/` — React app. Entry is `main.tsx` → `App.tsx` → `shell/AppShell.tsx` (HashRouter). Views (`BoardView`, `TaskDrawer`, `TaskDetailPage`, `SettingsView`, `QueueView`, `ItemDetailView`, `LocalTaskFormDialog`) sit under `views/`. Shared primitives are in `components/primitives/` and feature components in `components/{board,drawer,feedback,filters,review}/`. `hooks/useBoardStream.ts` subscribes to the backend WebSocket; `lib/sortOrder.ts` applies streamed board events into local state.
 

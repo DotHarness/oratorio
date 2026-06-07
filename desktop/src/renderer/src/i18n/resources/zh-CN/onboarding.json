@@ -28,11 +28,11 @@
     },
     "connectProject": {
       "title": "连接你的项目",
-      "body": "打开 设置 → Projects，把 Oratorio 指向 DotCraft 配置的同一个文件夹。一次连接，一次保存即可。"
+      "body": "打开 设置 → GitHub 或 GitLab，把 Oratorio 指向 DotCraft 配置的同一个文件夹。一次连接，一次保存即可。"
     },
     "credentials": {
       "title": "接入真实工作（可选）",
-      "body": "在 设置 → Credentials 接入 GitHub 或 GitLab，Oratorio 会把 issue、PR、MR 镜像成卡片。只想先试试看板的话，可以跳过这步、用本地任务体验。"
+      "body": "在 设置 → GitHub 或 GitLab 接入对应来源，Oratorio 会把 issue、PR、MR 镜像成卡片。只想先试试看板的话，可以跳过这步、用本地任务体验。"
     },
     "newTask": {
       "title": "写下第一个任务",

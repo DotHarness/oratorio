@@ -185,7 +185,7 @@ describe('SettingsView', () => {
       'gitlab:gitlab.internal.test/team/subsystem/example-project': 'C:\\example\\workspaces\\gitlab-example-project',
     }
 
-    renderSettings('/settings/projects')
+    renderSettings('/settings/github')
 
     const githubInput = await screen.findByDisplayValue('example-org/unity-example')
     const githubCard = githubInput.closest('.repository-card') as HTMLElement
@@ -195,7 +195,10 @@ describe('SettingsView', () => {
     expect(githubHeader.textContent).not.toContain('GitHub · github.com')
     expect(githubHeader.textContent).not.toContain('C:\\example\\workspaces\\unity-example')
 
-    const gitlabInput = screen.getByDisplayValue('team/subsystem/example-project')
+    cleanup()
+    renderSettings('/settings/gitlab')
+
+    const gitlabInput = await screen.findByDisplayValue('team/subsystem/example-project')
     const gitlabCard = gitlabInput.closest('.repository-card') as HTMLElement
     const gitlabHeader = gitlabCard.querySelector('.repository-card-header') as HTMLElement
     expect(within(gitlabHeader).getByText('gitlab:gitlab.internal.test/team/subsystem/example-project')).toBeInTheDocument()
@@ -250,7 +253,7 @@ describe('SettingsView', () => {
   it('does not expose the legacy global GitHub Installation ID field', async () => {
     renderSettings('/settings/credentials')
 
-    expect(await screen.findByText('GitHub credentials')).toBeInTheDocument()
+    expect(await screen.findByText('GitHub')).toBeInTheDocument()
     expect(screen.queryByText('Installation ID')).not.toBeInTheDocument()
   })
 
@@ -306,7 +309,7 @@ describe('SettingsView', () => {
         return jsonResponse({}, { status: 404 })
       }),
     )
-    renderSettings('/settings/projects', { onServerRestartRequired })
+    renderSettings('/settings/gitlab', { onServerRestartRequired })
 
     const projectInput = await screen.findByDisplayValue('group/subgroup/project')
     const projectCard = projectInput.closest('.repository-card') as HTMLElement
@@ -359,22 +362,23 @@ describe('SettingsView', () => {
   })
 
   it('renders GitHub and GitLab source provider cards with redacted operational status', async () => {
-    renderSettings('/settings/sources')
+    renderSettings('/settings/github')
 
-    expect(await screen.findByText('Source providers')).toBeInTheDocument()
-    expect(screen.getByText('GitHub')).toBeInTheDocument()
-    expect(screen.getByText('GitLab')).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'GitHub sync progress' })).toBeInTheDocument()
+    const githubHealth = document.querySelector('.provider-health') as HTMLElement
+    expect(githubHealth).toBeTruthy()
+    expect(within(githubHealth).getByText('Write')).toBeInTheDocument()
+
+    cleanup()
+    renderSettings('/settings/gitlab')
+
+    expect(await screen.findByRole('region', { name: 'GitLab sync progress' })).toBeInTheDocument()
     expect(screen.getByText('https://gitlab.example.test')).toBeInTheDocument()
-    expect(screen.getByText('1 configured repositories')).toBeInTheDocument()
-    expect(screen.getByText('1 configured projects')).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'GitHub sync progress' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'GitLab sync progress' })).toBeInTheDocument()
-    expect(screen.getAllByText('Write ready')).toHaveLength(2)
   })
 
   it('renders scheduled sync controls with the five-minute default and saves enablement', async () => {
     const updateSourceSyncSchedule = vi.fn(async () => undefined)
-    renderSettings('/settings/sources', {
+    renderSettings('/settings/github', {
       updateSourceSyncSchedule,
       sourceSyncSchedules: {
         github: {
@@ -395,13 +399,13 @@ describe('SettingsView', () => {
       },
     })
 
-    const gitHubCard = (await screen.findByText('GitHub')).closest('.source-provider-card') as HTMLElement
+    const syncGroup = (await screen.findByText('Sync & schedule')).closest('.settings-group') as HTMLElement
 
-    expect(within(gitHubCard).getByText('Scheduled sync')).toBeInTheDocument()
-    expect(within(gitHubCard).getByText('Off · interval 5 minutes')).toBeInTheDocument()
-    expect(within(gitHubCard).getByText('Previous background pull failed.')).toBeInTheDocument()
+    expect(within(syncGroup).getByText('Scheduled sync')).toBeInTheDocument()
+    expect(within(syncGroup).getByText('Off · interval 5 minutes')).toBeInTheDocument()
+    expect(within(syncGroup).getByText('Previous background pull failed.')).toBeInTheDocument()
 
-    fireEvent.click(within(gitHubCard).getByRole('button', { name: 'Off' }))
+    fireEvent.click(within(syncGroup).getByRole('button', { name: 'Off' }))
 
     await waitFor(() => expect(updateSourceSyncSchedule).toHaveBeenCalledWith('github', {
       enabled: true,
@@ -412,7 +416,7 @@ describe('SettingsView', () => {
   it('saves scheduled sync interval presets without requiring a server restart', async () => {
     const updateSourceSyncSchedule = vi.fn(async () => undefined)
     const onServerRestartRequired = vi.fn()
-    renderSettings('/settings/sources', {
+    renderSettings('/settings/github', {
       updateSourceSyncSchedule,
       onServerRestartRequired,
       sourceSyncSchedules: {
@@ -434,8 +438,8 @@ describe('SettingsView', () => {
       },
     })
 
-    const gitHubCard = (await screen.findByText('GitHub')).closest('.source-provider-card') as HTMLElement
-    fireEvent.click(within(gitHubCard).getByRole('button', { name: 'Scheduled sync interval' }))
+    const syncGroup = (await screen.findByText('Sync & schedule')).closest('.settings-group') as HTMLElement
+    fireEvent.click(within(syncGroup).getByRole('button', { name: 'Scheduled sync interval' }))
     fireEvent.click(screen.getByRole('option', { name: '1 min' }))
 
     await waitFor(() => expect(updateSourceSyncSchedule).toHaveBeenCalledWith('github', {
@@ -446,7 +450,7 @@ describe('SettingsView', () => {
   })
 
   it('disables scheduled sync when provider read capability is unavailable', async () => {
-    renderSettings('/settings/sources', {
+    renderSettings('/settings/github', {
       sourceProviders: [{
         provider: 'github',
         displayName: 'GitHub',
@@ -492,20 +496,18 @@ describe('SettingsView', () => {
       },
     })
 
-    const gitHubCard = (await screen.findByText('GitHub')).closest('.source-provider-card') as HTMLElement
+    const syncGroup = (await screen.findByText('Sync & schedule')).closest('.settings-group') as HTMLElement
 
-    expect(within(gitHubCard).getAllByText('GitHub read sync requires credentials.').length).toBeGreaterThan(0)
-    expect(within(gitHubCard).getByRole('button', { name: 'Off' })).toBeDisabled()
-    expect(within(gitHubCard).getByRole('button', { name: 'Scheduled sync interval' })).toBeDisabled()
+    expect(within(syncGroup).getAllByText('GitHub read sync requires credentials.').length).toBeGreaterThan(0)
+    expect(within(syncGroup).getByRole('button', { name: 'Off' })).toBeDisabled()
+    expect(within(syncGroup).getByRole('button', { name: 'Scheduled sync interval' })).toBeDisabled()
   })
 
   it('saves GitLab subgroup project routes with canonical workspace keys', async () => {
-    renderSettings('/settings/projects')
+    renderSettings('/settings/gitlab')
 
     await screen.findByText('Project routing')
     const addRow = () => document.querySelector('.repository-add-row') as HTMLElement
-    fireEvent.click(within(addRow()).getByRole('button', { name: 'Source provider' }))
-    fireEvent.click(screen.getByRole('option', { name: 'GitLab' }))
     fireEvent.change(within(addRow()).getByPlaceholderText('group/project or group/subgroup/project'), { target: { value: 'group/team/project' } })
     fireEvent.change(within(addRow()).getByPlaceholderText('DotCraft workspace path'), { target: { value: 'C:\\example\\workspaces\\gitlab-project' } })
     fireEvent.click(within(addRow()).getByRole('button', { name: 'Add' }))
@@ -538,12 +540,11 @@ describe('SettingsView', () => {
     serverConfigurationResponse.configuration.automation.autoReviewPublishEnabled = true
     serverConfigurationResponse.configuration.automation.autoReviewPublishRepositories = ['gitlab:gitlab.old.test/team/subsystem/example-project']
 
-    renderSettings('/settings/credentials')
+    renderSettings('/settings/gitlab')
 
-    const gitLabGroup = (await screen.findByText('GitLab')).closest('.settings-group') as HTMLElement
-    expect(within(gitLabGroup).queryByText('API base URL')).not.toBeInTheDocument()
+    expect(screen.queryByText('API base URL')).not.toBeInTheDocument()
 
-    const endpointInput = await within(gitLabGroup).findByDisplayValue('https://gitlab.old.test')
+    const endpointInput = await screen.findByDisplayValue('https://gitlab.old.test')
     fireEvent.change(endpointInput, { target: { value: 'https://gitlab.internal.test' } })
     fireEvent.blur(endpointInput)
     expect(screen.getByText('Changing host clears GitLab project profiles on save; new profiles are required after restart.')).toBeInTheDocument()
@@ -579,7 +580,7 @@ describe('SettingsView', () => {
   })
 
   it('saves GitLab token replacements without echoing plaintext after the response', async () => {
-    renderSettings('/settings/projects')
+    renderSettings('/settings/gitlab')
 
     const gitLabInput = await screen.findByDisplayValue('group/subgroup/project')
     const gitLabCard = gitLabInput.closest('.repository-card') as HTMLElement
@@ -595,12 +596,12 @@ describe('SettingsView', () => {
   })
 
   it('does not expose legacy global GitLab secret fields in Credentials', async () => {
-    renderSettings('/settings/credentials')
+    renderSettings('/settings/gitlab')
 
-    const gitLabGroup = (await screen.findByText('GitLab')).closest('.settings-group') as HTMLElement
-    expect(within(gitLabGroup).queryByText('GitLab token')).not.toBeInTheDocument()
-    expect(within(gitLabGroup).queryByText('GitLab webhook secret')).not.toBeInTheDocument()
-    expect(within(gitLabGroup).queryByText('GitLab signing token')).not.toBeInTheDocument()
+    const connection = (await screen.findByText('Connection')).closest('.settings-group') as HTMLElement
+    expect(within(connection).queryByText('GitLab token')).not.toBeInTheDocument()
+    expect(within(connection).queryByText('GitLab webhook secret')).not.toBeInTheDocument()
+    expect(within(connection).queryByText('GitLab signing token')).not.toBeInTheDocument()
   })
 
   it('shows one autosave error and keeps the edited value when saving fails', async () => {
@@ -744,7 +745,7 @@ describe('SettingsView', () => {
   })
 
   it('keeps source sync disabled while a server restart is pending', async () => {
-    renderSettings('/settings/sources', { serverRestartPending: true })
+    renderSettings('/settings/github', { serverRestartPending: true })
 
     expect(await screen.findAllByText('Saved source changes need a restart before Sync now can use them.')).not.toHaveLength(0)
     expect(screen.getAllByRole('button', { name: 'Sync now' }).every((button) => button.hasAttribute('disabled'))).toBe(true)
@@ -934,7 +935,7 @@ describe('SettingsView', () => {
   })
 
   it('renders per-project source sync progress', async () => {
-    renderSettings('/settings/sources', {
+    renderSettings('/settings/github', {
       sourceSyncJobs: {
         github: {
         jobId: 'job-1',

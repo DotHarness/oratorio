@@ -77,8 +77,8 @@ The release script publishes the ASP.NET Core server as a Windows x64 self-conta
 build/release/
   Oratorio*.exe
   server/
-    Oratorio.Server.exe
+    oratorio-server.exe
     appsettings.json
 ```
 
-Run the packaged desktop executable for the local Oratorio Desktop app. Run `build/release/server/Oratorio.Server.exe` to start only the headless backend; the console prints `API`, `Health`, and headless `Mode`.
+Run the packaged desktop executable for the local Oratorio Desktop app. Run `build/release/server/oratorio-server.exe` to start only the headless backend; the console prints `API`, `Health`, and headless `Mode`.
