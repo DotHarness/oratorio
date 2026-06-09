@@ -22,7 +22,19 @@
   "autoPrTooltip": "启动一次带自动{{target}}交付的实现运行。草稿提交后，Oratorio 会尝试提交、推送并创建一个{{longTarget}}。",
   "summary": {
     "title": "摘要",
-    "description": "用于看板分诊的简要说明。"
+    "description": "用于看板分诊的来源简要说明。"
+  },
+  "result": {
+    "title": "结果",
+    "description": "等待操作员评审的智能体产物。",
+    "countsAria": "评审结果数量",
+    "reviewDrafts_one": "{{count}} 份评审草稿",
+    "reviewDrafts_other": "{{count}} 份评审草稿",
+    "implementationDrafts_one": "{{count}} 份实现草稿",
+    "implementationDrafts_other": "{{count}} 份实现草稿",
+    "followUpDrafts_one": "{{count}} 个后续项",
+    "followUpDrafts_other": "{{count}} 个后续项",
+    "open": "打开结果"
   },
   "run": {
     "attempt": "{{kind}} 第 {{attempt}} 次尝试",
@@ -58,6 +70,24 @@
     "reviewFollowUps": { "label": "评审后续项", "description": "后续提议需要操作员处理。" },
     "viewComments": { "label": "查看评论", "description": "打开评审讨论与反馈编辑器。" },
     "recordDecision": { "label": "记录决策", "description": "评审已就绪，等待操作员决策。" }
+  },
+  "drawerDecision": {
+    "title": "评审决策",
+    "description": "可直接在抽屉中关闭本次评审，完整审计记录仍可在详情页查看。",
+    "approve": "批准",
+    "requestChanges": "请求修改",
+    "requestChangesAria": "从任务抽屉请求修改",
+    "requestChangesPlaceholder": "说明接受前还需要修改什么。",
+    "requestChangesSubmit": "发送请求",
+    "requestChangesCancel": "取消",
+    "reject": "拒绝……",
+    "rejectAria": "从任务抽屉确认拒绝",
+    "rejectTitle": "拒绝这次评审？",
+    "rejectDescription": "这会将当前回合关闭为已拒绝，直到任务被重新打开。",
+    "rejectNote": "决策备注",
+    "rejectNotePlaceholder": "可选：说明拒绝原因。",
+    "rejectConfirm": "拒绝",
+    "rejectCancel": "继续评审"
   },
   "artifacts": {
     "title": "评审工件",

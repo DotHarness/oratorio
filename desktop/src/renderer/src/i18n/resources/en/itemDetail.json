@@ -73,9 +73,9 @@
     "dispatchRound": "Dispatch round"
   },
   "brief": {
-    "title": "Brief",
+    "title": "Problem",
     "localDescription": "Local task description.",
-    "sourceDescription": "Operator-facing summary derived from the source body.",
+    "sourceDescription": "Issue or PR context from the originating source.",
     "summary": "Summary",
     "keyDetails": "Key details",
     "whyItMatters": "Why it matters",
@@ -93,7 +93,8 @@
   },
   "sourceActivity": {
     "title": "Source activity",
-    "description": "Imported changes from the connected source.",
+    "description": "Imported source changes are available for audit.",
+    "history": "Source update history",
     "showMore": "Show {{count}} more source events"
   },
   "sourceComments": {
@@ -105,15 +106,19 @@
     "failedFallback": "{{provider}} source details failed to sync.",
     "openSourceComment": "Open source comment"
   },
-  "agentResult": {
-    "title": "Agent result",
-    "description": "Latest analysis output from the runner.",
-    "agent": "Agent",
-    "noAgentYet": "No agent yet",
-    "attempt": "Attempt",
-    "status": "Status",
-    "pending": "Pending",
-    "rawAgentMarkdown": "Raw agent markdown"
+  "diagnostics": {
+    "title": "Diagnostics",
+    "description": "Execution details are quiet unless a run needs attention.",
+    "attentionDescription": "Run status, errors, and technical history for troubleshooting.",
+    "currentState": "Current state",
+    "latestRun": "Latest run",
+    "runner": "Runner",
+    "noRun": "No run recorded",
+    "attempt": "Attempt {{attempt}}",
+    "empty": "No diagnostic detail is needed for this item.",
+    "activityTitle": "Technical history",
+    "activityDescription": "Round, run, and event history for troubleshooting.",
+    "noActivity": "No round history has been recorded yet."
   },
   "sourceWrites": {
     "title": "{{source}} writes",

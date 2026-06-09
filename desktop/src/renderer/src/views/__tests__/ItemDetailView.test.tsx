@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { ComponentProps } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ItemDetailView } from '../ItemDetailView'
-import type { WorkItem } from '../../lib/types'
+import type { Run, WorkItem } from '../../lib/types'
 
 const item: WorkItem = {
   id: 'local:task-1',
@@ -65,9 +65,57 @@ describe('ItemDetailView', () => {
     expect(screen.getByRole('heading', { name: 'Stabilize review workflow' })).toBeInTheDocument()
     expect(screen.getByText('Round 1')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /Intake/ })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Brief' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: /Diagnostics/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Problem' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'More actions' })).toBeInTheDocument()
+    const labelList = screen.getByLabelText('Source labels')
+    expect(labelList).toHaveTextContent('frontend')
+    expect(labelList.closest('.detail-meta')).not.toBeNull()
+    expect(document.querySelector('.detail-header > .label-row')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Open review drawer' })).not.toBeInTheDocument()
+  })
+
+  it('keeps agent markdown summaries out of diagnostics', () => {
+    const diagnosticItem: WorkItem = {
+      ...item,
+      state: 'failed',
+      summary: 'Agent markdown summary should stay hidden.',
+    }
+    const diagnosticRun = makeRun({
+      status: 'failed',
+      errorMessage: 'Run failed while reading the source branch.',
+      statusMessage: 'Agent markdown status should stay hidden.',
+    })
+
+    renderDetail({
+      selectedItem: diagnosticItem,
+      selectedDetailItem: diagnosticItem,
+      selectedReviewStage: 'analysis',
+      selectedRun: diagnosticRun,
+      selectedRoundHistory: [
+        {
+          round: {
+            roundId: 'round-1',
+            roundNumber: 1,
+            status: 'failed',
+            summary: 'Raw round summary should stay hidden.',
+            createdAt: '2026-05-17T00:00:00Z',
+            completedAt: null,
+          },
+          runs: [diagnosticRun],
+          decisions: [],
+          comments: [],
+          events: [],
+        },
+      ],
+    })
+
+    expect(screen.getByRole('tab', { name: /Diagnostics/ })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Diagnostics' })).toBeInTheDocument()
+    expect(screen.getByText('Run failed while reading the source branch.')).toBeInTheDocument()
+    expect(screen.queryByText('Agent markdown status should stay hidden.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Agent markdown summary should stay hidden.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Raw round summary should stay hidden.')).not.toBeInTheDocument()
   })
 
   it('shows GitHub source detail loading and retry states', () => {
@@ -423,4 +471,45 @@ function renderDetailElement(overrides: Partial<ComponentProps<typeof ItemDetail
       {...overrides}
     />
   )
+}
+
+function makeRun(overrides: Partial<Run> = {}): Run {
+  return {
+    runId: 'run-1',
+    roundId: 'round-1',
+    attempt: 1,
+    status: 'running',
+    runnerKind: 'appServer',
+    threadId: null,
+    turnId: null,
+    appServerEndpoint: null,
+    startedAt: '2026-05-17T00:00:00Z',
+    completedAt: null,
+    summary: null,
+    errorCode: null,
+    errorMessage: null,
+    progressPercent: 62,
+    statusMessage: null,
+    lastHeartbeatAt: null,
+    baseWorkspacePath: null,
+    worktreePath: null,
+    worktreeBranch: null,
+    baseRef: null,
+    baseSha: null,
+    worktreeStatus: 'ready',
+    worktreeErrorCode: null,
+    worktreeErrorMessage: null,
+    retryCount: 0,
+    nextRetryAt: null,
+    leaseOwner: null,
+    leaseAcquiredAt: null,
+    worktreeCleanupAfterAt: null,
+    worktreeCleanedAt: null,
+    purpose: 'reviewAnalysis',
+    dispatchTrigger: 'manual',
+    targetHeadSha: null,
+    deliveryPolicy: 'manualDelivery',
+    implementationTurnCount: 0,
+    ...overrides,
+  }
 }

@@ -1153,6 +1153,7 @@
 .action-icon:disabled,
 .primary-button:disabled,
 .secondary-button:disabled,
+.danger-button:disabled,
 .quiet-button:disabled,
 .decision-stack button:disabled,
 .decision-button-row button:disabled {
@@ -1215,6 +1216,7 @@
 .quiet-button,
 .primary-button,
 .secondary-button,
+.danger-button,
 .decision-stack button,
 .decision-button-row button,
 .item-row,
@@ -1417,6 +1419,7 @@ textarea::placeholder {
 .select-control,
 .secondary-button,
 .primary-button,
+.danger-button,
 .decision-stack button,
 .decision-button-row button {
   display: inline-flex;
@@ -1431,6 +1434,7 @@ textarea::placeholder {
 .quiet-button,
 .secondary-button,
 .primary-button,
+.danger-button,
 .decision-stack button,
 .decision-button-row button,
 .tab-strip button,
@@ -2569,6 +2573,8 @@ textarea::placeholder {
 }
 
 .task-status-next-action .primary-button,
+.task-status-next-action .secondary-button,
+.task-status-next-action .danger-button,
 .task-status-run-actions .secondary-button {
   width: 100%;
   margin-top: 0;
@@ -2598,6 +2604,49 @@ textarea::placeholder {
 .task-status-brief {
   max-height: 280px;
   overflow: auto;
+}
+
+.task-status-result {
+  display: grid;
+  gap: 10px;
+}
+
+.task-status-result-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.task-status-result-facts span {
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-tertiary) 46%, transparent);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.task-status-result-preview {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  list-style: none;
+}
+
+.task-status-result-preview li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-status-result-action {
+  width: 100%;
 }
 
 .task-status-link {
@@ -2634,8 +2683,8 @@ textarea::placeholder {
 
 .task-status-counts > button:hover,
 .task-status-counts > button:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-active));
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-tertiary));
+  border-color: var(--border-active);
+  background: var(--bg-tertiary);
 }
 
 .task-status-counts > button:focus-visible {
@@ -2674,13 +2723,98 @@ textarea::placeholder {
 }
 
 .task-status-next-action {
-  position: sticky;
-  bottom: 0;
-  z-index: 3;
-  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border-default));
+  border: 1px solid color-mix(in srgb, var(--text-primary) 16%, var(--border-default));
   box-shadow: 0 -10px 22px -18px color-mix(in srgb, var(--bg-primary) 100%, transparent);
   background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
   backdrop-filter: blur(6px);
+}
+
+.task-status-primary-action {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+}
+
+.task-status-decision-stack {
+  display: grid;
+  gap: 8px;
+}
+
+.task-status-decision-form {
+  display: grid;
+  gap: 9px;
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-primary) 56%, transparent);
+}
+
+.task-status-decision-form textarea,
+.task-status-reject-confirm textarea {
+  width: 100%;
+  min-height: 86px;
+  resize: vertical;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 9px 10px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  font: inherit;
+  line-height: 1.45;
+}
+
+.task-status-decision-form textarea:focus,
+.task-status-reject-confirm textarea:focus {
+  outline: none;
+  border-color: var(--border-active);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.task-status-inline-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.task-status-danger-zone {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-default);
+}
+
+.task-status-reject-trigger {
+  justify-self: stretch;
+}
+
+.task-status-reject-confirm {
+  display: grid;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid color-mix(in srgb, var(--error) 30%, var(--border-default));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--error) 6%, var(--bg-primary));
+}
+
+.task-status-reject-confirm strong {
+  color: var(--text-primary);
+}
+
+.task-status-reject-confirm p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.task-status-reject-confirm label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .task-status-comment-action {
@@ -3381,11 +3515,12 @@ textarea::placeholder {
   display: flex;
   flex-direction: column;
   overflow: auto;
+  scrollbar-gutter: stable;
   background: var(--bg-primary);
 }
 
 .detail-header {
-  padding: 26px 28px 20px;
+  padding: 14px 28px 18px;
   border-bottom: 1px solid var(--border-default);
   background: color-mix(in srgb, var(--bg-primary) 94%, var(--bg-secondary));
 }
@@ -3413,7 +3548,7 @@ textarea::placeholder {
 }
 
 .title-row {
-  margin: 13px 0 14px;
+  margin: 0 0 12px;
   align-items: flex-start;
 }
 
@@ -3543,6 +3678,29 @@ textarea::placeholder {
   gap: 6px;
 }
 
+.detail-label-list {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 180px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.detail-label-chip {
+  min-height: 22px;
+  max-width: 220px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 86%, transparent);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .lifecycle-stepper,
 .review-stage-nav {
   --stage-node-size: 22px;
@@ -3553,7 +3711,7 @@ textarea::placeholder {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0;
-  margin: 24px 0 0;
+  margin: 20px 0 0;
   padding: 0;
   list-style: none;
 }
@@ -4602,7 +4760,8 @@ textarea::placeholder {
 }
 
 .section-disclosure .source-write-list,
-.section-disclosure .review-draft-list {
+.section-disclosure .review-draft-list,
+.section-disclosure .source-activity-list {
   margin-top: 0;
   padding: 0 12px 12px;
 }
@@ -4793,7 +4952,7 @@ textarea::placeholder {
   bottom: 0;
   z-index: 3;
   margin-top: 16px;
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border-default));
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, var(--border-default));
   box-shadow: 0 -12px 24px -16px color-mix(in srgb, var(--bg-primary) 100%, transparent);
   backdrop-filter: blur(6px);
   background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
@@ -4835,7 +4994,6 @@ textarea::placeholder {
 
 .decision-button-row button.approve-decision {
   font-weight: 720;
-  letter-spacing: 0.01em;
 }
 
 .decision-button-row button.reject-decision {
@@ -5566,6 +5724,7 @@ textarea::placeholder {
 
 .primary-button,
 .secondary-button,
+.danger-button,
 .decision-stack button,
 .decision-button-row button {
   width: 100%;
@@ -5579,34 +5738,52 @@ textarea::placeholder {
 
 .primary-button {
   margin-top: 14px;
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--border-active));
-  color: var(--on-accent);
-  background: linear-gradient(180deg, var(--accent-hover), var(--accent));
+  border-color: var(--text-primary);
+  color: var(--bg-primary);
+  background: var(--text-primary);
 }
 
 .secondary-button {
   margin-top: 10px;
+  border-color: var(--border-default);
+  background: var(--bg-secondary);
 }
 
 .primary-button.inline,
-.secondary-button.inline {
+.secondary-button.inline,
+.danger-button.inline {
   width: auto;
   margin-top: 0;
 }
 
 .primary-button:hover:not(:disabled) {
-  background: var(--accent-hover);
+  border-color: color-mix(in srgb, var(--text-primary) 88%, var(--bg-primary));
+  background: color-mix(in srgb, var(--text-primary) 88%, var(--bg-primary));
 }
 
 .secondary-button:hover:not(:disabled),
 .decision-stack button:hover:not(:disabled),
 .decision-button-row button:hover:not(:disabled) {
   border-color: var(--border-active);
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-active));
+  background: var(--bg-tertiary);
+}
+
+.danger-button {
+  margin-top: 10px;
+  color: color-mix(in srgb, var(--error) 82%, var(--text-secondary));
+  border-color: color-mix(in srgb, var(--error) 34%, var(--border-default));
+  background: transparent;
+}
+
+.danger-button:hover:not(:disabled) {
+  color: var(--error);
+  border-color: color-mix(in srgb, var(--error) 58%, var(--border-default));
+  background: color-mix(in srgb, var(--error) 8%, transparent);
 }
 
 .primary-button:active:not(:disabled),
 .secondary-button:active:not(:disabled),
+.danger-button:active:not(:disabled),
 .quiet-button:active:not(:disabled),
 .decision-stack button:active:not(:disabled),
 .decision-button-row button:active:not(:disabled),
@@ -5631,9 +5808,9 @@ textarea::placeholder {
 
 .decision-stack button.approve-decision,
 .decision-button-row button.approve-decision {
-  color: var(--on-accent);
-  border-color: color-mix(in srgb, var(--accent) 70%, var(--border-active));
-  background: linear-gradient(180deg, var(--accent-hover), var(--accent));
+  color: var(--bg-primary);
+  border-color: var(--text-primary);
+  background: var(--text-primary);
 }
 
 .decision-stack button.request-decision,
@@ -5652,7 +5829,7 @@ textarea::placeholder {
 
 .decision-stack button.request-decision:hover,
 .decision-button-row button.request-decision:hover {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background: var(--bg-tertiary);
 }
 
 .decision-stack button.reject-decision:hover,
@@ -6933,9 +7110,9 @@ textarea:focus-visible {
 
 .settings-page .settings-action-button.primary-button,
 .settings-server-restart-banner .settings-action-button.primary-button {
-  color: var(--on-accent);
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--border-active));
-  background: linear-gradient(180deg, var(--accent-hover), var(--accent));
+  color: var(--bg-primary);
+  border-color: var(--text-primary);
+  background: var(--text-primary);
 }
 
 .settings-page .settings-action-button.secondary-button:hover:not(:disabled),
@@ -6943,14 +7120,15 @@ textarea:focus-visible {
 .settings-server-restart-banner .settings-action-button.secondary-button:hover:not(:disabled),
 .settings-server-restart-banner .settings-action-button.secondary-button:focus-visible:not(:disabled) {
   border-color: var(--border-active);
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-active));
+  background: var(--bg-tertiary);
 }
 
 .settings-page .settings-action-button.primary-button:hover:not(:disabled),
 .settings-page .settings-action-button.primary-button:focus-visible:not(:disabled),
 .settings-server-restart-banner .settings-action-button.primary-button:hover:not(:disabled),
 .settings-server-restart-banner .settings-action-button.primary-button:focus-visible:not(:disabled) {
-  background: var(--accent-hover);
+  border-color: color-mix(in srgb, var(--text-primary) 88%, var(--bg-primary));
+  background: color-mix(in srgb, var(--text-primary) 88%, var(--bg-primary));
 }
 
 .settings-actions,
@@ -8119,31 +8297,41 @@ textarea:focus-visible {
   background: transparent;
 }
 
-.agent-result-section {
+.diagnostics-overview-section {
   background: transparent;
 }
 
-.agent-result-facts {
+.diagnostics-result-facts {
   grid-template-columns: 1fr;
 }
 
-.agent-brief {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
+.diagnostics-run-progress {
+  margin-top: 14px;
 }
 
-.agent-brief-icon {
-  display: inline-flex;
-  width: 30px;
-  height: 30px;
-  align-items: center;
-  justify-content: center;
-  border: 0;
+.diagnostics-run-progress p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.diagnostics-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 14px;
+  border: 1px solid color-mix(in srgb, var(--error) 30%, var(--border-default));
   border-radius: 8px;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  padding: 10px 11px;
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 7%, transparent);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.diagnostics-empty {
+  margin-top: 14px;
 }
 
 .brief-list {

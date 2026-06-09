@@ -499,7 +499,7 @@ function OratorioApp() {
   const selectedCanEditLocalTask = Boolean(selectedIsLocalTask && !selectedRunIsActive)
   const selectedCanDispatch = Boolean(selectedItem && !isBusy && !selectedRunIsActive && selectedItem.state !== 'archived')
   const selectedCanImplementationDispatch = Boolean(selectedCanDispatch && selectedItem && (selectedItem.kind === 'localTask' || ((selectedItem.sourceKey === 'github' || selectedItem.sourceKey === 'gitlab') && selectedItem.kind === 'issue')))
-  const selectedCanDecide = Boolean(selectedItem && !isBusy && !selectedRunIsActive && selectedItem.state !== 'archived')
+  const selectedCanDecide = Boolean(selectedItem && !isBusy && !selectedRunIsActive && selectedItem.state === 'awaitingReview')
   const selectedReReviewInfo = pullRequestReReviewInfo(selectedItem)
   const reviewDraftPublishDisabledReason = selectedItem?.sourceKey === 'github' && githubStatus.available && !githubStatus.writesEnabled
     ? githubWritesDisabledReason()
@@ -2181,8 +2181,8 @@ function OratorioApp() {
     navigate(lastBoardRouteRef.current || `/projects/${encodeURIComponent(workspaceId || 'default')}`)
   }
 
-  function setDecision(decision: 'approve' | 'request-changes' | 'reject') {
-    const noteBody = decisionNote.trim()
+  function setDecision(decision: 'approve' | 'request-changes' | 'reject', bodyOverride?: string) {
+    const noteBody = bodyOverride === undefined ? decisionNote.trim() : bodyOverride.trim()
     const body =
       decision === 'request-changes'
         ? noteBody
@@ -2443,12 +2443,14 @@ function OratorioApp() {
                   runnerMode={runnerMode}
                   canDispatch={selectedCanDispatch}
                   canImplementationDispatch={selectedCanImplementationDispatch}
+                  canDecide={selectedCanDecide}
                   isPullRequest={selectedIsPullRequest}
                   reReviewInfo={selectedReReviewInfo}
                   onDispatchRound={dispatchRound}
                   onDispatchImplementationRound={dispatchImplementationRound}
                   onReReviewPullRequest={reReviewPullRequest}
                   onOpenDetailStage={openSelectedTaskDetailStage}
+                  onRecordDecision={setDecision}
                 />
               }
             />

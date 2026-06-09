@@ -299,20 +299,25 @@ has enough context.
 
 The Task Drawer has no tabs. It renders only Status.
 
-Status may show:
+Status defaults to a Problem / Result / Action / Stats hierarchy:
 
-- current lifecycle state and TaskStatus;
-- latest run kind, attempt, status, progress, and concise summary/error;
-- compact thread/worktree identifiers when available;
-- task metadata such as repository, branch, assignee, round, source lifecycle,
-  HEAD, and last sync;
-- compact brief summary;
-- counts for review drafts, implementation drafts, follow-ups, source writes,
-  and comments;
-- board-safe actions such as dispatch, retry, archive, reopen, edit local task,
-  re-review PR, and copy task id when backend gates allow them;
-- a persistent `Open detail page` action in the drawer overflow menu, routing to
-  the existing task detail page for deeper inspection when Status is not enough.
+- **Problem** shows the source/local task brief (`BriefFields.summary`) or the
+  source/local description. It must not fall back to agent-generated item
+  summaries.
+- **Result** shows compact review outputs such as review drafts,
+  implementation drafts, follow-up drafts, and suggestion counts. Short result
+  previews may be shown, but raw run/round markdown is not drawer content.
+- **Action** shows the next operator action or the review decision block.
+- **Stats** shows compact counts for review drafts, implementation drafts,
+  follow-ups, source writes, and comments.
+
+Status may show the latest run kind, attempt, status, and progress only while a
+run is active or failed/cancelled/timed out. Successful run summaries are hidden
+from the default drawer because the review draft or follow-up draft is the
+operator-facing result. Status may also show board-safe actions such as
+dispatch, retry, archive, reopen, edit local task, re-review PR, and copy task
+id when backend gates allow them, plus a persistent `Open detail page` action in
+the drawer overflow menu.
 
 Status must not show:
 
@@ -336,8 +341,9 @@ may expose a `Re-review PR` or `Review latest commit` action. This action calls
 the Oratorio re-review endpoint directly; it must not be implemented by adding a
 comment, creating an Agent Discussion Turn, or recording `requestChanges`.
 
-If operators need execution detail, they use DotCraft Desktop. A future Desktop
-handoff button may be added only after a stable deep-link contract exists.
+If operators need execution detail, they use the Task detail page's Diagnostics
+stage or DotCraft Desktop. A future Desktop handoff button may be added only
+after a stable deep-link contract exists.
 
 ### 4.1 Drawer Section Hierarchy
 
@@ -346,9 +352,9 @@ treatment so a single glance identifies the section's role:
 
 | Type | Purpose | Treatment |
 | --- | --- | --- |
-| Action | The primary operator action (e.g. `Record decision`, `Dispatch round`) | Accented surface, primary CTA inside; nothing else competes with the CTA |
-| State | Current lifecycle / run status (e.g. `Awaiting review`, `mock attempt N`) | Left-edge state-color stripe, status icon, status label |
-| Info | Read-only narrative (e.g. `Summary`) | Plain surface, no accent, body text |
+| Action | The primary operator action (e.g. `Review decision`, `Dispatch round`) | Neutral elevated surface, neutral inverse primary CTA inside; nothing else competes with the CTA |
+| State | Current lifecycle / active-or-failed run status (e.g. `Awaiting review`, `mock attempt N`) | Left-edge state-color stripe, status icon, status label |
+| Info | Read-only narrative (e.g. `Problem`) | Plain surface, no accent, body text |
 | Stats | Compact counts of related artifacts (e.g. `Review artifacts`) | Plain surface, individual counts |
 
 The primary `Action` section must remain reachable when the drawer overflows.
@@ -375,11 +381,32 @@ The Task detail page is the deeper review surface reached from the drawer's
 Oratorio Desktop renderer; deeper agent execution surfaces remain in DotCraft
 Desktop.
 
+The default detail-page information hierarchy is Problem / Result / Decision:
+
+- **Problem** renders the source issue/PR/local task body and compact source
+  metadata.
+- **Result** renders operator-facing agent outputs: review drafts,
+  suggestions, implementation drafts, and follow-up drafts.
+- **Decision** renders the current decision composer and a compact decision
+  history.
+
+Execution process data (run attempts, round history, timeline events,
+thread/worktree identifiers, raw round summaries, and agent status markdown) is
+Diagnostics content. Diagnostics is shown by default only for active,
+failed/cancelled/timed-out, or explicitly deep-linked runs. Normal
+awaiting-review, approved, and rejected workflows must not surface agent
+process markdown in their default panels.
+
 ### 5.1 Routing
 
 The detail route is `/projects/:workspaceId/tasks/:shortId/detail/:stage`,
 where `:stage` is one of `intake`, `analysis`, `review`, `decision`, or
 `closed`.
+
+The `analysis` route segment is retained for compatibility, but the user-facing
+stage label is `Diagnostics`. `defaultReviewStage(item, run)` routes to
+Diagnostics only when the item/run is active or needs troubleshooting; a
+succeeded run does not by itself make Diagnostics the default stage.
 
 - The selected stage must match the URL `:stage` segment exactly. Mounting
   the detail page must not silently override the URL with
@@ -417,7 +444,10 @@ The four classes must not collapse into one visually identical chip style.
 
 ### 5.4 Review stage stepper
 
-The five-stage stepper is the page's primary status visualization:
+The review stage stepper is the page's primary status visualization. The normal
+path shows Intake, Review, Decision, and Closed. Diagnostics appears only when
+the current item/run needs attention or when the active URL is the `analysis`
+stage.
 
 - **Completed** stages render as a filled node in the success accent with a
   centered checkmark glyph.
@@ -430,20 +460,24 @@ The five-stage stepper is the page's primary status visualization:
   stage; pending segments stay neutral.
 
 Each node shows the stage name and a per-stage status sublabel
-(e.g. `Succeeded`, `Completed`, `In progress`, `Open`, `Pending`).
+(e.g. `Succeeded`, `In progress`, `Open`, `Pending`). Diagnostics is an
+on-demand diagnostic node, not a mandatory lifecycle step for successful review
+work.
 
 ### 5.5 Decision actions
 
 The detail page's primary decision actions are `Approve`, `Request changes`,
 and `Reject`. They follow a strict visual hierarchy:
 
-- `Approve` is the primary affirmative — filled primary CTA, leftmost in the
-  action row, widest button in the row.
 - `Request changes` is the secondary feedback action — outlined neutral
-  button, sitting next to `Approve`.
+  button, occupying the first row so feedback text and the feedback action read
+  together.
+- `Approve` is the primary affirmative — neutral inverse primary CTA in the
+  lower affirmative row.
 - `Reject` is the terminal destructive action — outlined destructive style,
-  separated from the other two by a gap or divider so a careless
-  click on `Approve` cannot land on `Reject`.
+  paired with `Approve` in the lower row but visually separated through
+  destructive color, spacing, and copy so it never competes with the primary
+  affirmative action.
 
 The decision action panel is sticky to the bottom of the detail page when
 the page content overflows the viewport. Scrolling never hides the primary
@@ -618,15 +652,18 @@ than borrowing an existing one with a one-off override.
 
 ### 7.2 Accent Palette
 
-The accent palette has fixed semantic roles. Accents must not be repurposed
-for decorative gradients or unrelated emphasis.
+The palette has fixed semantic roles. Neutral tokens carry the default action
+hierarchy: primary buttons use neutral inversion (`text-primary` surface with
+`bg-primary` text), secondary buttons use neutral surfaces and borders, and
+danger buttons use destructive outlines. Accents must not be repurposed for
+decorative gradients or unrelated emphasis.
 
 | Accent | Roles |
 | --- | --- |
-| Primary (blue) | CTAs, active tab, current stepper node, focus rings, selected filter |
+| Primary (blue) | Focus rings, active tab, current stepper node, selected filter, links, and small brand accents |
 | Success (green) | Completed lifecycle states, passing checks, completed stepper nodes, success pills |
 | Attention (amber) | States the operator must react to (`Attention`, `Awaiting review`); outlined-color pills |
-| Destructive (red) | Reject CTA, terminal failures, destructive outlined buttons |
+| Destructive (red) | Reject action, terminal failures, destructive outlined buttons |
 | Neutral (zinc/slate) | All other surfaces, text, and borders |
 
 The status pill catalogue lives in §3.1. The drawer section type catalogue

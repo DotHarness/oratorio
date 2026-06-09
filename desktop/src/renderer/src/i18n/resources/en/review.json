@@ -1,7 +1,7 @@
 {
   "stages": {
     "intake": "Intake",
-    "analysis": "Analysis",
+    "analysis": "Diagnostics",
     "review": "Review",
     "decision": "Decision",
     "closed": "Closed"
@@ -11,10 +11,12 @@
   "meta": {
     "completed": "Completed",
     "inProgress": "In progress",
-    "pending": "Pending"
+    "pending": "Pending",
+    "available": "Available"
   },
   "badge": {
     "noRun": "No run",
+    "diagnostics": "Diagnostics",
     "open": "Open",
     "drafts_one": "{{count}} draft",
     "drafts_other": "{{count}} drafts",

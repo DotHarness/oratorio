@@ -18,16 +18,20 @@ export function ReviewStageNav({
   const { t } = useTranslation('review')
   const closedReached = item.state === 'approved' || item.state === 'rejected' || item.state === 'archived'
   const decisionReached = closedReached
-  const analysisComplete = Boolean(run && ['succeeded', 'failed', 'cancelled', 'timedOut'].includes(run.status))
+  const diagnosticsRelevant = item.state === 'dispatching' || item.state === 'running' || item.state === 'failed' || Boolean(run && run.status !== 'succeeded')
+  const showDiagnosticsStage = activeStage === 'analysis' || diagnosticsRelevant
   const reviewReached = item.state === 'awaitingReview' || decisionReached
-  const currentIndex = closedReached ? 4 : decisionReached ? 3 : reviewReached ? 2 : run ? 1 : 0
-  const steps = [
+  const currentStageId: ReviewStageId = closedReached ? 'closed' : reviewReached ? 'review' : diagnosticsRelevant ? 'analysis' : 'intake'
+  const steps: Array<{ id: ReviewStageId; label: string; meta: string; badge: string }> = [
     { id: 'intake' as const, label: t('stages.intake'), meta: item.updated, badge: item.sourceKey === 'local' ? t('localBadge') : sourceLifecycleLabel(item.sourceState) },
-    { id: 'analysis' as const, label: t('stages.analysis'), meta: analysisComplete ? t('meta.completed') : run ? t('meta.inProgress') : t('meta.pending'), badge: run ? runStatusLabel(run.status) : t('badge.noRun') },
+    ...(showDiagnosticsStage
+      ? [{ id: 'analysis' as const, label: t('stages.analysis'), meta: diagnosticsRelevant ? t('meta.inProgress') : t('meta.available'), badge: run ? runStatusLabel(run.status) : t('badge.diagnostics') }]
+      : []),
     { id: 'review' as const, label: t('stages.review'), meta: reviewReached ? t('meta.inProgress') : t('meta.pending'), badge: item.reviewDrafts.length > 0 ? t('badge.drafts', { count: item.reviewDrafts.length }) : item.followUpDrafts.length > 0 ? t('badge.followUps', { count: item.followUpDrafts.length }) : t('badge.feedback', { count: item.comments.length }) },
     { id: 'decision' as const, label: t('stages.decision'), meta: decisionReached ? stateLabel(item.state) : t('meta.pending'), badge: item.sourceWrites.length > 0 ? t('badge.writes', { count: item.sourceWrites.length }) : decisionReached ? stateLabel(item.state) : t('badge.open') },
     { id: 'closed' as const, label: t('stages.closed'), meta: closedReached ? stateLabel(item.state) : t('meta.pending'), badge: closedReached ? stateLabel(item.state) : t('badge.open') },
   ]
+  const currentIndex = Math.max(0, steps.findIndex((step) => step.id === currentStageId))
   const stageIds = steps.map((step) => step.id)
 
   const handleStageKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, index: number) => {

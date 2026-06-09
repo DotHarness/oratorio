@@ -22,7 +22,19 @@
   "autoPrTooltip": "Starts an implementation run with Auto {{target}} delivery. Oratorio attempts to commit, push, and create a {{longTarget}} after the draft is submitted.",
   "summary": {
     "title": "Summary",
-    "description": "A compact brief for board triage."
+    "description": "A compact source brief for board triage."
+  },
+  "result": {
+    "title": "Result",
+    "description": "Agent outputs ready for operator review.",
+    "countsAria": "Review result counts",
+    "reviewDrafts_one": "{{count}} review draft",
+    "reviewDrafts_other": "{{count}} review drafts",
+    "implementationDrafts_one": "{{count}} implementation draft",
+    "implementationDrafts_other": "{{count}} implementation drafts",
+    "followUpDrafts_one": "{{count}} follow-up",
+    "followUpDrafts_other": "{{count}} follow-ups",
+    "open": "Open result"
   },
   "run": {
     "attempt": "{{kind}} attempt {{attempt}}",
@@ -58,6 +70,24 @@
     "reviewFollowUps": { "label": "Review follow-ups", "description": "Follow-up proposals need operator action." },
     "viewComments": { "label": "View comments", "description": "Open the review discussion and feedback composer." },
     "recordDecision": { "label": "Record decision", "description": "Review is ready for an operator decision." }
+  },
+  "drawerDecision": {
+    "title": "Review decision",
+    "description": "Close this review from the drawer, or open the detail page for the full audit trail.",
+    "approve": "Approve",
+    "requestChanges": "Request changes",
+    "requestChangesAria": "Request changes from the task drawer",
+    "requestChangesPlaceholder": "Describe what needs to change before this can be accepted.",
+    "requestChangesSubmit": "Send request",
+    "requestChangesCancel": "Cancel",
+    "reject": "Reject...",
+    "rejectAria": "Confirm rejection from the task drawer",
+    "rejectTitle": "Reject this review?",
+    "rejectDescription": "This closes the current round as rejected until the task is reopened.",
+    "rejectNote": "Decision note",
+    "rejectNotePlaceholder": "Optional context for why this is rejected.",
+    "rejectConfirm": "Reject",
+    "rejectCancel": "Keep reviewing"
   },
   "artifacts": {
     "title": "Review artifacts",

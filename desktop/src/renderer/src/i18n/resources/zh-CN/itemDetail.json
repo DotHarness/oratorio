@@ -73,9 +73,9 @@
     "dispatchRound": "派发回合"
   },
   "brief": {
-    "title": "简要说明",
+    "title": "问题",
     "localDescription": "本地任务描述。",
-    "sourceDescription": "由来源正文派生的面向操作员的摘要。",
+    "sourceDescription": "来自源系统的 issue 或 PR 上下文。",
     "summary": "摘要",
     "keyDetails": "关键细节",
     "whyItMatters": "重要原因",
@@ -93,7 +93,8 @@
   },
   "sourceActivity": {
     "title": "来源动态",
-    "description": "从已连接来源导入的变更。",
+    "description": "已导入的来源变更可用于审计。",
+    "history": "来源更新历史",
     "showMore": "显示另外 {{count}} 条来源事件"
   },
   "sourceComments": {
@@ -105,15 +106,19 @@
     "failedFallback": "{{provider}} 来源详情同步失败。",
     "openSourceComment": "打开来源评论"
   },
-  "agentResult": {
-    "title": "智能体结果",
-    "description": "运行器输出的最新分析结果。",
-    "agent": "智能体",
-    "noAgentYet": "尚无智能体",
-    "attempt": "尝试",
-    "status": "状态",
-    "pending": "待处理",
-    "rawAgentMarkdown": "原始智能体 Markdown"
+  "diagnostics": {
+    "title": "诊断",
+    "description": "只有运行需要关注时，执行细节才会进入视野。",
+    "attentionDescription": "用于排障的运行状态、错误与技术历史。",
+    "currentState": "当前状态",
+    "latestRun": "最近运行",
+    "runner": "运行器",
+    "noRun": "无运行记录",
+    "attempt": "第 {{attempt}} 次尝试",
+    "empty": "此条目目前不需要诊断信息。",
+    "activityTitle": "技术历史",
+    "activityDescription": "用于排障的回合、运行与事件历史。",
+    "noActivity": "尚未记录任何回合历史。"
   },
   "sourceWrites": {
     "title": "{{source}} 写入",

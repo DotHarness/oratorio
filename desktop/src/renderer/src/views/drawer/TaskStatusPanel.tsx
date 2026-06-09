@@ -1,10 +1,11 @@
-import { Activity, Bot, ClipboardList, GitBranch, GitPullRequest, MessageSquare, PanelRightOpen, Play } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Activity, Bot, CheckCircle2, ClipboardList, GitBranch, GitPullRequest, MessageSquare, PanelRightOpen, Play, ShieldCheck, Sparkles, XCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { MarkdownBlock } from '../../components/primitives/MarkdownBlock'
 import { SectionBlock } from '../../components/primitives/SectionBlock'
 import { Tooltip } from '../../components/primitives/Tooltip'
 import type { BriefFields, DeliveryPolicy, ReReviewInfo, ReviewStageId, Run, RunnerMode, WorkItem } from '../../lib/types'
-import { runnerKindLabel, runnerModeLabel, runStatusLabel } from '../../lib/format'
+import { runnerKindLabel, runnerModeLabel, runStatusLabel, summaryPreviewLines } from '../../lib/format'
 
 type TaskStatusPanelProps = {
   item: WorkItem | null | undefined
@@ -13,12 +14,14 @@ type TaskStatusPanelProps = {
   runnerMode: RunnerMode
   canDispatch: boolean
   canImplementationDispatch: boolean
+  canDecide?: boolean
   isPullRequest: boolean
   reReviewInfo?: ReReviewInfo | null
   onDispatchRound: () => void
   onDispatchImplementationRound: (deliveryPolicy?: DeliveryPolicy) => void
   onReReviewPullRequest: () => void
   onOpenDetailStage: (stage: ReviewStageId, options?: { focus?: 'discussionComposer' }) => void
+  onRecordDecision?: (decision: 'approve' | 'request-changes' | 'reject', body?: string) => void
 }
 
 type DetailStageOptions = { focus?: 'discussionComposer' }
@@ -42,15 +45,20 @@ function actionableReviewNextAction(item: WorkItem): ReviewNextAction | null {
     return { key: 'reviewFollowUps', stage: 'review' }
   }
 
-  if (item.comments.length > 0) {
-    return { key: 'viewComments', stage: 'review', options: { focus: 'discussionComposer' } }
-  }
-
-  if (item.state === 'awaitingReview') {
-    return { key: 'recordDecision', stage: 'decision' }
-  }
-
   return null
+}
+
+const drawerDiagnosticRunStatuses: Run['status'][] = ['queued', 'dispatching', 'running', 'failed', 'cancelled', 'timedOut']
+
+function shouldShowRunDiagnostics(item: WorkItem, run?: Run) {
+  return Boolean(run && drawerDiagnosticRunStatuses.includes(run.status)) ||
+    item.state === 'dispatching' ||
+    item.state === 'running' ||
+    item.state === 'failed'
+}
+
+function latestEntry<T>(items: T[]) {
+  return items.length > 0 ? items[items.length - 1] : null
 }
 
 export function TaskStatusPanel({
@@ -60,14 +68,28 @@ export function TaskStatusPanel({
   runnerMode,
   canDispatch,
   canImplementationDispatch,
+  canDecide = false,
   isPullRequest,
   reReviewInfo,
   onDispatchRound,
   onDispatchImplementationRound,
   onReReviewPullRequest,
   onOpenDetailStage,
+  onRecordDecision = () => {},
 }: TaskStatusPanelProps) {
   const { t } = useTranslation('detail')
+  const [requestChangesOpen, setRequestChangesOpen] = useState(false)
+  const [requestChangesDraft, setRequestChangesDraft] = useState('')
+  const [rejectConfirmOpen, setRejectConfirmOpen] = useState(false)
+  const [rejectNote, setRejectNote] = useState('')
+
+  useEffect(() => {
+    setRequestChangesOpen(false)
+    setRequestChangesDraft('')
+    setRejectConfirmOpen(false)
+    setRejectNote('')
+  }, [item?.id])
+
   if (!item) {
     return (
       <div className="task-status-panel">
@@ -76,32 +98,70 @@ export function TaskStatusPanel({
     )
   }
 
-  const summary = brief.summary || item.description || item.summary
+  const problemSummary = brief.summary || item.description
   const hasDrafts = item.reviewDrafts.length + item.implementationDrafts.length + item.followUpDrafts.length > 0
+  const latestReviewDraft = latestEntry(item.reviewDrafts)
+  const latestImplementationDraft = latestEntry(item.implementationDrafts)
+  const latestFollowUpDraft = latestEntry(item.followUpDrafts)
+  const latestResultSummary =
+    latestReviewDraft?.summaryBody?.trim() ||
+    latestImplementationDraft?.summary?.trim() ||
+    latestFollowUpDraft?.body?.trim() ||
+    ''
+  const resultPreview = latestResultSummary ? summaryPreviewLines(latestResultSummary).slice(0, 2) : []
   const reviewNextAction = actionableReviewNextAction(item)
   const canShowReReviewAction = Boolean(reReviewInfo && canDispatch && item.state !== 'archived')
-  const canShowNextAction = canDispatch && item.state !== 'archived' && !reviewNextAction && !canShowReReviewAction
+  const canShowNextAction = canDispatch && item.state !== 'archived' && item.state !== 'awaitingReview' && !reviewNextAction && !canShowReReviewAction
+  const canShowDecisionAction = item.state === 'awaitingReview'
+  const canShowRunStatus = Boolean(run && shouldShowRunDiagnostics(item, run))
   const draftCount = item.reviewDrafts.length + item.implementationDrafts.length
   const artifactCount = draftCount + item.followUpDrafts.length + item.sourceWrites.length + item.comments.length
   const commentActionLabel = item.comments.length > 0 ? t('commentAction.view') : t('commentAction.add')
   const isGitLab = item.sourceKey === 'gitlab'
   const reviewTargetName = isGitLab ? t('target.mr') : t('target.pr')
   const autoPrTooltip = t('autoPrTooltip', { target: reviewTargetName, longTarget: isGitLab ? t('longTarget.mr') : t('longTarget.pr') })
+  const canSubmitRequestChanges = canDecide && requestChangesDraft.trim().length > 0
 
   return (
     <div className="task-status-panel">
-      {summary ? (
-        <SectionBlock tone="blue" icon={<ClipboardList size={16} />} title={t('summary.title')} description={t('summary.description')}>
-          <MarkdownBlock value={summary} className="task-status-brief" compact />
+      {problemSummary ? (
+        <SectionBlock tone="slate" icon={<ClipboardList size={16} />} title={t('summary.title')} description={t('summary.description')}>
+          <MarkdownBlock value={problemSummary} className="task-status-brief" compact />
         </SectionBlock>
       ) : null}
 
-      {run ? (
+      {hasDrafts ? (
         <SectionBlock
-          tone="blue"
+          tone="slate"
+          icon={<Sparkles size={16} />}
+          title={t('result.title')}
+          description={t('result.description')}
+        >
+          <div className="task-status-result">
+            <div className="task-status-result-facts" aria-label={t('result.countsAria')}>
+              {item.reviewDrafts.length > 0 ? <span>{t('result.reviewDrafts', { count: item.reviewDrafts.length })}</span> : null}
+              {item.implementationDrafts.length > 0 ? <span>{t('result.implementationDrafts', { count: item.implementationDrafts.length })}</span> : null}
+              {item.followUpDrafts.length > 0 ? <span>{t('result.followUpDrafts', { count: item.followUpDrafts.length })}</span> : null}
+            </div>
+            {resultPreview.length > 0 ? (
+              <ul className="task-status-result-preview">
+                {resultPreview.map((line, index) => <li key={`${index}-${line}`}>{line}</li>)}
+              </ul>
+            ) : null}
+            <button className="secondary-button task-status-result-action" onClick={() => onOpenDetailStage('review')}>
+              <PanelRightOpen size={15} />
+              {t('result.open')}
+            </button>
+          </div>
+        </SectionBlock>
+      ) : null}
+
+      {canShowRunStatus && run ? (
+        <SectionBlock
+          tone="slate"
           icon={<Bot size={16} />}
           title={t('run.attempt', { kind: runnerKindLabel(run.runnerKind), attempt: run.attempt })}
-          description={run.statusMessage ?? run.errorMessage ?? run.summary ?? t('run.waiting')}
+          description={run.errorMessage ?? run.statusMessage ?? t('run.waiting')}
           action={<span className={`status-chip ${run.status}`}>{runStatusLabel(run.status)}</span>}
         >
           <div className="run-progress task-status-run-progress">
@@ -119,7 +179,7 @@ export function TaskStatusPanel({
       {canShowReReviewAction && reReviewInfo ? (
         <SectionBlock
           className="task-status-next-action"
-          tone="blue"
+          tone="amber"
           icon={<GitPullRequest size={16} />}
           title={t('reReview.title')}
           description={reReviewInfo.description}
@@ -133,8 +193,8 @@ export function TaskStatusPanel({
 
       {canShowNextAction ? (
         <SectionBlock
-          className="task-status-next-action"
-          tone={canImplementationDispatch ? 'green' : 'blue'}
+          className="task-status-next-action task-status-primary-action"
+          tone={canImplementationDispatch ? 'green' : 'slate'}
           icon={<Play size={16} />}
           title={canImplementationDispatch ? t('start.implementation') : item.state === 'failed' ? t('start.retry') : isPullRequest ? t('start.review', { target: reviewTargetName }) : t('start.dispatch')}
           description={t('start.runner', { mode: runnerModeLabel(runnerMode) })}
@@ -173,7 +233,7 @@ export function TaskStatusPanel({
 
       {reviewNextAction ? (
         <SectionBlock
-          className="task-status-next-action"
+          className={`task-status-next-action${canShowDecisionAction ? '' : ' task-status-primary-action'}`}
           tone={reviewNextAction.stage === 'decision' ? 'green' : 'amber'}
           icon={reviewNextAction.options?.focus === 'discussionComposer' ? <MessageSquare size={16} /> : <PanelRightOpen size={16} />}
           title={t(`nextAction.${reviewNextAction.key}.label`)}
@@ -183,6 +243,132 @@ export function TaskStatusPanel({
             <PanelRightOpen size={16} />
             {t(`nextAction.${reviewNextAction.key}.label`)}
           </button>
+        </SectionBlock>
+      ) : null}
+
+      {canShowDecisionAction ? (
+        <SectionBlock
+          className="task-status-next-action task-status-primary-action task-status-decision-action"
+          tone="amber"
+          icon={<ShieldCheck size={16} />}
+          title={t('drawerDecision.title')}
+          description={t('drawerDecision.description')}
+        >
+          <div className="task-status-decision-stack">
+            <button className="primary-button" onClick={() => onRecordDecision('approve')} disabled={!canDecide}>
+              <CheckCircle2 size={16} />
+              {t('drawerDecision.approve')}
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => {
+                setRequestChangesOpen((current) => !current)
+                setRejectConfirmOpen(false)
+              }}
+              disabled={!canDecide}
+              aria-expanded={requestChangesOpen}
+            >
+              <MessageSquare size={16} />
+              {t('drawerDecision.requestChanges')}
+            </button>
+          </div>
+
+          {requestChangesOpen ? (
+            <form
+              className="task-status-decision-form"
+              aria-label={t('drawerDecision.requestChangesAria')}
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (!canSubmitRequestChanges) {
+                  return
+                }
+
+                onRecordDecision('request-changes', requestChangesDraft)
+                setRequestChangesDraft('')
+                setRequestChangesOpen(false)
+              }}
+            >
+              <textarea
+                value={requestChangesDraft}
+                onChange={(event) => setRequestChangesDraft(event.target.value)}
+                rows={4}
+                placeholder={t('drawerDecision.requestChangesPlaceholder')}
+              />
+              <div className="task-status-inline-actions">
+                <button
+                  type="button"
+                  className="secondary-button inline"
+                  onClick={() => {
+                    setRequestChangesDraft('')
+                    setRequestChangesOpen(false)
+                  }}
+                >
+                  {t('drawerDecision.requestChangesCancel')}
+                </button>
+                <button type="submit" className="primary-button inline" disabled={!canSubmitRequestChanges}>
+                  {t('drawerDecision.requestChangesSubmit')}
+                </button>
+              </div>
+            </form>
+          ) : null}
+
+          <div className="task-status-danger-zone">
+            <button
+              className="danger-button task-status-reject-trigger"
+              onClick={() => {
+                setRejectConfirmOpen(true)
+                setRequestChangesOpen(false)
+              }}
+              disabled={!canDecide}
+            >
+              <XCircle size={16} />
+              {t('drawerDecision.reject')}
+            </button>
+
+            {rejectConfirmOpen ? (
+              <form
+                className="task-status-reject-confirm"
+                role="alertdialog"
+                aria-label={t('drawerDecision.rejectAria')}
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  onRecordDecision('reject', rejectNote)
+                  setRejectNote('')
+                  setRejectConfirmOpen(false)
+                }}
+              >
+                <div>
+                  <strong>{t('drawerDecision.rejectTitle')}</strong>
+                  <p>{t('drawerDecision.rejectDescription')}</p>
+                </div>
+                <label>
+                  <span>{t('drawerDecision.rejectNote')}</span>
+                  <textarea
+                    value={rejectNote}
+                    onChange={(event) => setRejectNote(event.target.value)}
+                    rows={3}
+                    placeholder={t('drawerDecision.rejectNotePlaceholder')}
+                    disabled={!canDecide}
+                  />
+                </label>
+                <div className="task-status-inline-actions">
+                  <button
+                    type="button"
+                    className="secondary-button inline"
+                    onClick={() => {
+                      setRejectNote('')
+                      setRejectConfirmOpen(false)
+                    }}
+                  >
+                    {t('drawerDecision.rejectCancel')}
+                  </button>
+                  <button type="submit" className="danger-button inline" disabled={!canDecide}>
+                    {t('drawerDecision.rejectConfirm')}
+                  </button>
+                </div>
+              </form>
+            ) : null}
+          </div>
         </SectionBlock>
       ) : null}
 

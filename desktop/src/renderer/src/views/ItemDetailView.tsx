@@ -82,7 +82,6 @@ import {
   stateCopy,
   stateIcon,
   stateLabel,
-  summaryPreviewLines,
   technicalPreview,
   timeLabel,
   timelineIcon,
@@ -153,7 +152,7 @@ export type ItemDetailViewProps = {
   addComment: () => void
   askAgent?: () => void
   askAgentDisabledReason?: string | null
-  setDecision: (decision: 'approve' | 'request-changes' | 'reject') => void
+  setDecision: (decision: 'approve' | 'request-changes' | 'reject', body?: string) => void
   toggleAllTechnicalEvents: () => void
   toggleTechnicalEvents: (roundId: string) => void
   startSidecarResize: (event: ReactPointerEvent<HTMLDivElement>) => void
@@ -309,6 +308,13 @@ export function ItemDetailView({
       : t('askAgent.answering')
     : askAgentDisabledReason ?? latestFailedDiscussionTurn?.errorMessage ?? null
   const canAskAgent = !isBusy && !askAgentDisabledReason && !activeDiscussionTurn && Boolean(feedbackDraft.trim())
+  const diagnosticsRunVisible = Boolean(selectedRun && selectedRun.status !== 'succeeded')
+  const diagnosticsRunIsActive = Boolean(selectedRun && (selectedRun.status === 'queued' || selectedRun.status === 'dispatching' || selectedRun.status === 'running'))
+  const diagnosticsNeedsAttention = Boolean(
+    selectedItem &&
+    (selectedItem.state === 'dispatching' || selectedItem.state === 'running' || selectedItem.state === 'failed' || diagnosticsRunVisible),
+  )
+  const diagnosticsError = selectedRun?.errorMessage || selectedRun?.worktreeErrorMessage || null
   useEffect(() => {
     if (selectedReviewStage !== 'review' || selectedDetailFocus !== 'discussionComposer') {
       return
@@ -447,6 +453,16 @@ export function ItemDetailView({
                     {checkLabel(selectedItem.check)}
                   </span>
                 </Tooltip>
+                {selectedItem.labels.length > 0 ? (
+                  <div className="detail-label-list" aria-label={t('aria.sourceLabels')}>
+                    {selectedItem.labels.map((label) => (
+                      <span className="detail-label-chip" key={label}>
+                        <Tag size={12} />
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
               <ReviewStageNav
                 item={selectedItem}
@@ -454,16 +470,6 @@ export function ItemDetailView({
                 activeStage={selectedReviewStage}
                 onStageChange={setSelectedReviewStage}
               />
-              {selectedItem.labels.length > 0 ? (
-                <div className="label-row" aria-label={t('aria.sourceLabels')}>
-                  {selectedItem.labels.map((label) => (
-                    <span className="label-chip" key={label}>
-                      <Tag size={12} />
-                      {label}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
             </header>
 
             {selectedDetailItem ? (
@@ -477,7 +483,7 @@ export function ItemDetailView({
             {reReviewInfo && selectedCanDispatch ? (
               <SectionBlock
                 className="stage-action-section rereview-action-section"
-                tone="blue"
+                tone="amber"
                 icon={<GitPullRequest size={16} />}
                 title={t('reReview.title')}
                 description={reReviewInfo.description}
@@ -493,7 +499,7 @@ export function ItemDetailView({
             {(selectedReviewStage === 'intake' || (selectedReviewStage === 'analysis' && selectedItem.state === 'failed')) && selectedCanDispatch ? (
               <SectionBlock
                 className="stage-action-section dispatch-action-section"
-                tone={selectedCanImplementationDispatch ? 'green' : 'blue'}
+                tone={selectedCanImplementationDispatch ? 'green' : 'slate'}
                 icon={<Play size={16} />}
                 title={selectedCanImplementationDispatch ? t('dispatch.startImplementation') : selectedIsPullRequest ? t('dispatch.startReview', { target: reviewTargetName }) : t('dispatch.dispatchAnalysis')}
                 description={
@@ -537,7 +543,7 @@ export function ItemDetailView({
             {selectedReviewStage === 'intake' && selectedItem.description ? (
               <SectionBlock
                 className="brief-section"
-                tone="blue"
+                tone="slate"
                 icon={<ClipboardList size={16} />}
                 title={t('brief.title')}
                 description={selectedIsLocalTask ? t('brief.localDescription') : t('brief.sourceDescription')}
@@ -579,7 +585,7 @@ export function ItemDetailView({
             {selectedReviewStage === 'intake' && selectedHasSourceMetadata ? (
             <SectionBlock
               className="brief-section source-section"
-              tone="green"
+              tone="slate"
               icon={<Code2 size={16} />}
               title={t('source.title')}
               description={t('source.description')}
@@ -598,51 +604,56 @@ export function ItemDetailView({
             {selectedReviewStage === 'intake' && selectedSourceActivity.length > 0 ? (
               <SectionBlock
                 className="source-activity-section"
-                tone="blue"
+                tone="slate"
                 icon={<Activity size={16} />}
                 title={t('sourceActivity.title')}
                 description={t('sourceActivity.description')}
                 action={<span className="count-badge">{selectedSourceActivity.length}</span>}
               >
-                <div className="source-activity-list">
-                  {visibleSourceActivity.map((event) => (
-                    <article className="source-activity-row" key={event.id}>
-                      <span className="activity-time">{event.time}</span>
-                      <div className="activity-main">
-                        <strong>{event.title}</strong>
-                        <MarkdownBlock value={event.body} className="activity-markdown" compact />
-                      </div>
-                      <span className="activity-actor">{event.actor}</span>
-                    </article>
-                  ))}
-                  {hiddenSourceActivity.length > 0 ? (
-                    <details className="source-activity-more">
-                      <summary>
-                        <ChevronRight size={15} />
-                        {t('sourceActivity.showMore', { count: hiddenSourceActivity.length })}
-                      </summary>
-                      <div className="source-activity-list compact">
-                        {hiddenSourceActivity.map((event) => (
-                          <article className="source-activity-row" key={event.id}>
-                            <span className="activity-time">{event.time}</span>
-                            <div className="activity-main">
-                              <strong>{event.title}</strong>
-                              <MarkdownBlock value={event.body} className="activity-markdown" compact />
-                            </div>
-                            <span className="activity-actor">{event.actor}</span>
-                          </article>
-                        ))}
-                      </div>
-                    </details>
-                  ) : null}
-                </div>
+                <details className="audit-details section-disclosure source-activity-disclosure">
+                  <summary>
+                    <span>{t('sourceActivity.history')}</span>
+                  </summary>
+                  <div className="source-activity-list">
+                    {visibleSourceActivity.map((event) => (
+                      <article className="source-activity-row" key={event.id}>
+                        <span className="activity-time">{event.time}</span>
+                        <div className="activity-main">
+                          <strong>{event.title}</strong>
+                          <MarkdownBlock value={event.body} className="activity-markdown" compact />
+                        </div>
+                        <span className="activity-actor">{event.actor}</span>
+                      </article>
+                    ))}
+                    {hiddenSourceActivity.length > 0 ? (
+                      <details className="source-activity-more">
+                        <summary>
+                          <ChevronRight size={15} />
+                          {t('sourceActivity.showMore', { count: hiddenSourceActivity.length })}
+                        </summary>
+                        <div className="source-activity-list compact">
+                          {hiddenSourceActivity.map((event) => (
+                            <article className="source-activity-row" key={event.id}>
+                              <span className="activity-time">{event.time}</span>
+                              <div className="activity-main">
+                                <strong>{event.title}</strong>
+                                <MarkdownBlock value={event.body} className="activity-markdown" compact />
+                              </div>
+                              <span className="activity-actor">{event.actor}</span>
+                            </article>
+                          ))}
+                        </div>
+                      </details>
+                    ) : null}
+                  </div>
+                </details>
               </SectionBlock>
             ) : null}
 
             {showSourceDetailsPanel ? (
               <SectionBlock
                 className="source-comments-section"
-                tone="blue"
+                tone={sourceDetailsFailed ? 'amber' : 'slate'}
                 icon={<MessageSquareText size={16} />}
                 title={t('sourceComments.title')}
                 description={sourceDetailsSyncing ? t('sourceComments.loadingDescription', { provider: isGitLabItem ? 'GitLab' : 'GitHub' }) : sourceDetailsFailed ? t('sourceComments.failedDescription', { provider: isGitLabItem ? 'GitLab' : 'GitHub' }) : t('sourceComments.description')}
@@ -691,35 +702,41 @@ export function ItemDetailView({
 
             {selectedReviewStage === 'analysis' ? (
             <SectionBlock
-              className="brief-section agent-result-section"
-              tone="amber"
-              icon={<Bot size={16} />}
-              title={t('agentResult.title')}
-              description={t('agentResult.description')}
+              className="brief-section diagnostics-overview-section"
+              tone={diagnosticsNeedsAttention ? 'amber' : 'slate'}
+              icon={diagnosticsError ? <AlertTriangle size={16} /> : <Activity size={16} />}
+              title={t('diagnostics.title')}
+              description={diagnosticsNeedsAttention ? t('diagnostics.attentionDescription') : t('diagnostics.description')}
               action={<span className={`state-pill ${stateClassName(selectedItem.state)}`}>{stateLabel(selectedItem.state)}</span>}
             >
-              <InfoRowGroup className="agent-result-facts">
-                <InfoRow label={t('agentResult.agent')}>{selectedRun ? runnerKindLabel(selectedRun.runnerKind) : t('agentResult.noAgentYet')}</InfoRow>
-                <InfoRow label={t('agentResult.attempt')}>{selectedRun ? selectedRun.attempt : 0}</InfoRow>
-                <InfoRow label={t('agentResult.status')}>{selectedRun ? runStatusLabel(selectedRun.status) : t('agentResult.pending')}</InfoRow>
+              <InfoRowGroup className="diagnostics-result-facts">
+                <InfoRow label={t('diagnostics.currentState')}>{stateLabel(selectedItem.state)}</InfoRow>
+                <InfoRow label={t('diagnostics.latestRun')}>{selectedRun ? runStatusLabel(selectedRun.status) : t('diagnostics.noRun')}</InfoRow>
+                {selectedRun ? <InfoRow label={t('diagnostics.runner')}>{runnerKindLabel(selectedRun.runnerKind)}</InfoRow> : null}
               </InfoRowGroup>
-              <div className="agent-brief">
-                <div className="agent-brief-icon">
-                  <Bot size={17} />
+              {selectedRun && diagnosticsRunVisible ? (
+                <div className="run-progress diagnostics-run-progress">
+                  <div className="run-progress-head">
+                    <span>{t('diagnostics.attempt', { attempt: selectedRun.attempt })}</span>
+                    <strong>{runStatusLabel(selectedRun.status)}</strong>
+                  </div>
+                  <div className="progress-track" aria-label={t('aria.runProgress')}>
+                    <span style={{ width: `${selectedRun.progressPercent}%` }} />
+                  </div>
+                  {diagnosticsRunIsActive && selectedRun.statusMessage ? <p>{selectedRun.statusMessage}</p> : null}
                 </div>
-                <ul className="brief-list">
-                  {summaryPreviewLines(selectedItem.summary).map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-              </div>
-              <details className="technical-disclosure">
-                <summary>
-                  <Code2 size={15} />
-                  {t('agentResult.rawAgentMarkdown')}
-                </summary>
-                <MarkdownBlock value={selectedItem.summary} className="summary-markdown" />
-              </details>
+              ) : null}
+              {diagnosticsError ? (
+                <div className="diagnostics-error">
+                  <AlertTriangle size={15} />
+                  <span>{diagnosticsError}</span>
+                </div>
+              ) : !diagnosticsNeedsAttention ? (
+                <div className="stage-empty diagnostics-empty">
+                  <Activity size={24} strokeWidth={1.5} className="stage-empty-icon" aria-hidden="true" />
+                  <p className="stage-empty-copy">{t('diagnostics.empty')}</p>
+                </div>
+              ) : null}
             </SectionBlock>
             ) : null}
 
@@ -777,7 +794,7 @@ export function ItemDetailView({
                 description={t('reviewDrafts.description', { target: reviewTargetName })}
                 action={<span className="count-badge">{selectedItem.reviewDrafts.length}</span>}
               >
-                <details className="audit-details section-disclosure" open={selectedItem.reviewDrafts.some((draft) => draft.status === 'draft' || draft.status === 'publishFailed')}>
+                <details className="audit-details section-disclosure" open>
                   <summary>
                     <span>{t('reviewDrafts.draftDetails')}</span>
                   </summary>
@@ -942,13 +959,13 @@ export function ItemDetailView({
             {selectedReviewStage === 'review' && selectedItem.followUpDrafts.length > 0 ? (
               <SectionBlock
                 className="review-draft-section follow-up-draft-section"
-                tone="blue"
+                tone="slate"
                 icon={<ClipboardList size={16} />}
                 title={t('followUpDrafts.title')}
                 description={t('followUpDrafts.description')}
                 action={<span className="count-badge">{selectedItem.followUpDrafts.length}</span>}
               >
-                <details className="audit-details section-disclosure" open={selectedItem.followUpDrafts.some((draft) => draft.status === 'draft')}>
+                <details className="audit-details section-disclosure" open>
                   <summary>
                     <span>{t('followUpDrafts.followUpDetails')}</span>
                   </summary>
@@ -998,7 +1015,7 @@ export function ItemDetailView({
             {selectedReviewStage === 'review' ? (
               <SectionBlock
                 className="discussion-section"
-                tone="blue"
+                tone="slate"
                 icon={<MessageSquare size={16} />}
                 title={t('discussion.title')}
                 description={t('discussion.description')}
@@ -1145,28 +1162,16 @@ export function ItemDetailView({
                   <InfoRow label={t('closed.latestRun')}>{selectedRun ? runStatusLabel(selectedRun.status) : t('closed.noRunRecorded')}</InfoRow>
                   <InfoRow label={t('closed.check')}>{checkLabel(selectedItem.check)}</InfoRow>
                 </InfoRowGroup>
-                {selectedItem.summary ? (
-                  <div className="agent-brief closed-summary">
-                    <div className="agent-brief-icon">
-                      <Bot size={17} />
-                    </div>
-                    <ul className="brief-list">
-                      {summaryPreviewLines(selectedItem.summary).map((line) => (
-                        <li key={line}>{line}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
               </SectionBlock>
             ) : null}
 
             {selectedReviewStage === 'analysis' ? (
             <SectionBlock
-              className="latest-activity-section"
+              className="latest-activity-section diagnostics-activity-section"
               tone="slate"
               icon={<Activity size={16} />}
-              title={t('latestActivity.title')}
-              description={t('latestActivity.description')}
+              title={t('diagnostics.activityTitle')}
+              description={t('diagnostics.activityDescription')}
               action={
                 <button className="quiet-button" onClick={toggleAllTechnicalEvents}>
                   <SlidersHorizontal size={15} />
@@ -1197,22 +1202,6 @@ export function ItemDetailView({
                       <span>{t('latestActivity.feedback', { count: group.comments.length })}</span>
                       {technicalEvents.length > 0 ? <span>{t('latestActivity.technicalCount', { count: technicalEvents.length })}</span> : null}
                     </div>
-                    {group.round.summary ? (
-                      <div className="round-summary-preview">
-                        <ul className="brief-list compact">
-                          {summaryPreviewLines(group.round.summary).map((line) => (
-                            <li key={line}>{line}</li>
-                          ))}
-                        </ul>
-                        <details className="technical-disclosure">
-                          <summary>
-                            <Code2 size={15} />
-                            {t('latestActivity.rawRoundSummary')}
-                          </summary>
-                          <MarkdownBlock value={group.round.summary} className="event-markdown" compact />
-                        </details>
-                      </div>
-                    ) : null}
                     {group.runs.length > 0 ? (
                       <div className="round-run-list">
                         {group.runs.map((run) => (
@@ -1306,6 +1295,12 @@ export function ItemDetailView({
                   </details>
                   )
                 })}
+                {selectedRoundHistory.length === 0 ? (
+                  <div className="stage-empty diagnostics-empty">
+                    <Activity size={24} strokeWidth={1.5} className="stage-empty-icon" aria-hidden="true" />
+                    <p className="stage-empty-copy">{t('diagnostics.noActivity')}</p>
+                  </div>
+                ) : null}
               </div>
             </SectionBlock>
             ) : null}

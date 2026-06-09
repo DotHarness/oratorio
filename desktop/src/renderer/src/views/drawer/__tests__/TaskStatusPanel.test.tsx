@@ -114,6 +114,7 @@ describe('TaskStatusPanel', () => {
 
   it('prioritizes unresolved review actions in the drawer primary CTA', () => {
     const onOpenDetailStage = vi.fn()
+    const onRecordDecision = vi.fn()
     const { rerender } = render(
       <TaskStatusPanel
         item={makeItem({
@@ -134,9 +135,13 @@ describe('TaskStatusPanel', () => {
         onDispatchImplementationRound={vi.fn()}
         onReReviewPullRequest={vi.fn()}
         onOpenDetailStage={onOpenDetailStage}
+        onRecordDecision={onRecordDecision}
       />,
     )
 
+    const draftHeading = screen.getByRole('heading', { name: 'Review agent draft' })
+    const decisionHeading = screen.getByRole('heading', { name: 'Review decision' })
+    expect(Boolean(draftHeading.compareDocumentPosition(decisionHeading) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'Review agent draft' }))
     expect(onOpenDetailStage).toHaveBeenLastCalledWith('review', undefined)
 
@@ -159,6 +164,7 @@ describe('TaskStatusPanel', () => {
         onDispatchImplementationRound={vi.fn()}
         onReReviewPullRequest={vi.fn()}
         onOpenDetailStage={onOpenDetailStage}
+        onRecordDecision={onRecordDecision}
       />,
     )
 
@@ -183,6 +189,7 @@ describe('TaskStatusPanel', () => {
         onDispatchImplementationRound={vi.fn()}
         onReReviewPullRequest={vi.fn()}
         onOpenDetailStage={onOpenDetailStage}
+        onRecordDecision={onRecordDecision}
       />,
     )
 
@@ -206,13 +213,19 @@ describe('TaskStatusPanel', () => {
         onDispatchImplementationRound={vi.fn()}
         onReReviewPullRequest={vi.fn()}
         onOpenDetailStage={onOpenDetailStage}
+        onRecordDecision={onRecordDecision}
       />,
     )
 
+    expect(screen.getByRole('heading', { name: 'Review decision' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
     fireEvent.click(screen.getAllByRole('button', { name: 'View comments' })[0])
     expect(onOpenDetailStage).toHaveBeenLastCalledWith('review', { focus: 'discussionComposer' })
+  })
 
-    rerender(
+  it('records review decisions from the drawer action block', () => {
+    const onRecordDecision = vi.fn()
+    render(
       <TaskStatusPanel
         item={makeItem({ state: 'awaitingReview' })}
         run={undefined}
@@ -220,17 +233,38 @@ describe('TaskStatusPanel', () => {
         runnerMode="mock"
         canDispatch={false}
         canImplementationDispatch={false}
+        canDecide
         isPullRequest={false}
         reReviewInfo={null}
         onDispatchRound={vi.fn()}
         onDispatchImplementationRound={vi.fn()}
         onReReviewPullRequest={vi.fn()}
-        onOpenDetailStage={onOpenDetailStage}
+        onOpenDetailStage={vi.fn()}
+        onRecordDecision={onRecordDecision}
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Record decision' }))
-    expect(onOpenDetailStage).toHaveBeenLastCalledWith('decision', undefined)
+    expect(screen.queryByRole('button', { name: 'Record decision' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Request changes' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Reject...' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+    expect(onRecordDecision).toHaveBeenLastCalledWith('approve')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Request changes' }))
+    const sendRequest = screen.getByRole('button', { name: 'Send request' })
+    expect(sendRequest).toBeDisabled()
+    fireEvent.change(screen.getByPlaceholderText('Describe what needs to change before this can be accepted.'), { target: { value: 'Please update the tests.' } })
+    expect(sendRequest).not.toBeDisabled()
+    fireEvent.click(sendRequest)
+    expect(onRecordDecision).toHaveBeenLastCalledWith('request-changes', 'Please update the tests.')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reject...' }))
+    expect(screen.getByRole('alertdialog', { name: 'Confirm rejection from the task drawer' })).toBeInTheDocument()
+    fireEvent.change(screen.getByPlaceholderText('Optional context for why this is rejected.'), { target: { value: 'Wrong direction.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
+    expect(onRecordDecision).toHaveBeenLastCalledWith('reject', 'Wrong direction.')
   })
 
   it('shows a PR re-review shortcut when the pull request head moved', () => {

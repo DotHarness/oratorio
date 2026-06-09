@@ -211,7 +211,8 @@ export function defaultReviewStage(item: WorkItem, run?: Run): ReviewStageId {
     return item.reviewDrafts.length > 0 || item.followUpDrafts.length > 0 ? 'review' : 'decision'
   }
 
-  if (item.state === 'dispatching' || item.state === 'running' || item.state === 'failed' || run) {
+  const runNeedsDiagnostics = run && run.status !== 'succeeded'
+  if (item.state === 'dispatching' || item.state === 'running' || item.state === 'failed' || runNeedsDiagnostics) {
     return 'analysis'
   }
 

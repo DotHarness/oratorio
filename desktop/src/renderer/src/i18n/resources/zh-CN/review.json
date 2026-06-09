@@ -1,7 +1,7 @@
 {
   "stages": {
     "intake": "接收",
-    "analysis": "分析",
+    "analysis": "诊断",
     "review": "评审",
     "decision": "决策",
     "closed": "关闭"
@@ -11,10 +11,12 @@
   "meta": {
     "completed": "已完成",
     "inProgress": "进行中",
-    "pending": "待定"
+    "pending": "待定",
+    "available": "可查看"
   },
   "badge": {
     "noRun": "无运行",
+    "diagnostics": "诊断",
     "open": "开放",
     "drafts_one": "{{count}} 个草稿",
     "drafts_other": "{{count}} 个草稿",
