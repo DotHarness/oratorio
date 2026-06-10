@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<!--
+  Oratorio · DotCraft Interactive Tool UI — review card (QueueReviewRound).
+  Self-contained on purpose: the host serves this document standalone, so relative
+  asset references do not resolve. The design language mirrors DotCraft's tool-result
+  cards (tokens + chrome from desktop/src/renderer/styles/tokens.css): a single
+  bg-secondary surface, hairline-divided sections (no nested boxes), pill badges,
+  neutral-inversion primary action. Bridge contract: dotcraft tool-result-presentation.md §7.
+-->
+<style>
+  :root {
+    color-scheme: dark;
+    --bg-primary: #141515; --bg-secondary: #202020; --bg-tertiary: #2a2a2a; --bg-active: #343434;
+    --bg-hover: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    --text-primary: #eeeeec;
+    --text-secondary: color-mix(in srgb, var(--text-primary) 66%, var(--bg-primary));
+    --text-dimmed: color-mix(in srgb, var(--text-primary) 42%, var(--bg-primary));
+    --border-default: color-mix(in srgb, var(--text-primary) 10%, transparent);
+    --border-active: color-mix(in srgb, var(--text-primary) 18%, transparent);
+    --accent: #4566cc; --success: #22c55e; --warning: #eab308; --error: #ef4444; --info: #3b82f6;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.22);
+    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+    --font-mono: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace;
+  }
+  html[data-theme="light"] {
+    color-scheme: light;
+    --bg-primary: #f9f9f9; --bg-secondary: #ffffff; --bg-tertiary: #ededed; --bg-active: #e8e8e8;
+    --bg-hover: color-mix(in srgb, var(--text-primary) 6%, transparent);
+    --text-primary: #1a1c1f;
+    --text-secondary: color-mix(in srgb, var(--text-primary) 70%, var(--bg-primary));
+    --text-dimmed: color-mix(in srgb, var(--text-primary) 50%, var(--bg-primary));
+    --border-default: color-mix(in srgb, var(--text-primary) 8%, transparent);
+    --border-active: color-mix(in srgb, var(--text-primary) 12%, transparent);
+    --accent: #4f6cce; --success: #16a34a; --warning: #c9a227; --error: #dc2626; --info: #2563eb;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.06);
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; font: 13px/1.45 var(--font-ui); color: var(--text-primary); background: var(--bg-secondary); user-select: text; -webkit-font-smoothing: antialiased; }
+  .mono { font-family: var(--font-mono); }
+
+  .card { display: flex; flex-direction: column; height: 100vh; }
+
+  .head { display: flex; align-items: flex-start; gap: 10px; padding: 11px 12px; border-bottom: 1px solid var(--border-default); }
+  .head-text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+  .eyebrow { font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-dimmed); }
+  .title { font-size: 14px; font-weight: 600; line-height: 19px; color: var(--text-primary); }
+  .subtitle { font-size: 11.5px; color: var(--text-dimmed); }
+  .subtitle .id { font-family: var(--font-mono); color: var(--text-secondary); }
+  .head-meta { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+
+  .body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+  .section { padding: 12px; }
+  .section + .section { border-top: 1px solid var(--border-default); }
+  .block-title { font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--text-dimmed); margin-bottom: 8px; }
+
+  .status { display: flex; align-items: flex-start; gap: 9px; }
+  .status + .status { margin-top: 10px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--text-dimmed); }
+  .dot.tone-info { background: var(--info); }
+  .dot.tone-warning { background: var(--warning); }
+  .dot.tone-success { background: var(--success); }
+  .dot.tone-danger { background: var(--error); }
+  .status-text { display: grid; gap: 2px; min-width: 0; }
+  .status-title { font-size: 12.5px; color: var(--text-primary); }
+  .status-sub { font-size: 11.5px; color: var(--text-dimmed); white-space: pre-wrap; max-height: 120px; overflow-y: auto; }
+
+  .badge { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 999px; font-size: 11px; line-height: 1; font-weight: 500; white-space: nowrap;
+    color: var(--text-dimmed); background: color-mix(in srgb, var(--text-dimmed) 14%, transparent); border: 1px solid color-mix(in srgb, var(--text-dimmed) 28%, transparent); }
+  .badge.tone-info { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); border-color: color-mix(in srgb, var(--info) 32%, transparent); }
+  .badge.tone-warning { color: var(--warning); background: color-mix(in srgb, var(--warning) 14%, transparent); border-color: color-mix(in srgb, var(--warning) 32%, transparent); }
+  .badge.tone-success { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); border-color: color-mix(in srgb, var(--success) 32%, transparent); }
+  .badge.tone-danger { color: var(--error); background: color-mix(in srgb, var(--error) 14%, transparent); border-color: color-mix(in srgb, var(--error) 32%, transparent); }
+
+  .footer { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 10px 12px; border-top: 1px solid var(--border-default); background: color-mix(in srgb, var(--text-primary) 2%, transparent); }
+  .btn { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 11px; border-radius: 7px; border: 1px solid var(--border-default); background: var(--bg-tertiary); color: var(--text-secondary); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; transition: background 120ms ease, color 120ms ease, border-color 120ms ease; }
+  .btn:hover:not(:disabled) { background: var(--bg-active); color: var(--text-primary); border-color: var(--border-active); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.primary { margin-left: auto; background: var(--text-primary); border-color: var(--text-primary); color: var(--bg-primary); font-weight: 600; }
+  .btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--text-primary) 88%, var(--bg-primary)); color: var(--bg-primary); }
+  .btn svg { width: 13px; height: 13px; }
+
+  .notice { font-size: 12px; color: var(--text-secondary); padding: 0 12px 2px; }
+  .notice:empty { display: none; }
+  .notice.error { color: var(--error); }
+  .empty { padding: 18px 12px; text-align: center; font-size: 12px; color: var(--text-dimmed); }
+  .empty.error { color: var(--error); }
+
+  .skeleton { display: grid; gap: 9px; padding: 14px 12px; }
+  .sk-bar { height: 12px; border-radius: 4px; background: var(--bg-active); animation: skeleton-pulse 1.4s ease-in-out infinite; }
+  @keyframes skeleton-pulse { 0%, 100% { opacity: .45; } 50% { opacity: .85; } }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--border-active); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-dimmed); }
+  ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="body" id="body">
+      <div class="skeleton">
+        <div class="sk-bar" style="width:58%"></div>
+        <div class="sk-bar" style="width:84%;animation-delay:.15s"></div>
+        <div class="sk-bar" style="width:46%;animation-delay:.3s"></div>
+      </div>
+    </div>
+  </div>
+<script>
+  "use strict";
+  var pending = new Map();
+  var nextId = 1;
+  var toolInput = {};
+  var current = null;
+
+  var ICON = {
+    refresh: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v5h-5"/></svg>',
+    open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg>'
+  };
+
+  function request(method, params) {
+    return new Promise(function (resolve, reject) {
+      var id = nextId++;
+      pending.set(id, { resolve: resolve, reject: reject });
+      parent.postMessage({ jsonrpc: "2.0", id: id, method: method, params: params }, "*");
+    });
+  }
+
+  function applyContext(ctx) {
+    if (ctx && typeof ctx.theme === "string") document.documentElement.dataset.theme = ctx.theme;
+  }
+
+  function label(value) {
+    return String(value == null ? "" : value)
+      .replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " ").toLowerCase();
+  }
+
+  function statusTone(state) {
+    switch (state) {
+      case "running": case "dispatching": case "queued": case "pending": return "info";
+      case "awaitingReview": return "warning";
+      case "approved": case "succeeded": return "success";
+      case "rejected": case "failed": case "cancelled": return "danger";
+      default: return "neutral";
+    }
+  }
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  function badge(text, tone) {
+    return el("span", "badge tone-" + (tone || "neutral"), text);
+  }
+
+  function btn(icon, text, className) {
+    var b = el("button", "btn" + (className ? " " + className : ""));
+    b.type = "button";
+    b.innerHTML = ICON[icon] || "";
+    b.appendChild(document.createTextNode(text));
+    return b;
+  }
+
+  function statusRow(parent, title, state, subText) {
+    var row = el("div", "status");
+    row.appendChild(el("span", "dot tone-" + statusTone(state)));
+    var text = el("div", "status-text");
+    text.appendChild(el("div", "status-title", title));
+    if (subText) text.appendChild(el("div", "status-sub", subText));
+    row.appendChild(text);
+    parent.appendChild(row);
+  }
+
+  function itemId() {
+    return (current && (current.shortId || current.itemId)) || toolInput.itemId || "";
+  }
+
+  function render(structured, errorText) {
+    var body = document.getElementById("body");
+    body.textContent = "";
+    if (errorText) { body.appendChild(el("div", "empty error", errorText)); return; }
+
+    var detail = (structured && structured.detail) || {};
+    var item = detail.item || {};
+    current = item;
+    var rounds = Array.isArray(detail.rounds) ? detail.rounds : [];
+    var runs = Array.isArray(detail.runs) ? detail.runs : [];
+    var round = rounds.length > 0 ? rounds[rounds.length - 1] : null;
+    var run = runs.length > 0 ? runs[runs.length - 1] : null;
+
+    var head = el("div", "head");
+    var headText = el("div", "head-text");
+    headText.appendChild(el("span", "eyebrow", "Oratorio · Review round"));
+    headText.appendChild(el("span", "title", "Review round queued"));
+    var sub = el("div", "subtitle");
+    if (item.shortId) {
+      var id = el("span", "id", item.shortId);
+      sub.appendChild(id);
+      sub.appendChild(document.createTextNode("  "));
+    }
+    sub.appendChild(document.createTextNode(item.title || "(untitled)"));
+    headText.appendChild(sub);
+    head.appendChild(headText);
+    if (round && round.status != null) {
+      var meta = el("div", "head-meta");
+      meta.appendChild(badge(label(round.status), statusTone(round.status)));
+      head.appendChild(meta);
+    }
+    body.appendChild(head);
+
+    var sec = el("div", "section");
+    if (round) {
+      statusRow(sec,
+        "Round " + (round.roundNumber != null ? round.roundNumber : "?") + " · " + label(round.status),
+        round.status, round.summary || null);
+    }
+    if (run) {
+      statusRow(sec,
+        "Run · " + label(run.status) + (run.runnerKind ? " · " + label(run.runnerKind) : ""),
+        run.status, run.statusMessage || run.summary || null);
+    }
+    if (!round && !run) {
+      statusRow(sec, "The round is being prepared", "pending", "Refresh for status.");
+    }
+    body.appendChild(sec);
+
+    var noticeLine = el("div", "notice");
+    noticeLine.id = "notice";
+    body.appendChild(noticeLine);
+
+    var footer = el("div", "footer");
+    var refresh = btn("refresh", "Refresh status");
+    refresh.addEventListener("click", function () {
+      refresh.disabled = true;
+      request("tools/call", { name: "GetBoardItem", arguments: { itemId: itemId() } })
+        .then(function (result) {
+          if (result && result.isError) {
+            notice((result.content && result.content[0] && result.content[0].text) || "Refresh failed.", "error");
+            return;
+          }
+          render(result ? result.structuredContent : null);
+        })
+        .catch(function (err) { notice(err && err.message ? err.message : "Refresh failed.", "error"); })
+        .finally(function () { refresh.disabled = false; });
+    });
+    var open = btn("open", "Open in Oratorio", "primary");
+    open.addEventListener("click", function () {
+      request("ui/open-link", { url: "oratorio://open/task/" + encodeURIComponent(itemId()) }).catch(function () {});
+    });
+    footer.appendChild(refresh);
+    footer.appendChild(open);
+
+    var shell = document.querySelector(".card");
+    var existingFooter = shell.querySelector(".footer");
+    if (existingFooter) existingFooter.remove();
+    shell.appendChild(footer);
+  }
+
+  function notice(text, kind) {
+    var node = document.getElementById("notice");
+    if (!node) return;
+    node.className = "notice" + (kind ? " " + kind : "");
+    node.textContent = text;
+  }
+
+  function onToolResult(params) {
+    if (params && params.isError) {
+      render(null, (params.content && params.content[0] && params.content[0].text) || "The review round could not be loaded.");
+      return;
+    }
+    render(params ? params.structuredContent : null);
+  }
+
+  window.addEventListener("message", function (event) {
+    var m = event.data;
+    if (!m || typeof m !== "object") return;
+    if (m.id !== undefined && pending.has(m.id)) {
+      var p = pending.get(m.id);
+      pending.delete(m.id);
+      if (m.error) p.reject(new Error(m.error.message || "Request failed")); else p.resolve(m.result);
+      return;
+    }
+    if (m.method === "ui/notifications/tool-input") toolInput = (m.params && m.params.toolInput) || {};
+    else if (m.method === "ui/notifications/tool-result") onToolResult(m.params || {});
+    else if (m.method === "ui/notifications/host-context-changed") applyContext(m.params || {});
+  });
+
+  request("ui/initialize", { app: { name: "oratorio", version: "1.0" } })
+    .then(function (result) { applyContext(result && result.hostContext); })
+    .catch(function () {});
+</script>
+</body>
+</html>

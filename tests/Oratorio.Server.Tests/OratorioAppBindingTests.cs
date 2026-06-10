@@ -42,6 +42,58 @@ public sealed class OratorioAppBindingTests
     }
 
     [Fact]
+    public void ManagerTools_DeclareInteractiveUiPerContract()
+    {
+        var grantedScopes = new HashSet<string>(StringComparer.Ordinal)
+        {
+            AppServerDynamicToolCatalog.BoardReadScope,
+            AppServerDynamicToolCatalog.BoardManageScope
+        };
+        var tools = AppServerDynamicToolCatalog.AppBoundManagerTools(JsonOptions, grantedScopes)
+            .ToDictionary(tool => tool.Name, StringComparer.Ordinal);
+
+        // The DotCraft Interactive Tool UI contract (tool-result-presentation.md §15).
+        Assert.Equal(
+            AppServerDynamicToolCatalog.BoardUiResourceUri,
+            tools[AppServerDynamicToolCatalog.ListBoardItemsName].Meta?.Ui?.ResourceUri);
+        Assert.Equal(
+            AppServerDynamicToolCatalog.ItemUiResourceUri,
+            tools[AppServerDynamicToolCatalog.GetBoardItemName].Meta?.Ui?.ResourceUri);
+        Assert.Equal(
+            AppServerDynamicToolCatalog.ReviewUiResourceUri,
+            tools[AppServerDynamicToolCatalog.QueueReviewRoundName].Meta?.Ui?.ResourceUri);
+        Assert.Null(tools[AppServerDynamicToolCatalog.CreateBoardTaskName].Meta);
+
+        // UI-bearing tools stay model-visible and become app-invocable (card refresh/actions).
+        Assert.All(
+            tools.Values.Where(tool => tool.Meta?.Ui is not null),
+            tool =>
+            {
+                Assert.Contains("model", tool.Meta!.Ui!.Visibility ?? []);
+                Assert.Contains("app", tool.Meta!.Ui!.Visibility ?? []);
+            });
+
+        // The wrapper must serialize _meta.ui (not a top-level ui) to match DotCraft's attach wire.
+        var listSpec = tools[AppServerDynamicToolCatalog.ListBoardItemsName];
+        using var wire = JsonSerializer.SerializeToDocument(listSpec, global::DotCraft.Sdk.Wire.DotCraftJson.Options);
+        Assert.True(wire.RootElement.TryGetProperty("_meta", out var metaEl));
+        Assert.Equal(
+            AppServerDynamicToolCatalog.BoardUiResourceUri,
+            metaEl.GetProperty("ui").GetProperty("resourceUri").GetString());
+        Assert.False(wire.RootElement.TryGetProperty("ui", out _));
+
+        // Every declared ui:// resource ships in the served UiResources folder.
+        var folder = Path.Combine(AppContext.BaseDirectory, "UiResources");
+        foreach (var tool in tools.Values.Where(tool => tool.Meta?.Ui is not null))
+        {
+            var relative = tool.Meta!.Ui!.ResourceUri[(AppServerDynamicToolCatalog.UiResourcePrefix.Length + 1)..];
+            Assert.True(
+                File.Exists(Path.Combine(folder, relative)),
+                $"Missing UI resource file for {tool.Name}: {relative}");
+        }
+    }
+
+    [Fact]
     public async Task ToolHandler_ValidatesGrant_AndCallsBoardTools()
     {
         await using var app = new TestOratorioApp();

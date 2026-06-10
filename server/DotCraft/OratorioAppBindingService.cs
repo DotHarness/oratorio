@@ -247,6 +247,7 @@ public sealed class OratorioAppBindingService(
             var handler = scope.ServiceProvider.GetRequiredService<OratorioAppBindingToolHandler>();
             return await handler.HandleAsync(context, call, handlerCt);
         });
+        RegisterUiResources(client, binding.BindingId);
 
         var tools = AppServerDynamicToolCatalog.AppBoundManagerTools(JsonOptions, context.GrantedScopes);
         var direct = tools
@@ -293,6 +294,27 @@ public sealed class OratorioAppBindingService(
         _activeBindings[binding.BindingId] = client;
         _ = Task.Run(() => KeepBindingAliveAsync(binding.BindingId, client));
         return binding.BindingId;
+    }
+
+    /// <summary>
+    /// Serves the DotCraft Interactive Tool UI documents (board/item/review cards) on
+    /// <c>item/resource/read</c>. The registrations live and die with the binding's client.
+    /// </summary>
+    private void RegisterUiResources(IDotCraftAppServerClient client, string bindingId)
+    {
+        var folder = Path.Combine(AppContext.BaseDirectory, "UiResources");
+        try
+        {
+            client.ServeUiResources(AppServerDynamicToolCatalog.UiResourcePrefix, folder);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                ex,
+                "Unable to serve Oratorio interactive tool UI resources from {Folder} for binding {BindingId}; DotCraft falls back to text results.",
+                folder,
+                bindingId);
+        }
     }
 
     private async Task UpsertBoardToolsContextBlockAsync(

@@ -22,4 +22,9 @@
     <ProjectReference Include="..\..\dotcraft\sdk\dotnet\src\DotCraft.Sdk\DotCraft.Sdk.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- DotCraft Interactive Tool UI documents served on item/resource/read. -->
+    <Content Include="UiResources\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

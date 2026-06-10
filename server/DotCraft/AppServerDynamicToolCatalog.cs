@@ -25,6 +25,14 @@ public static class AppServerDynamicToolCatalog
     public const string BoardToolsContextBlockId = "oratorio.boardTools";
     public const string BoardToolsContextBlockTitle = "Oratorio board tools";
 
+    /// <summary>DotCraft Interactive Tool UI resources (served on <c>item/resource/read</c>).</summary>
+    public const string UiResourcePrefix = "ui://oratorio";
+    public const string BoardUiResourceUri = $"{UiResourcePrefix}/board.html";
+    public const string ItemUiResourceUri = $"{UiResourcePrefix}/item.html";
+    public const string ReviewUiResourceUri = $"{UiResourcePrefix}/review.html";
+
+    private static readonly string[] ModelAndAppVisibility = ["model", "app"];
+
     public static AppServerDynamicToolSpec SubmitDiscussionReply(JsonSerializerOptions jsonOptions) =>
         new(
             Namespace: Namespace,
@@ -130,7 +138,11 @@ public static class AppServerDynamicToolCatalog
                     limit = new { type = "integer", minimum = 1, maximum = 100 },
                     includeArchived = new { type = "boolean" }
                 }
-            }, jsonOptions));
+            }, jsonOptions),
+            Meta: new AppServerDynamicToolMeta(new AppServerDynamicToolUiMeta(
+                BoardUiResourceUri,
+                Visibility: ModelAndAppVisibility,
+                PrefersBorder: true)));
 
     public static AppServerDynamicToolSpec GetBoardItem(JsonSerializerOptions jsonOptions) =>
         new(
@@ -145,7 +157,11 @@ public static class AppServerDynamicToolCatalog
                     itemId = new { type = "string", description = "Oratorio item id or task short id." }
                 },
                 required = new[] { "itemId" }
-            }, jsonOptions));
+            }, jsonOptions),
+            Meta: new AppServerDynamicToolMeta(new AppServerDynamicToolUiMeta(
+                ItemUiResourceUri,
+                Visibility: ModelAndAppVisibility,
+                PrefersBorder: true)));
 
     public static AppServerDynamicToolSpec CreateBoardTask(JsonSerializerOptions jsonOptions) =>
         new(
@@ -195,7 +211,11 @@ public static class AppServerDynamicToolCatalog
             Approval: new AppServerToolApprovalDescriptor(
                 "remoteResource",
                 "itemId",
-                Operation: "Queue Oratorio review round"));
+                Operation: "Queue Oratorio review round"),
+            Meta: new AppServerDynamicToolMeta(new AppServerDynamicToolUiMeta(
+                ReviewUiResourceUri,
+                Visibility: ModelAndAppVisibility,
+                PrefersBorder: true)));
 
     public static IReadOnlyList<string> DynamicToolIds(IReadOnlyList<AppServerDynamicToolSpec> dynamicTools) =>
         dynamicTools

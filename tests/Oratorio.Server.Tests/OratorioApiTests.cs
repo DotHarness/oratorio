@@ -5566,6 +5566,14 @@ internal sealed class FakeAppServerClient(
     public void SetDynamicToolHandler(Func<AppServerDynamicToolCall, CancellationToken, Task<AppServerDynamicToolResult>> handler) =>
         _dynamicToolHandler = handler;
 
+    public IDisposable ServeUiResources(string uriPrefix, string folderPath) => EmptyDisposable.Instance;
+
+    private sealed class EmptyDisposable : IDisposable
+    {
+        public static readonly EmptyDisposable Instance = new();
+        public void Dispose() { }
+    }
+
     public Task<string> StartThreadAsync(AppServerThreadStartRequest request, CancellationToken ct)
     {
         var threadId = startThread(request);

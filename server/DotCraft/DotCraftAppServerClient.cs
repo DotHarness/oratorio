@@ -1,11 +1,14 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using DotCraft.Sdk.Wire;
 using Oratorio.Server.Api;
 using SdkClient = DotCraft.Sdk.AppServer.DotCraftClient;
 using SdkClientOptions = DotCraft.Sdk.AppServer.DotCraftClientOptions;
 using SdkDynamicToolCall = DotCraft.Sdk.AppServer.DynamicToolCall;
+using SdkDynamicToolMeta = DotCraft.Sdk.AppServer.DynamicToolMeta;
 using SdkDynamicToolResult = DotCraft.Sdk.AppServer.DynamicToolResult;
 using SdkDynamicToolSpec = DotCraft.Sdk.AppServer.DynamicToolSpec;
+using SdkDynamicToolUiMeta = DotCraft.Sdk.AppServer.DynamicToolUiMeta;
 using SdkSessionIdentity = DotCraft.Sdk.AppServer.SessionIdentity;
 using SdkThreadResumeRequest = DotCraft.Sdk.AppServer.DotCraftThreadResumeRequest;
 using SdkThreadStartRequest = DotCraft.Sdk.AppServer.DotCraftThreadStartRequest;
@@ -49,6 +52,12 @@ public interface IDotCraftAppServerClient : IAsyncDisposable
     Task<AppBindingAttachToolsResponse> AttachAppBindingToolsAsync(AppBindingAttachToolsRequest request, CancellationToken ct);
     Task<AppBindingContextBlockUpsertResponse> UpsertAppBindingContextBlockAsync(AppBindingContextBlockUpsertRequest request, CancellationToken ct);
     IAsyncEnumerable<AppServerNotification> ReadNotificationsAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Serves every file in <paramref name="folderPath"/> as a DotCraft Interactive Tool UI
+    /// resource under the given <c>ui://</c> prefix (answered on <c>item/resource/read</c>).
+    /// </summary>
+    IDisposable ServeUiResources(string uriPrefix, string folderPath);
 }
 
 public sealed record AppServerThreadStartRequest(
@@ -74,7 +83,26 @@ public sealed record AppServerDynamicToolSpec(
     string Description,
     JsonElement InputSchema,
     bool DeferLoading = false,
-    AppServerToolApprovalDescriptor? Approval = null);
+    AppServerToolApprovalDescriptor? Approval = null,
+    // This wrapper is serialized directly onto the app/binding/attachTools wire, so the field
+    // MUST be `_meta` (not `ui`) to match DotCraft's DynamicToolSpec contract.
+    [property: JsonPropertyName("_meta")] AppServerDynamicToolMeta? Meta = null);
+
+/// <summary>
+/// Extensible <c>_meta</c> envelope on a dynamic tool spec (MCP Apps); carries the Interactive
+/// Tool UI declaration.
+/// </summary>
+public sealed record AppServerDynamicToolMeta(
+    AppServerDynamicToolUiMeta? Ui = null);
+
+/// <summary>
+/// DotCraft Interactive Tool UI declaration (`_meta.ui`): the `ui://` resource DotCraft Desktop
+/// renders for this tool's results, in a sandboxed iframe with a postMessage bridge.
+/// </summary>
+public sealed record AppServerDynamicToolUiMeta(
+    string ResourceUri,
+    IReadOnlyList<string>? Visibility = null,
+    bool? PrefersBorder = null);
 
 public sealed record AppServerToolApprovalDescriptor(
     string Kind,
@@ -95,7 +123,8 @@ public sealed record AppServerDynamicToolResult(
     IReadOnlyList<AppServerToolContentItem>? ContentItems = null,
     object? StructuredResult = null,
     string? ErrorCode = null,
-    string? ErrorMessage = null);
+    string? ErrorMessage = null,
+    object? Meta = null);
 
 public sealed record AppServerToolContentItem(string Type, string Text);
 
@@ -421,6 +450,9 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
             request,
             ct);
 
+    public IDisposable ServeUiResources(string uriPrefix, string folderPath) =>
+        client.ServeStaticUiResources(uriPrefix, folderPath);
+
     public async IAsyncEnumerable<AppServerNotification> ReadNotificationsAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
@@ -459,7 +491,13 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
                     tool.Approval.Kind,
                     tool.Approval.TargetArgument,
                     tool.Approval.Operation,
-                    tool.Approval.OperationArgument));
+                    tool.Approval.OperationArgument),
+            tool.Meta?.Ui is null
+                ? null
+                : new SdkDynamicToolMeta(new SdkDynamicToolUiMeta(
+                    tool.Meta.Ui.ResourceUri,
+                    tool.Meta.Ui.Visibility,
+                    PrefersBorder: tool.Meta.Ui.PrefersBorder)));
 
     private static IReadOnlyList<SdkTurnInputPart> NormalizeInput(IReadOnlyList<TurnInputPartDto> input) =>
         input
@@ -484,7 +522,8 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
             result.ContentItems?.Select(item => new SdkToolContentItem(item.Type, item.Text)).ToArray(),
             result.StructuredResult,
             result.ErrorCode,
-            result.ErrorMessage);
+            result.ErrorMessage,
+            result.Meta);
 
     private static ConversationItemDto ToConversationItem(JsonElement item, string? fallbackTurnId)
     {
