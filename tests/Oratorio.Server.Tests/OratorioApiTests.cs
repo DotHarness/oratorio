@@ -4445,6 +4445,33 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
+    public async Task GitHubApiClient_CreatePullRequestReviewThreadReply_UsesGraphQlMutation()
+    {
+        var handler = new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """{"data":{"addPullRequestReviewThreadReply":{"comment":{"id":"PRRC_reply"}}}}""",
+                Encoding.UTF8,
+                "application/json")
+        });
+        var client = CreateGitHubApiClient(handler);
+
+        var response = await client.CreatePullRequestReviewThreadReplyAsync(
+            new GitHubRepositoryRef("dotcraft", "oratorio"),
+            "PRRT_thread",
+            "Resolved because the follow-up commit addressed it.",
+            CancellationToken.None);
+
+        Assert.Equal("PRRC_reply", response.ExternalId);
+        Assert.Equal("/graphql", handler.LastRequestUri?.AbsolutePath);
+        using var document = JsonDocument.Parse(handler.LastRequestBody!);
+        Assert.Contains("addPullRequestReviewThreadReply", document.RootElement.GetProperty("query").GetString(), StringComparison.Ordinal);
+        var variables = document.RootElement.GetProperty("variables");
+        Assert.Equal("PRRT_thread", variables.GetProperty("threadId").GetString());
+        Assert.Equal("Resolved because the follow-up commit addressed it.", variables.GetProperty("body").GetString());
+    }
+
+    [Fact]
     public async Task GitHubApiClient_WriteFailure_IncludesGitHubResponseBody()
     {
         var handler = new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.UnprocessableEntity)
@@ -4844,6 +4871,7 @@ internal sealed class FakeGitHubApiClient : IGitHubApiClient
     public List<GitHubPullRequestReviewWrite> PullRequestReviews { get; } = [];
     public List<GitHubCheckRunWrite> CheckRuns { get; } = [];
     public List<GitHubPullRequestCreateWrite> PullRequestCreates { get; } = [];
+    public List<string> WriteOperations { get; } = [];
     public Dictionary<string, List<GitHubIssue>> IssuesByRepository { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, List<GitHubPullRequest>> PullRequestsByRepository { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, TimeSpan> ListIssueDelays { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -5160,6 +5188,7 @@ index 3333333..4444444 100644
         return Task.FromResult(new GitHubWriteResponse(checkRunId, $"https://github.example.test/{repository.FullName}/runs/{checkRunId}", $$"""{"id":"{{checkRunId}}"}"""));
     }
 
+    public List<GitHubReviewThreadReplyWrite> ReviewThreadReplies { get; } = [];
     public List<(string ThreadId, bool Resolved)> ReviewThreadResolutions { get; } = [];
 
     public Task<IReadOnlyList<GitHubReviewThread>> ListPullRequestReviewThreadsAsync(GitHubRepositoryRef repository, int number, CancellationToken ct)
@@ -5170,16 +5199,29 @@ index 3333333..4444444 100644
         {
             foreach (var comment in review.Comments)
             {
-                threads.Add(new GitHubReviewThread($"thread-{number}-{index++}", false, [comment.Body]));
+                var threadId = $"thread-{number}-{index++}";
+                var bodies = new List<string> { comment.Body };
+                bodies.AddRange(ReviewThreadReplies.Where(reply => reply.ThreadId == threadId).Select(reply => reply.Body));
+                threads.Add(new GitHubReviewThread(threadId, false, bodies));
             }
         }
 
         return Task.FromResult<IReadOnlyList<GitHubReviewThread>>(threads);
     }
 
+    public Task<GitHubWriteResponse> CreatePullRequestReviewThreadReplyAsync(GitHubRepositoryRef repository, string threadId, string body, CancellationToken ct)
+    {
+        MaybeFailWrite();
+        WriteOperations.Add($"reply:{threadId}");
+        ReviewThreadReplies.Add(new GitHubReviewThreadReplyWrite(repository, threadId, body));
+        var id = $"review-thread-reply:{400 + ReviewThreadReplies.Count - 1}";
+        return Task.FromResult(new GitHubWriteResponse(id, $"https://github.example.test/{repository.FullName}/pull/184#discussion_r{400 + ReviewThreadReplies.Count - 1}", $$"""{"id":"{{id}}"}"""));
+    }
+
     public Task<GitHubWriteResponse> ResolveReviewThreadAsync(GitHubRepositoryRef repository, string threadId, bool resolved, CancellationToken ct)
     {
         MaybeFailWrite();
+        WriteOperations.Add($"resolve:{threadId}:{resolved}");
         ReviewThreadResolutions.Add((threadId, resolved));
         return Task.FromResult(new GitHubWriteResponse(threadId, null, $$"""{"threadId":"{{threadId}}","resolved":{{(resolved ? "true" : "false")}}}"""));
     }
@@ -5212,6 +5254,8 @@ index 3333333..4444444 100644
 internal sealed record GitHubIssueCommentWrite(GitHubRepositoryRef Repository, int Number, string Body);
 
 internal sealed record GitHubPullRequestReviewWrite(GitHubRepositoryRef Repository, int Number, string Event, string Body, string? CommitId, IReadOnlyList<GitHubPullRequestReviewCommentWrite> Comments);
+
+internal sealed record GitHubReviewThreadReplyWrite(GitHubRepositoryRef Repository, string ThreadId, string Body);
 
 internal sealed class GitHubCheckRunWrite(
     GitHubRepositoryRef repository,

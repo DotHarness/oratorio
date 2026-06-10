@@ -168,10 +168,10 @@ public sealed class ReviewFindingResolutionService(
             Repository = publishWrite.Repository,
             Number = publishWrite.Number,
             HeadSha = draft.Item!.HeadSha,
-            RequestJson = JsonSerializer.Serialize(new { threadId = comment.RemoteThreadId, resolved }, JsonOptions),
             CreatedAt = now,
             UpdatedAt = now
         };
+        write.RequestJson = JsonSerializer.Serialize(BuildRemoteResolveRequest(comment, write.WriteId, publishWrite.Source, resolved), JsonOptions);
         db.SourceWriteLogs.Add(write);
         comment.RemoteResolveWriteId = write.WriteId;
 
@@ -250,6 +250,33 @@ public sealed class ReviewFindingResolutionService(
 
     private static string KindLabel(ReviewFindingResolutionKind kind) =>
         kind == ReviewFindingResolutionKind.Fixed ? "fixed" : "dismissed";
+
+    private static Dictionary<string, object?> BuildRemoteResolveRequest(
+        OratorioReviewDraftComment comment,
+        string writeId,
+        string source,
+        bool resolved)
+    {
+        var request = new Dictionary<string, object?>
+        {
+            ["threadId"] = comment.RemoteThreadId,
+            ["resolved"] = resolved
+        };
+        if (resolved &&
+            string.Equals(source, "github", StringComparison.OrdinalIgnoreCase) &&
+            comment.ResolutionKind is { } kind &&
+            !string.IsNullOrWhiteSpace(comment.ResolutionNote))
+        {
+            var marker = $"oratorio-resolution:{writeId}";
+            request["replyMarker"] = marker;
+            request["replyBody"] = BuildResolutionReplyBody(kind, comment.ResolutionNote, marker);
+        }
+
+        return request;
+    }
+
+    private static string BuildResolutionReplyBody(ReviewFindingResolutionKind kind, string note, string marker) =>
+        $"Oratorio resolved this finding as **{KindLabel(kind)}**.\n\nReason: {note.Trim()}\n\n<!-- {marker} -->";
 
     private static ResolveReviewFindingResponse ToResponse(OratorioReviewDraftComment comment) =>
         new(comment.DraftCommentId, comment.ResolutionState.ToString(), comment.ResolutionKind?.ToString());

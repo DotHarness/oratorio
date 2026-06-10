@@ -468,7 +468,7 @@ public sealed class GitHubWriteService(
                 SourceWriteKind.IssueComment => await client.CreateIssueCommentAsync(repository, write.Number.Value, ReadString(write.RequestJson, "body"), ct),
                 SourceWriteKind.PullRequestReview => await CreatePullRequestReviewAsync(repository, write, ct),
                 SourceWriteKind.CheckRun => await ExecuteCheckRunAsync(repository, write, ct),
-                SourceWriteKind.ResolveReviewThread => await client.ResolveReviewThreadAsync(repository, ReadString(write.RequestJson, "threadId"), ReadBool(write.RequestJson, "resolved"), ct),
+                SourceWriteKind.ResolveReviewThread => await ExecuteReviewThreadResolutionAsync(repository, write, ct),
                 _ => throw new InvalidOperationException($"Unsupported source write kind: {write.Kind}")
             };
 
@@ -554,6 +554,66 @@ public sealed class GitHubWriteService(
             ? await client.CreatePullRequestReviewAsync(repository, write.Number!.Value, @event, body, commitId, ct)
             : await client.CreatePullRequestReviewAsync(repository, write.Number!.Value, @event, body, commitId, comments, ct);
     }
+
+    private async Task<GitHubWriteResponse> ExecuteReviewThreadResolutionAsync(GitHubRepositoryRef repository, OratorioSourceWriteLog write, CancellationToken ct)
+    {
+        var threadId = ReadString(write.RequestJson, "threadId");
+        var resolved = ReadBool(write.RequestJson, "resolved");
+        var replyBody = ReadOptionalString(write.RequestJson, "replyBody");
+        var replyMarker = ReadOptionalString(write.RequestJson, "replyMarker");
+        GitHubWriteResponse? replyResponse = null;
+        var replySkipped = false;
+
+        if (resolved && !string.IsNullOrWhiteSpace(replyBody))
+        {
+            if (!string.IsNullOrWhiteSpace(replyMarker) &&
+                await ReviewThreadContainsMarkerAsync(repository, write.Number!.Value, threadId, replyMarker, ct))
+            {
+                replySkipped = true;
+            }
+            else
+            {
+                replyResponse = await client.CreatePullRequestReviewThreadReplyAsync(repository, threadId, replyBody, ct);
+            }
+        }
+
+        var resolveResponse = await client.ResolveReviewThreadAsync(repository, threadId, resolved, ct);
+        if (replyResponse is null && !replySkipped)
+        {
+            return resolveResponse;
+        }
+
+        return new GitHubWriteResponse(
+            resolveResponse.ExternalId,
+            replyResponse?.ExternalUrl ?? resolveResponse.ExternalUrl,
+            JsonSerializer.Serialize(new
+            {
+                replySkipped,
+                reply = replyResponse is null ? null : ToAuditResponse(replyResponse),
+                resolve = ToAuditResponse(resolveResponse)
+            }, JsonOptions));
+    }
+
+    private async Task<bool> ReviewThreadContainsMarkerAsync(
+        GitHubRepositoryRef repository,
+        int number,
+        string threadId,
+        string replyMarker,
+        CancellationToken ct)
+    {
+        var threads = await client.ListPullRequestReviewThreadsAsync(repository, number, ct);
+        return threads.Any(thread =>
+            string.Equals(thread.Id, threadId, StringComparison.Ordinal) &&
+            thread.CommentBodies.Any(body => body.Contains(replyMarker, StringComparison.Ordinal)));
+    }
+
+    private static object ToAuditResponse(GitHubWriteResponse response) =>
+        new
+        {
+            response.ExternalId,
+            response.ExternalUrl,
+            response.ResponseJson
+        };
 
     private async Task<GitHubWriteResponse> ExecuteCheckRunAsync(GitHubRepositoryRef repository, OratorioSourceWriteLog write, CancellationToken ct)
     {
