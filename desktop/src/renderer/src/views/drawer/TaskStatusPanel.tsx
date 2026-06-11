@@ -1,15 +1,26 @@
 import { useEffect, useState } from 'react'
-import { Activity, Bot, CheckCircle2, ClipboardList, GitBranch, GitPullRequest, MessageSquare, PanelRightOpen, Play, ShieldCheck, Sparkles, XCircle } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { Activity, Bot, Brain, CheckCircle2, ClipboardList, GitBranch, GitPullRequest, MessageSquare, PanelRightOpen, Pencil, Play, ShieldCheck, Sparkles, Terminal, Wrench, XCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { MarkdownBlock } from '../../components/primitives/MarkdownBlock'
 import { SectionBlock } from '../../components/primitives/SectionBlock'
 import { Tooltip } from '../../components/primitives/Tooltip'
 import type { BriefFields, DeliveryPolicy, ReReviewInfo, ReviewStageId, Run, RunnerMode, WorkItem } from '../../lib/types'
-import { runnerKindLabel, runnerModeLabel, runStatusLabel, summaryPreviewLines } from '../../lib/format'
+import type { LiveActivity, LiveActivityKind } from '../../lib/liveActivity'
+import { isActiveRun, runnerKindLabel, runnerModeLabel, runStatusLabel, summaryPreviewLines } from '../../lib/format'
+
+const liveActivityIcons: Record<LiveActivityKind, ReactNode> = {
+  thinking: <Brain size={16} />,
+  writing: <Pencil size={16} />,
+  command: <Terminal size={16} />,
+  tool: <Wrench size={16} />,
+  working: <Bot size={16} />,
+}
 
 type TaskStatusPanelProps = {
   item: WorkItem | null | undefined
   run?: Run
+  liveActivity?: LiveActivity | null
   brief: BriefFields
   runnerMode: RunnerMode
   canDispatch: boolean
@@ -64,6 +75,7 @@ function latestEntry<T>(items: T[]) {
 export function TaskStatusPanel({
   item,
   run,
+  liveActivity,
   brief,
   runnerMode,
   canDispatch,
@@ -114,6 +126,18 @@ export function TaskStatusPanel({
   const canShowNextAction = canDispatch && item.state !== 'archived' && item.state !== 'awaitingReview' && !reviewNextAction && !canShowReReviewAction
   const canShowDecisionAction = item.state === 'awaitingReview'
   const canShowRunStatus = Boolean(run && shouldShowRunDiagnostics(item, run))
+  const liveLine = run && liveActivity && isActiveRun(run.status) ? liveActivity : null
+  const runStatusIcon = liveLine ? liveActivityIcons[liveLine.kind] : <Bot size={16} />
+  const runStatusDescription: ReactNode = run?.errorMessage
+    ? run.errorMessage
+    : liveLine
+      ? (
+          <>
+            {t(`run.activity.${liveLine.kind}`)}
+            {liveLine.tail ? <span className="task-status-live-tail"> · {liveLine.tail}</span> : null}
+          </>
+        )
+      : run?.statusMessage ?? t('run.waiting')
   const draftCount = item.reviewDrafts.length + item.implementationDrafts.length
   const artifactCount = draftCount + item.followUpDrafts.length + item.sourceWrites.length + item.comments.length
   const commentActionLabel = item.comments.length > 0 ? t('commentAction.view') : t('commentAction.add')
@@ -159,9 +183,9 @@ export function TaskStatusPanel({
       {canShowRunStatus && run ? (
         <SectionBlock
           tone="slate"
-          icon={<Bot size={16} />}
+          icon={runStatusIcon}
           title={t('run.attempt', { kind: runnerKindLabel(run.runnerKind), attempt: run.attempt })}
-          description={run.errorMessage ?? run.statusMessage ?? t('run.waiting')}
+          description={runStatusDescription}
           action={<span className={`status-chip ${run.status}`}>{runStatusLabel(run.status)}</span>}
         >
           <div className="run-progress task-status-run-progress">

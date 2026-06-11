@@ -39,7 +39,14 @@
   "run": {
     "attempt": "{{kind}} attempt {{attempt}}",
     "waiting": "Waiting for runner update.",
-    "progress": "Run progress"
+    "progress": "Run progress",
+    "activity": {
+      "thinking": "Thinking",
+      "writing": "Writing",
+      "command": "Running command",
+      "tool": "Using tool",
+      "working": "Working"
+    }
   },
   "reReview": {
     "title": "Review latest commit",

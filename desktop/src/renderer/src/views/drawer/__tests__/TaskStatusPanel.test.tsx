@@ -301,6 +301,52 @@ describe('TaskStatusPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Re-review PR' }))
     expect(onReReviewPullRequest).toHaveBeenCalledOnce()
   })
+
+  it('shows the live activity verb and tail in place of the heartbeat message while a run streams', () => {
+    render(
+      <TaskStatusPanel
+        item={makeItem({ state: 'running' })}
+        run={makeRun({ status: 'running' })}
+        liveActivity={{ runId: 'run-1', kind: 'writing', tail: 'updating the retry path' }}
+        brief={{ summary: '', keyDetails: '', whyItMatters: '', desiredOutcome: '' }}
+        runnerMode="appServer"
+        canDispatch={false}
+        canImplementationDispatch={false}
+        isPullRequest={false}
+        reReviewInfo={null}
+        onDispatchRound={vi.fn()}
+        onDispatchImplementationRound={vi.fn()}
+        onReReviewPullRequest={vi.fn()}
+        onOpenDetailStage={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Writing')).toBeInTheDocument()
+    expect(screen.getByText(/updating the retry path/)).toBeInTheDocument()
+    expect(screen.queryByText('DotCraft agent is producing output.')).not.toBeInTheDocument()
+  })
+
+  it('falls back to the run heartbeat message when there is no live activity', () => {
+    render(
+      <TaskStatusPanel
+        item={makeItem({ state: 'running' })}
+        run={makeRun({ status: 'running' })}
+        liveActivity={null}
+        brief={{ summary: '', keyDetails: '', whyItMatters: '', desiredOutcome: '' }}
+        runnerMode="appServer"
+        canDispatch={false}
+        canImplementationDispatch={false}
+        isPullRequest={false}
+        reReviewInfo={null}
+        onDispatchRound={vi.fn()}
+        onDispatchImplementationRound={vi.fn()}
+        onReReviewPullRequest={vi.fn()}
+        onOpenDetailStage={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('DotCraft agent is producing output.')).toBeInTheDocument()
+  })
 })
 
 function makeReviewDraft(): WorkItem['reviewDrafts'][number] {

@@ -30,6 +30,7 @@ import { NoticeToastHost } from '../components/feedback/NoticeToastHost'
 import { OnboardingTour } from '../components/onboarding/OnboardingTour'
 import { markOnboardingSeen, shouldShowOnboarding } from '../lib/onboarding'
 import { useBoardStream } from '../hooks/useBoardStream'
+import { reduceLiveActivity, type LiveActivity } from '../lib/liveActivity'
 import { applyBoardEvent } from '../lib/sortOrder'
 import { parseTaskSearchQuery, taskSearchApiSource } from '../lib/taskSearch'
 import { DesktopTitlebar } from './DesktopTitlebar'
@@ -42,6 +43,7 @@ import type {
   DotCraftAppBindingStatusResponse,
   DotCraftStatus,
   DotCraftStatusResponse,
+  DrawerStreamEvent,
   FollowUpDraft,
   GitHubSyncJob,
   GitHubSyncMode,
@@ -255,6 +257,7 @@ function OratorioApp() {
   const [closedError, setClosedError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedDetail, setSelectedDetail] = useState<WorkItem | null>(null)
+  const [liveActivity, setLiveActivity] = useState<LiveActivity | null>(null)
   const [query, setQuery] = useState('')
   const [repositoryFilter, setRepositoryFilter] = useState('all')
   const [feedbackDraft, setFeedbackDraft] = useState('')
@@ -323,6 +326,7 @@ function OratorioApp() {
   const closedRequestIdRef = useRef(0)
   const selectedIdRef = useRef<string | null>(null)
   const selectedDetailRef = useRef<WorkItem | null>(null)
+  const focusedRunIdRef = useRef<string | null>(null)
   const initialRefreshStartedRef = useRef(false)
   const noticeIdRef = useRef(0)
   const celebrationTimerRef = useRef<number | null>(null)
@@ -817,6 +821,10 @@ function OratorioApp() {
 
   const applyStreamEvent = useCallback((event: BoardStreamEvent) => {
     if (event.type.startsWith('drawer/')) {
+      const drawerEvent = event as DrawerStreamEvent
+      if (drawerEvent.runId === focusedRunIdRef.current) {
+        setLiveActivity((current) => reduceLiveActivity(current, drawerEvent))
+      }
       return
     }
 
@@ -871,7 +879,24 @@ function OratorioApp() {
     onEvent: applyStreamEvent,
     onStatus: handleBoardStreamStatus,
   })
-  void sendBoardStreamFrame
+
+  // Focus the open drawer's active run so the backend streams its drawer
+  // events here, and fold them into the single-line live activity status.
+  // Drawer events for every other run stay server-side (BoardEventBroker only
+  // forwards focused runs), so this never pulls a full conversation client-side.
+  const focusedRunId = selectedRunIsActive && selectedRun ? selectedRun.runId : null
+  useEffect(() => {
+    focusedRunIdRef.current = focusedRunId
+    setLiveActivity(null)
+    if (!focusedRunId) {
+      return
+    }
+
+    sendBoardStreamFrame({ type: 'focus', runId: focusedRunId })
+    return () => {
+      sendBoardStreamFrame({ type: 'unfocus', runId: focusedRunId })
+    }
+  }, [focusedRunId, sendBoardStreamFrame])
 
   useEffect(() => {
     selectedIdRef.current = selectedId
@@ -2439,6 +2464,7 @@ function OratorioApp() {
                 <TaskStatusPanel
                   item={selectedItem}
                   run={selectedRun}
+                  liveActivity={selectedRun && liveActivity?.runId === selectedRun.runId ? liveActivity : null}
                   brief={selectedBrief}
                   runnerMode={runnerMode}
                   canDispatch={selectedCanDispatch}
