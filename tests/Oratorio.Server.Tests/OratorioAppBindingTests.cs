@@ -94,6 +94,22 @@ public sealed class OratorioAppBindingTests
     }
 
     [Fact]
+    public void InteractiveUiResources_AttachBridgeTokenToHostActions()
+    {
+        var uiFolder = Path.Combine(FindRepositoryRoot(), "server", "UiResources");
+        foreach (var fileName in new[] { "board.html", "item.html", "review.html" })
+        {
+            var html = File.ReadAllText(Path.Combine(uiFolder, fileName));
+
+            Assert.Contains("var bridgeToken = null;", html);
+            Assert.Contains("if (bridgeToken && method !== \"ui/initialize\") message.bridgeToken = bridgeToken;", html);
+            Assert.Contains("parent.postMessage(message, \"*\");", html);
+            Assert.Contains("bridgeToken = result && typeof result.bridgeToken === \"string\" ? result.bridgeToken : null;", html);
+            Assert.DoesNotContain("parent.postMessage({ jsonrpc: \"2.0\", id: id, method: method, params: params }, \"*\");", html);
+        }
+    }
+
+    [Fact]
     public async Task ToolHandler_ValidatesGrant_AndCallsBoardTools()
     {
         await using var app = new TestOratorioApp();
@@ -408,6 +424,23 @@ public sealed class OratorioAppBindingTests
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions)
                ?? throw new InvalidOperationException("Missing response body.");
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "Oratorio.sln")) &&
+                Directory.Exists(Path.Combine(dir.FullName, "server", "UiResources")))
+            {
+                return dir.FullName;
+            }
+
+            dir = dir.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the Oratorio repository root.");
     }
 
     private static TestOratorioApp AppWithDotCraft(Action<DotCraftFakes> configure)

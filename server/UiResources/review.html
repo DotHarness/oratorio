@@ -114,6 +114,7 @@
   "use strict";
   var pending = new Map();
   var nextId = 1;
+  var bridgeToken = null;
   var toolInput = {};
   var current = null;
 
@@ -125,8 +126,10 @@
   function request(method, params) {
     return new Promise(function (resolve, reject) {
       var id = nextId++;
+      var message = { jsonrpc: "2.0", id: id, method: method, params: params };
+      if (bridgeToken && method !== "ui/initialize") message.bridgeToken = bridgeToken;
       pending.set(id, { resolve: resolve, reject: reject });
-      parent.postMessage({ jsonrpc: "2.0", id: id, method: method, params: params }, "*");
+      parent.postMessage(message, "*");
     });
   }
 
@@ -293,7 +296,10 @@
   });
 
   request("ui/initialize", { app: { name: "oratorio", version: "1.0" } })
-    .then(function (result) { applyContext(result && result.hostContext); })
+    .then(function (result) {
+      bridgeToken = result && typeof result.bridgeToken === "string" ? result.bridgeToken : null;
+      applyContext(result && result.hostContext);
+    })
     .catch(function () {});
 </script>
 </body>
