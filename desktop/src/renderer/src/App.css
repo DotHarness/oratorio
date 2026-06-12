@@ -8549,6 +8549,10 @@ textarea:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
+.product-textarea:focus-visible {
+  outline: 0;
+}
+
 .product-textarea::placeholder {
   color: var(--text-dimmed);
 }
