@@ -2525,7 +2525,8 @@ textarea::placeholder {
 
 .task-drawer-panel {
   min-width: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .task-drawer-empty {
@@ -2535,10 +2536,12 @@ textarea::placeholder {
 .task-status-panel {
   display: grid;
   gap: 14px;
+  min-width: 0;
   padding: 14px;
 }
 
 .task-status-panel .product-section {
+  min-width: 0;
   margin: 0;
   padding: 15px;
   border: 1px solid var(--border-default);
@@ -2548,10 +2551,23 @@ textarea::placeholder {
 
 .task-status-panel .section-block-head {
   align-items: flex-start;
+  min-width: 0;
 }
 
 .task-status-panel .section-block-title-group {
   align-items: center;
+  min-width: 0;
+}
+
+.task-status-panel .section-block-title-group > div {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.task-status-panel .section-block-description {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .task-status-panel .product-section-head h3 {
@@ -2578,7 +2594,10 @@ textarea::placeholder {
 .task-status-panel .task-status-run-section--live .section-block-description,
 .task-status-live-line {
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
   overflow: hidden;
+  overflow-wrap: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2623,7 +2642,16 @@ textarea::placeholder {
 
 .task-status-brief {
   max-height: 280px;
-  overflow: auto;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.task-status-brief p,
+.task-status-brief li {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .task-status-result {

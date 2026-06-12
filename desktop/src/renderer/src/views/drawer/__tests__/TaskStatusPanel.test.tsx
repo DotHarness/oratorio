@@ -303,7 +303,7 @@ describe('TaskStatusPanel', () => {
   })
 
   it('shows the live activity verb and tail as a single clipped line while a run streams', () => {
-    const longTail = 'updating the retry path with enough streamed detail to overflow the compact drawer status line'
+    const longTail = 'updating the retry path with enough streamed detail to overflow the compact drawer status line desktopActivation.tsx'.repeat(3)
 
     render(
       <TaskStatusPanel
