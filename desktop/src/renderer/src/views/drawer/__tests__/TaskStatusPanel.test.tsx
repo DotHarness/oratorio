@@ -302,12 +302,14 @@ describe('TaskStatusPanel', () => {
     expect(onReReviewPullRequest).toHaveBeenCalledOnce()
   })
 
-  it('shows the live activity verb and tail in place of the heartbeat message while a run streams', () => {
+  it('shows the live activity verb and tail as a single clipped line while a run streams', () => {
+    const longTail = 'updating the retry path with enough streamed detail to overflow the compact drawer status line'
+
     render(
       <TaskStatusPanel
         item={makeItem({ state: 'running' })}
         run={makeRun({ status: 'running' })}
-        liveActivity={{ runId: 'run-1', kind: 'writing', tail: 'updating the retry path' }}
+        liveActivity={{ runId: 'run-1', kind: 'writing', tail: longTail }}
         brief={{ summary: '', keyDetails: '', whyItMatters: '', desiredOutcome: '' }}
         runnerMode="appServer"
         canDispatch={false}
@@ -321,8 +323,11 @@ describe('TaskStatusPanel', () => {
       />,
     )
 
-    expect(screen.getByText('Writing')).toBeInTheDocument()
-    expect(screen.getByText(/updating the retry path/)).toBeInTheDocument()
+    const liveLine = document.querySelector('.task-status-live-line')
+    expect(liveLine).toBeInTheDocument()
+    expect(liveLine).toHaveTextContent(`Writing · ${longTail}`)
+    expect(liveLine?.closest('section')).toHaveClass('task-status-run-section', 'task-status-run-section--live')
+    expect(screen.getByText(/updating the retry path/)).toHaveClass('task-status-live-tail')
     expect(screen.queryByText('DotCraft agent is producing output.')).not.toBeInTheDocument()
   })
 
@@ -346,6 +351,8 @@ describe('TaskStatusPanel', () => {
     )
 
     expect(screen.getByText('DotCraft agent is producing output.')).toBeInTheDocument()
+    expect(document.querySelector('.task-status-run-section')).toBeInTheDocument()
+    expect(document.querySelector('.task-status-run-section--live')).not.toBeInTheDocument()
   })
 })
 

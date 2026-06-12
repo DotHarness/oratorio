@@ -127,15 +127,16 @@ export function TaskStatusPanel({
   const canShowDecisionAction = item.state === 'awaitingReview'
   const canShowRunStatus = Boolean(run && shouldShowRunDiagnostics(item, run))
   const liveLine = run && liveActivity && isActiveRun(run.status) ? liveActivity : null
+  const runSectionClassName = `task-status-run-section${liveLine ? ' task-status-run-section--live' : ''}`
   const runStatusIcon = liveLine ? liveActivityIcons[liveLine.kind] : <Bot size={16} />
   const runStatusDescription: ReactNode = run?.errorMessage
     ? run.errorMessage
     : liveLine
       ? (
-          <>
+          <span className="task-status-live-line">
             {t(`run.activity.${liveLine.kind}`)}
             {liveLine.tail ? <span className="task-status-live-tail"> · {liveLine.tail}</span> : null}
-          </>
+          </span>
         )
       : run?.statusMessage ?? t('run.waiting')
   const draftCount = item.reviewDrafts.length + item.implementationDrafts.length
@@ -182,6 +183,7 @@ export function TaskStatusPanel({
 
       {canShowRunStatus && run ? (
         <SectionBlock
+          className={runSectionClassName}
           tone="slate"
           icon={runStatusIcon}
           title={t('run.attempt', { kind: runnerKindLabel(run.runnerKind), attempt: run.attempt })}

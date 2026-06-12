@@ -2567,6 +2567,26 @@ textarea::placeholder {
   gap: 10px;
 }
 
+.task-status-panel .task-status-run-section .section-block-title-group {
+  align-items: flex-start;
+}
+
+.task-status-panel .task-status-run-section .section-block-title-group > div {
+  min-width: 0;
+}
+
+.task-status-panel .task-status-run-section--live .section-block-description,
+.task-status-live-line {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-status-live-line {
+  display: block;
+}
+
 .task-status-run-actions {
   display: grid;
   gap: 8px;
