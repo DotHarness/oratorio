@@ -3856,6 +3856,125 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
+    public async Task AppServerFollowUpDraft_InheritsPullRequestRouteWhenBranchOmitted()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitFollowUpDraft)
+        {
+            FollowUpDraftBranch = null
+        };
+        var fakeWorktree = new FakeWorktreeManager();
+        await using var app = new TestOratorioApp(services =>
+        {
+            services.RemoveAll<IGitHubApiClient>();
+            services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+            services.RemoveAll<IWorktreeManager>();
+            services.AddSingleton<IWorktreeManager>(fakeWorktree);
+            services.RemoveAll<IDotCraftAppServerProcessManager>();
+            services.RemoveAll<IDotCraftAppServerClientFactory>();
+            services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+            services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+        });
+        var client = app.CreateClient();
+
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Review and capture follow-up work.", null, null));
+
+        var reviewed = await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.AwaitingReview && x.FollowUpDrafts.Count == 1);
+        var draft = Assert.Single(reviewed.FollowUpDrafts);
+        Assert.Null(draft.Branch);
+
+        var created = await PostAsync<ItemDetailResponse>(client, $"/api/v1/follow-up-drafts/{draft.DraftId}/create-local-task", new { });
+        var createdDraft = Assert.Single(created.FollowUpDrafts);
+        var localTask = await client.GetFromJsonAsync<ItemDetailResponse>($"/api/v1/items/id/{createdDraft.CreatedItemId}", JsonOptions);
+        Assert.NotNull(localTask);
+        Assert.Equal(ItemKind.LocalTask, localTask!.Item.Kind);
+        Assert.Equal("example-owner/oratorio", localTask.Item.Repository);
+        Assert.Equal("feature/auth-refresh", localTask.Item.Branch);
+        Assert.Equal("abc123", localTask.Item.HeadSha);
+        Assert.Equal(pr.ItemId, localTask.Item.ParentItemId);
+
+        fakeAppServer.Outcome = FakeAppServerOutcome.SubmitImplementationDraft;
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{localTask.Item.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Implement this inherited follow-up task.", null, null, "implementation", DeliveryPolicy.ManualDelivery));
+
+        await WaitForItemByIdAsync(client, localTask.Item.ItemId, x => x.Item.State == ItemState.AwaitingReview && x.ImplementationDrafts.Count == 1);
+        var localPrepareRequest = Assert.Single(fakeWorktree.PrepareRequests, x => x.ItemId == localTask.Item.ItemId);
+        Assert.Equal("local", localPrepareRequest.Source);
+        Assert.Equal("feature/auth-refresh", localPrepareRequest.SourceBranch);
+        Assert.Equal("abc123", localPrepareRequest.HeadSha);
+        Assert.Equal("refs/pull/184/head", localPrepareRequest.ReviewTargetFetchRef);
+    }
+
+    [Fact]
+    public async Task FollowUpDraft_CreateLocalTask_DoesNotInheritBranchFromNonPullRequestParent()
+    {
+        await using var app = new TestOratorioApp();
+        var client = app.CreateClient();
+        var parent = await CreateLocalTaskAsync(client, "Parent local follow-up", repository: "example-owner/oratorio");
+        string draftId;
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
+            var item = await db.Items.FirstAsync(x => x.ItemId == parent.Item.ItemId);
+            var now = DateTimeOffset.UtcNow;
+            item.State = ItemState.AwaitingReview;
+            item.CurrentRound = 1;
+            item.HeadSha = "local-parent-head";
+            var round = new OratorioRound
+            {
+                ItemId = item.ItemId,
+                RoundNumber = 1,
+                Status = RoundStatus.AwaitingReview,
+                CreatedAt = now
+            };
+            var run = new OratorioRun
+            {
+                ItemId = item.ItemId,
+                RoundId = round.RoundId,
+                Attempt = 1,
+                Status = RunStatus.Succeeded,
+                RunnerKind = "appServer",
+                StartedAt = now,
+                CompletedAt = now,
+                Purpose = RunPurpose.ReviewAnalysis
+            };
+            var draft = new OratorioFollowUpDraft
+            {
+                ItemId = item.ItemId,
+                RoundId = round.RoundId,
+                RunId = run.RunId,
+                Status = FollowUpDraftStatus.Draft,
+                Title = "Separate local cleanup",
+                Body = "This should become a local task without inheriting the parent local branch.",
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            db.Rounds.Add(round);
+            db.Runs.Add(run);
+            db.FollowUpDrafts.Add(draft);
+            await db.SaveChangesAsync();
+            draftId = draft.DraftId;
+        }
+
+        var created = await PostAsync<ItemDetailResponse>(client, $"/api/v1/follow-up-drafts/{draftId}/create-local-task", new { });
+        var createdDraft = Assert.Single(created.FollowUpDrafts);
+        var localTask = await client.GetFromJsonAsync<ItemDetailResponse>($"/api/v1/items/id/{createdDraft.CreatedItemId}", JsonOptions);
+        Assert.NotNull(localTask);
+        Assert.Equal("example-owner/oratorio", localTask!.Item.Repository);
+        Assert.Null(localTask.Item.Branch);
+        Assert.Null(localTask.Item.HeadSha);
+    }
+
+    [Fact]
     public async Task AppServerFollowUpDraft_CanBeEditedAndCreatedAsLocalTask()
     {
         var fakeGitHub = new FakeGitHubApiClient();
@@ -3916,6 +4035,8 @@ public sealed class OratorioApiTests
         Assert.Equal(ItemKind.LocalTask, localTask!.Item.Kind);
         Assert.Equal("Edited follow-up", localTask.Item.Title);
         Assert.Equal("Edited local task body.", localTask.Item.Description);
+        Assert.Equal("feature/follow-up", localTask.Item.Branch);
+        Assert.Null(localTask.Item.HeadSha);
         Assert.Equal(pr.ItemId, localTask.Item.ParentItemId);
         Assert.Equal(draft.DraftId, localTask.Item.GeneratedFromDraftId);
 
@@ -5524,6 +5645,8 @@ internal sealed record GitDeliveryPush(SourceProjectKey Project, string BranchNa
 internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) : IDotCraftAppServerClientFactory
 {
     public FakeAppServerOutcome Outcome { get; set; } = outcome;
+    public string? FollowUpDraftRepository { get; set; } = "example-owner/oratorio";
+    public string? FollowUpDraftBranch { get; set; } = "main";
     public AppServerThreadStartRequest? LastThreadStartRequest { get; private set; }
     public AppBindingConnectionConnectRequest? LastAppConnectionConnectRequest { get; private set; }
     public List<AppServerThreadStartRequest> ThreadStartRequests { get; } = [];
@@ -5575,6 +5698,8 @@ internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) :
             () => SupportsRuntimeAdditionalContext,
             () => UseMismatchedToolThreadId,
             () => ConnectionStatus,
+            () => FollowUpDraftRepository,
+            () => FollowUpDraftBranch,
             request => LastAppConnectionConnectRequest = request,
             request => AppBindingContextBlockUpsertRequests.Add(request),
             result =>
@@ -5595,6 +5720,8 @@ internal sealed class FakeAppServerClient(
     Func<bool> supportsRuntimeAdditionalContext,
     Func<bool> useMismatchedToolThreadId,
     Func<AppBindingConnectionStatus> getConnectionStatus,
+    Func<string?> getFollowUpDraftRepository,
+    Func<string?> getFollowUpDraftBranch,
     Action<AppBindingConnectionConnectRequest> captureConnectionConnect,
     Action<AppBindingContextBlockUpsertRequest> upsertContextBlock,
     Action<AppServerDynamicToolResult> captureToolResult) : IDotCraftAppServerClient
@@ -6013,9 +6140,9 @@ internal sealed class FakeAppServerClient(
                                 title = "Split out migration cleanup",
                                 body = "The migration cleanup is useful but should be handled separately from this review.",
                                 rationale = "It touches a different risk area.",
-                                repository = "example-owner/oratorio",
+                                repository = getFollowUpDraftRepository(),
                                 assignee = "maintainer",
-                                branch = "main",
+                                branch = getFollowUpDraftBranch(),
                                 labels = new[] { "follow-up", "backend" }
                             }
                         }

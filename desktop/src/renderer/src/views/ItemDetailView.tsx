@@ -227,6 +227,24 @@ function discussionPurposeLabel(purpose?: CommentPurpose) {
   return null
 }
 
+function effectiveFollowUpDraftBranch(draft: FollowUpDraft, item: WorkItem, selectedIsPullRequest: boolean) {
+  const explicitBranch = draft.branch?.trim()
+  if (explicitBranch) {
+    return explicitBranch
+  }
+
+  const effectiveRepository = draft.repository?.trim() ? draft.repository : item.repository
+  if (!selectedIsPullRequest || !item.branch || !sameRepository(effectiveRepository, item.repository)) {
+    return null
+  }
+
+  return item.branch
+}
+
+function sameRepository(left?: string | null, right?: string | null) {
+  return Boolean(left?.trim() && right?.trim() && left.trim().toLowerCase() === right.trim().toLowerCase())
+}
+
 export function ItemDetailView({
   selectedItem,
   selectedRun,
@@ -983,7 +1001,7 @@ export function ItemDetailView({
                         {draft.rationale ? <p className="stage-empty-copy">{draft.rationale}</p> : null}
                         <InfoRowGroup>
                           <InfoRow label={t('followUpDrafts.assignee')}>{draft.assignee ?? t('followUpDrafts.unassigned')}</InfoRow>
-                          <InfoRow label={t('followUpDrafts.branch')}>{draft.branch ?? t('followUpDrafts.noBranch')}</InfoRow>
+                          <InfoRow label={t('followUpDrafts.branch')}>{effectiveFollowUpDraftBranch(draft, selectedItem, selectedIsPullRequest) ?? t('followUpDrafts.noBranch')}</InfoRow>
                           <InfoRow label={t('followUpDrafts.createdTask')}>{draft.createdItemId ?? t('followUpDrafts.notCreated')}</InfoRow>
                         </InfoRowGroup>
                         {draft.labels.length > 0 ? (

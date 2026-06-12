@@ -154,6 +154,55 @@ describe('ItemDetailView', () => {
     expect(retry).toHaveBeenCalledOnce()
   })
 
+  it('shows the inherited PR branch for branchless follow-up drafts', () => {
+    const reviewItem: WorkItem = {
+      ...item,
+      sourceKey: 'github',
+      source: 'GitHub',
+      kind: 'pullRequest',
+      type: 'pr',
+      repository: 'example-owner/oratorio',
+      branch: 'feature/auth-refresh',
+      state: 'awaitingReview',
+      taskStatus: 'in_review',
+      followUpDrafts: [
+        {
+          draftId: 'follow-up-1',
+          itemId: 'task-1',
+          roundId: 'round-1',
+          runId: 'run-1',
+          status: 'draft',
+          title: 'Remove stale mocks',
+          body: 'Clean up stale API mocks that were left out of the current PR.',
+          rationale: null,
+          repository: null,
+          assignee: null,
+          branch: null,
+          labels: [],
+          createdItemId: null,
+          createdAt: '2026-05-10T00:00:00Z',
+          updatedAt: '2026-05-10T00:00:00Z',
+          resolvedAt: null,
+        },
+      ],
+    }
+
+    renderDetail({
+      selectedItem: reviewItem,
+      selectedDetailItem: reviewItem,
+      selectedReviewStage: 'review',
+      selectedIsLocalTask: false,
+      selectedIsPullRequest: true,
+    })
+
+    expect(screen.getByText('Remove stale mocks')).toBeInTheDocument()
+    const branchRow = Array.from(document.querySelectorAll('.follow-up-draft-section .info-row'))
+      .find((row) => row.querySelector('.info-row-label')?.textContent === 'Branch')
+    expect(branchRow).toBeTruthy()
+    expect(branchRow!).toHaveTextContent('feature/auth-refresh')
+    expect(branchRow!).not.toHaveTextContent('No branch')
+  })
+
   it('uses the app tooltip for Ask agent and omits the review drawer opener', async () => {
     renderDetail({
       selectedReviewStage: 'review',

@@ -731,6 +731,10 @@ Operators can edit, discard, or create each draft as an Oratorio local task whil
 it remains in `draft` status. Creating a local task copies the operator-reviewed
 fields into a new local task, marks the draft `created`, records the created item
 ID, and adds timeline entries on both the originating item and created task.
+When the originating item is a GitHub PR or GitLab MR and the draft does not
+explicitly override routing, the created local task inherits the review target's
+repository, head branch, and head SHA so later implementation runs start from
+the reviewed head rather than the mapped workspace's current `HEAD`.
 Follow-up Drafts are advisory and do not become hidden requirements for the
 current round.
 

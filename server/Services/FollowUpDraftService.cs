@@ -117,6 +117,7 @@ public sealed class FollowUpDraftService(OratorioDbContext db, IClock clock)
         EnsureDraftEditable(draft, "create");
 
         var now = clock.UtcNow;
+        var route = ResolveLocalTaskRoute(draft);
         var created = new OratorioItem
         {
             Source = "local",
@@ -124,9 +125,10 @@ public sealed class FollowUpDraftService(OratorioDbContext db, IClock clock)
             Kind = ItemKind.LocalTask,
             Title = draft.Title.Trim(),
             Description = draft.Body.Trim(),
-            Repository = draft.Repository,
+            Repository = route.Repository,
             Assignee = draft.Assignee,
-            Branch = draft.Branch,
+            Branch = route.Branch,
+            HeadSha = route.HeadSha,
             LabelsJson = draft.LabelsJson,
             State = ItemState.Discovered,
             CheckState = CheckState.NotConfigured,
@@ -224,6 +226,36 @@ public sealed class FollowUpDraftService(OratorioDbContext db, IClock clock)
 
     private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private static FollowUpLocalTaskRoute ResolveLocalTaskRoute(OratorioFollowUpDraft draft)
+    {
+        var parent = draft.Item;
+        var repository = EmptyToNull(draft.Repository) ?? EmptyToNull(parent?.Repository);
+        var explicitBranch = EmptyToNull(draft.Branch);
+        if (explicitBranch is not null)
+        {
+            return new FollowUpLocalTaskRoute(repository, explicitBranch, null);
+        }
+
+        if (CanInheritPullRequestRoute(parent, repository))
+        {
+            return new FollowUpLocalTaskRoute(repository, EmptyToNull(parent!.Branch), EmptyToNull(parent.HeadSha));
+        }
+
+        return new FollowUpLocalTaskRoute(repository, null, null);
+    }
+
+    private static bool CanInheritPullRequestRoute(OratorioItem? parent, string? repository) =>
+        parent is not null &&
+        parent.Kind == ItemKind.PullRequest &&
+        parent.Source is "github" or "gitlab" &&
+        !string.IsNullOrWhiteSpace(parent.Branch) &&
+        SameRepository(repository, parent.Repository);
+
+    private static bool SameRepository(string? left, string? right) =>
+        !string.IsNullOrWhiteSpace(left) &&
+        !string.IsNullOrWhiteSpace(right) &&
+        string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
+
     private static string? SerializeLabels(IReadOnlyList<string>? labels)
     {
         var normalized = (labels ?? [])
@@ -249,4 +281,6 @@ public sealed class FollowUpDraftService(OratorioDbContext db, IClock clock)
             CreatedAt = createdAt
         });
     }
+
+    private sealed record FollowUpLocalTaskRoute(string? Repository, string? Branch, string? HeadSha);
 }

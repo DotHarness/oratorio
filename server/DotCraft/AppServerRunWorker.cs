@@ -389,7 +389,7 @@ public sealed class AppServerRunWorker(
                 baseWorkspacePath,
                 stackOntoBranch,
                 stackOntoSha,
-                ResolveReviewTargetFetchRef(run));
+                await ResolveWorktreeFetchRefAsync(db, run, ct));
         }
 
         try
@@ -1538,29 +1538,71 @@ public sealed class AppServerRunWorker(
     private static bool IsTerminal(RunStatus status) =>
         status is RunStatus.Succeeded or RunStatus.Failed or RunStatus.Cancelled or RunStatus.TimedOut;
 
-    private static string? ResolveReviewTargetFetchRef(OratorioRun run)
+    private static async Task<string?> ResolveWorktreeFetchRefAsync(OratorioDbContext db, OratorioRun run, CancellationToken ct)
     {
         var item = run.Item;
-        if (run.Purpose != RunPurpose.ReviewAnalysis ||
-            item is null ||
-            item.Kind != ItemKind.PullRequest ||
-            string.IsNullOrWhiteSpace(item.HeadSha))
+        if (item is null || string.IsNullOrWhiteSpace(item.HeadSha))
         {
             return null;
         }
 
-        if (item.Source == "github" && TryParseSourceNumber(item.ExternalId, '#', out var pullRequestNumber))
+        if (run.Purpose == RunPurpose.ReviewAnalysis && item.Kind == ItemKind.PullRequest)
+        {
+            return ResolveReviewTargetFetchRef(item.Source, item.ExternalId);
+        }
+
+        if (item.Kind != ItemKind.LocalTask ||
+            string.IsNullOrWhiteSpace(item.ParentItemId) ||
+            string.IsNullOrWhiteSpace(item.GeneratedFromDraftId))
+        {
+            return null;
+        }
+
+        var parent = await db.Items.AsNoTracking()
+            .Where(x => x.ItemId == item.ParentItemId)
+            .Select(x => new
+            {
+                x.Source,
+                x.ExternalId,
+                x.Kind,
+                x.Repository,
+                x.HeadSha
+            })
+            .FirstOrDefaultAsync(ct);
+
+        if (parent is null ||
+            parent.Kind != ItemKind.PullRequest ||
+            !SameRepository(parent.Repository, item.Repository) ||
+            !string.Equals(NullIfWhiteSpace(parent.HeadSha), NullIfWhiteSpace(item.HeadSha), StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return ResolveReviewTargetFetchRef(parent.Source, parent.ExternalId);
+    }
+
+    private static string? ResolveReviewTargetFetchRef(string source, string externalId)
+    {
+        if (source == "github" && TryParseSourceNumber(externalId, '#', out var pullRequestNumber))
         {
             return $"refs/pull/{pullRequestNumber}/head";
         }
 
-        if (item.Source == "gitlab" && TryParseSourceNumber(item.ExternalId, '!', out var mergeRequestIid))
+        if (source == "gitlab" && TryParseSourceNumber(externalId, '!', out var mergeRequestIid))
         {
             return $"refs/merge-requests/{mergeRequestIid}/head";
         }
 
         return null;
     }
+
+    private static bool SameRepository(string? left, string? right) =>
+        !string.IsNullOrWhiteSpace(left) &&
+        !string.IsNullOrWhiteSpace(right) &&
+        string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private static string? NullIfWhiteSpace(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static bool TryParseSourceNumber(string externalId, char marker, out int number)
     {

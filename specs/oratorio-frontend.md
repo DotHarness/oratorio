@@ -396,7 +396,9 @@ The default detail-page information hierarchy is Problem / Result / Decision:
 - **Problem** renders the source issue/PR/local task body and compact source
   metadata.
 - **Result** renders operator-facing agent outputs: review drafts,
-  suggestions, implementation drafts, and follow-up drafts.
+  suggestions, implementation drafts, and follow-up drafts. Follow-up drafts
+  from PR/MR review display the inherited review-target branch when the draft
+  leaves its branch empty and targets the same repository.
 - **Decision** renders the current decision composer and a compact decision
   history.
 
