@@ -24,7 +24,8 @@ public sealed record WorktreePrepareRequest(
     string? HeadSha,
     string BaseWorkspacePath,
     string? StackOntoBranch = null,
-    string? StackOntoSha = null);
+    string? StackOntoSha = null,
+    string? ReviewTargetFetchRef = null);
 
 public sealed record WorktreePrepareResult(
     string BaseWorkspacePath,
@@ -68,7 +69,7 @@ public sealed class WorktreeManager(IOptionsMonitor<DotCraftOptions> options, IL
         {
             var baseSha = stackOntoExistingPr
                 ? await ResolveStackBaseShaAsync(repoRoot, request, ct)
-                : (await GitAsync(repoRoot, ["rev-parse", baseRef], ct)).Trim();
+                : await ResolveBaseShaAsync(repoRoot, request, baseRef, ct);
             if (string.IsNullOrWhiteSpace(baseSha))
             {
                 throw new WorktreeException("baseRefUnresolved", $"Could not resolve base ref '{baseRef}'.");
@@ -178,6 +179,82 @@ public sealed class WorktreeManager(IOptionsMonitor<DotCraftOptions> options, IL
 
         return string.IsNullOrWhiteSpace(request.SourceBranch) ? "HEAD" : request.SourceBranch;
     }
+
+    private static async Task<string> ResolveBaseShaAsync(string repoRoot, WorktreePrepareRequest request, string baseRef, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(request.HeadSha))
+        {
+            return await ResolveReviewTargetHeadShaAsync(repoRoot, request, ct);
+        }
+
+        return (await GitAsync(repoRoot, ["rev-parse", baseRef], ct)).Trim();
+    }
+
+    private static async Task<string> ResolveReviewTargetHeadShaAsync(string repoRoot, WorktreePrepareRequest request, CancellationToken ct)
+    {
+        var expectedHeadSha = request.HeadSha!.Trim();
+        if (await CommitExistsAsync(repoRoot, expectedHeadSha, ct))
+        {
+            return expectedHeadSha;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ReviewTargetFetchRef))
+        {
+            var fetchRef = request.ReviewTargetFetchRef!.Trim();
+            try
+            {
+                await GitAsync(repoRoot, ["fetch", "origin", fetchRef], ct);
+            }
+            catch (WorktreeException ex)
+            {
+                throw new WorktreeException(
+                    "reviewTargetFetchFailed",
+                    $"Could not fetch review target ref '{fetchRef}' from origin: {ex.Message}");
+            }
+
+            string fetchedHead;
+            try
+            {
+                fetchedHead = (await GitAsync(repoRoot, ["rev-parse", "FETCH_HEAD"], ct)).Trim();
+            }
+            catch (WorktreeException ex)
+            {
+                throw new WorktreeException(
+                    "reviewTargetHeadUnresolved",
+                    $"Fetched review target ref '{fetchRef}', but could not resolve FETCH_HEAD: {ex.Message}");
+            }
+
+            if (!string.Equals(fetchedHead, expectedHeadSha, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new WorktreeException(
+                    "reviewTargetHeadUnresolved",
+                    $"Fetched review target ref '{fetchRef}' resolved to {fetchedHead}, but Oratorio expected {expectedHeadSha}.");
+            }
+
+            if (await CommitExistsAsync(repoRoot, expectedHeadSha, ct))
+            {
+                return expectedHeadSha;
+            }
+
+            throw new WorktreeException(
+                "reviewTargetHeadUnresolved",
+                $"Fetched review target ref '{fetchRef}', but expected head {expectedHeadSha} is not available in the mapped repository checkout.");
+        }
+
+        try
+        {
+            return (await GitAsync(repoRoot, ["rev-parse", expectedHeadSha], ct)).Trim();
+        }
+        catch (WorktreeException ex)
+        {
+            throw new WorktreeException(
+                "reviewTargetHeadUnresolved",
+                $"Could not resolve review target head '{expectedHeadSha}' in the mapped repository checkout: {ex.Message}");
+        }
+    }
+
+    private static Task<bool> CommitExistsAsync(string repoRoot, string sha, CancellationToken ct) =>
+        TryGitAsync(repoRoot, ["cat-file", "-e", $"{sha}^{{commit}}"], ct);
 
     // Implementation follow-up rounds must stack on the existing generated PR head so prior
     // delivered commits are retained (design spec §5.5). Prefer the locally available head SHA,

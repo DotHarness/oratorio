@@ -388,7 +388,8 @@ public sealed class AppServerRunWorker(
                 item.HeadSha,
                 baseWorkspacePath,
                 stackOntoBranch,
-                stackOntoSha);
+                stackOntoSha,
+                ResolveReviewTargetFetchRef(run));
         }
 
         try
@@ -1536,6 +1537,37 @@ public sealed class AppServerRunWorker(
 
     private static bool IsTerminal(RunStatus status) =>
         status is RunStatus.Succeeded or RunStatus.Failed or RunStatus.Cancelled or RunStatus.TimedOut;
+
+    private static string? ResolveReviewTargetFetchRef(OratorioRun run)
+    {
+        var item = run.Item;
+        if (run.Purpose != RunPurpose.ReviewAnalysis ||
+            item is null ||
+            item.Kind != ItemKind.PullRequest ||
+            string.IsNullOrWhiteSpace(item.HeadSha))
+        {
+            return null;
+        }
+
+        if (item.Source == "github" && TryParseSourceNumber(item.ExternalId, '#', out var pullRequestNumber))
+        {
+            return $"refs/pull/{pullRequestNumber}/head";
+        }
+
+        if (item.Source == "gitlab" && TryParseSourceNumber(item.ExternalId, '!', out var mergeRequestIid))
+        {
+            return $"refs/merge-requests/{mergeRequestIid}/head";
+        }
+
+        return null;
+    }
+
+    private static bool TryParseSourceNumber(string externalId, char marker, out int number)
+    {
+        number = 0;
+        var index = externalId.LastIndexOf(marker);
+        return index >= 0 && int.TryParse(externalId[(index + 1)..], out number);
+    }
 
     private static bool SamePath(string? left, string? right)
     {

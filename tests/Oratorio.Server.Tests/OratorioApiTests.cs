@@ -2033,7 +2033,8 @@ public sealed class OratorioApiTests
         Assert.StartsWith("oratorio/run/", run.WorktreeBranch);
         Assert.Equal("abc123", run.BaseRef);
         Assert.Equal("abc123", run.BaseSha);
-        Assert.Single(fakeWorktree.PrepareRequests);
+        var prepareRequest = Assert.Single(fakeWorktree.PrepareRequests);
+        Assert.Equal("refs/pull/184/head", prepareRequest.ReviewTargetFetchRef);
         Assert.Equal(run.BaseWorkspacePath, fakeProcess.EnsureWorkspacePaths.Single());
         Assert.Equal(run.WorktreePath, fakeAppServer.LastThreadStartRequest?.WorkspacePath);
         Assert.Equal(CheckState.Attention, reviewed.Item.CheckState);
