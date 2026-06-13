@@ -83,6 +83,8 @@ When you review a GitHub pull request from Oratorio:
 - **Ask for changes** publishes review feedback and records that the Oratorio review still needs work.
 - **Reject** records that the work should not move forward.
 
+<img src="https://github.com/DotHarness/resources/raw/master/oratorio/github-review.png" alt="An Oratorio GitHub App review with an inline finding and a resolved follow-up comment on a pull request" />
+
 When an implementation draft is ready, Oratorio can also push a branch and open a pull request, as long as GitHub writes are enabled and the app has the right repository access.
 
 ## Troubleshooting

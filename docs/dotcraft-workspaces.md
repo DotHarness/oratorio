@@ -1,6 +1,6 @@
 # How Oratorio Plugs into DotCraft
 
-Oratorio is a board. [DotCraft](https://dotharness.github.io/dotcraft/) is the AI agent doing the work. They're separate apps, and each one is responsible for half of the picture — Oratorio shows you where things stand, DotCraft does the thinking, runs the tools, and writes the result.
+Oratorio is a board. [DotCraft](https://www.dotcraft.net/) is the AI agent doing the work. They're separate apps, and each one is responsible for half of the picture — Oratorio shows you where things stand, DotCraft does the thinking, runs the tools, and writes the result.
 
 This page explains why DotCraft is the engine, what you get because of that, and how you connect the two.
 
@@ -27,7 +27,7 @@ This split keeps Oratorio simple. It also means every project you wire in alread
 > [!IMPORTANT]
 > If you've never used DotCraft, start with its five-minute setup. It walks you through installation, picking your project, and configuring a model. **You should get a successful chat in DotCraft before connecting Oratorio.**
 >
-> → [DotCraft Getting Started ↗](https://dotharness.github.io/dotcraft/getting-started)
+> → [DotCraft Getting Started ↗](https://www.dotcraft.net/getting-started)
 
 The high-level flow:
 
@@ -54,7 +54,7 @@ Behind the scenes, Oratorio discovers the local agent endpoint through DotCraft'
 
 ## Reading Further
 
-- [DotCraft Getting Started ↗](https://dotharness.github.io/dotcraft/getting-started) — install, model setup, first session
-- [DotCraft Project Workspace ↗](https://dotharness.github.io/dotcraft/features/workspace) — what lives with the project, how settings layer
-- [DotCraft Configuration ↗](https://dotharness.github.io/dotcraft/developing/configuration) — full field reference
+- [DotCraft Getting Started ↗](https://www.dotcraft.net/getting-started) — install, model setup, first session
+- [DotCraft Project Workspace ↗](https://www.dotcraft.net/features/workspace) — what lives with the project, how settings layer
+- [DotCraft Configuration ↗](https://www.dotcraft.net/developing/configuration) — full field reference
 - [Configuration Reference](/configuration) — Oratorio's own configuration, including the project connection field

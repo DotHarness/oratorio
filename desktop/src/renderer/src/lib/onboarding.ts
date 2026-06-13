@@ -10,7 +10,7 @@ export const onboardingVersion = 1
 // Same remotely-hosted screenshots the documentation uses. Not bundled.
 export const onboardingImageBase = 'https://github.com/DotHarness/resources/raw/master/oratorio/'
 
-const dotcraftSetupUrl = 'https://dotharness.github.io/dotcraft/getting-started'
+const dotcraftSetupUrl = 'https://www.dotcraft.net/getting-started'
 const oratorioGuideUrl = 'https://dotharness.github.io/oratorio/getting-started'
 
 // The board route the spotlight steps need. Matches AppShell's default redirect.

@@ -1,17 +1,17 @@
 # Getting Started
 
-Oratorio is a board where you hand work to your AI agent and watch it go. The agent itself is [DotCraft](https://dotharness.github.io/dotcraft/) — a project-native AI that remembers your conversations, learns your project's skills, and connects to your local tools. This walkthrough takes you from install to your first hand-off and review. About fifteen minutes — five to set up DotCraft if you don't have it, ten for Oratorio.
+Oratorio is a board where you hand work to your AI agent and watch it go. The agent itself is [DotCraft](https://www.dotcraft.net/) — a project-native AI that remembers your conversations, learns your project's skills, and connects to your local tools. This walkthrough takes you from install to your first hand-off and review. About fifteen minutes — five to set up DotCraft if you don't have it, ten for Oratorio.
 
 > [!IMPORTANT]
 > **DotCraft has to be set up for your project first.** Oratorio is the board; DotCraft is the agent doing the work. If you skip Step 1, you'll have a board with no one to answer it.
 
 ## 1. Set up DotCraft for your project
 
-Install [DotCraft](https://dotharness.github.io/dotcraft/), open your project in it, and complete the quick first-run — pick a model, send a test chat like "read this project's README and tell me what it does." That's it. Your project now has an AI agent that lives inside it.
+Install [DotCraft](https://www.dotcraft.net/), open your project in it, and complete the quick first-run — pick a model, send a test chat like "read this project's README and tell me what it does." That's it. Your project now has an AI agent that lives inside it.
 
 If you've never used DotCraft, follow its setup first:
 
-- [DotCraft Getting Started ↗](https://dotharness.github.io/dotcraft/getting-started)
+- [DotCraft Getting Started ↗](https://www.dotcraft.net/getting-started)
 - [How Oratorio plugs into DotCraft](/dotcraft-workspaces)
 
 **Don't move on until that test chat works.** The agent has to be reachable in DotCraft before Oratorio can hand it anything.

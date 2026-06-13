@@ -72,13 +72,13 @@ lastUpdated: false
           <p class="or-kicker">由 DotCraft 驱动</p>
           <h3>一个早已熟悉你项目的 AI Agent。</h3>
           <p>
-            Oratorio 负责看板，<a href="https://dotharness.github.io/dotcraft/">DotCraft</a> 才是真正干活的那位 Agent —— 它住在你的项目里，记得每一次对话，学会项目专属的 Skill 和插件，通过 MCP 调用本地工具，并接到你选定的模型。
+            Oratorio 负责看板，<a href="https://www.dotcraft.net/">DotCraft</a> 才是真正干活的那位 Agent —— 它住在你的项目里，记得每一次对话，学会项目专属的 Skill 和插件，通过 MCP 调用本地工具，并接到你选定的模型。
           </p>
           <p>
             先在 DotCraft 里把项目准备好，再让 Oratorio 接上来。之后你每交出一张卡片，接活的 Agent 都已经熟知项目的来龙去脉。
           </p>
           <div class="or-actions">
-            <a class="or-button or-button--primary" href="https://dotharness.github.io/dotcraft/zh/getting-started">5 分钟装好 DotCraft ↗</a>
+            <a class="or-button or-button--primary" href="https://www.dotcraft.net/zh/getting-started">5 分钟装好 DotCraft ↗</a>
             <a class="or-button" href="./dotcraft-workspaces">Oratorio 如何接入</a>
           </div>
         </div>

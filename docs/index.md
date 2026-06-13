@@ -72,13 +72,13 @@ lastUpdated: false
           <p class="or-kicker">Powered by DotCraft</p>
           <h3>An AI agent that already knows your project.</h3>
           <p>
-            Oratorio is the board. The agent doing the work is <a href="https://dotharness.github.io/dotcraft/">DotCraft</a> — an AI agent that lives inside your project. It remembers your conversations, learns your project's skills and plugins, talks to your local tools through MCP, and connects to the model you choose.
+            Oratorio is the board. The agent doing the work is <a href="https://www.dotcraft.net/">DotCraft</a> — an AI agent that lives inside your project. It remembers your conversations, learns your project's skills and plugins, talks to your local tools through MCP, and connects to the model you choose.
           </p>
           <p>
             Get DotCraft set up for your project once, point Oratorio at it, and every card you hand off lands in an agent that already knows the place.
           </p>
           <div class="or-actions">
-            <a class="or-button or-button--primary" href="https://dotharness.github.io/dotcraft/getting-started">Get DotCraft (5 min) ↗</a>
+            <a class="or-button or-button--primary" href="https://www.dotcraft.net/getting-started">Get DotCraft (5 min) ↗</a>
             <a class="or-button" href="./dotcraft-workspaces">How Oratorio plugs in</a>
           </div>
         </div>

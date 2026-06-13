@@ -51,4 +51,4 @@ Then set the Oratorio Desktop backend address to `http://127.0.0.1:5087`.
 
 - [How Oratorio connects to DotCraft](/dotcraft-workspaces)
 - [Configuration Reference](/configuration)
-- [DotCraft server deployment ↗](https://dotharness.github.io/dotcraft/features/self-hosted/server-deployment)
+- [DotCraft server deployment ↗](https://www.dotcraft.net/features/self-hosted/server-deployment)

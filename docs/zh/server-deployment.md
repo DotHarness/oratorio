@@ -51,4 +51,4 @@ ssh -N -L 5087:127.0.0.1:5087 user@your-server
 
 - [Oratorio 如何接入 DotCraft](/zh/dotcraft-workspaces)
 - [配置参考](/zh/configuration)
-- [DotCraft 服务器部署 ↗](https://dotharness.github.io/dotcraft/zh/features/self-hosted/server-deployment)
+- [DotCraft 服务器部署 ↗](https://www.dotcraft.net/zh/features/self-hosted/server-deployment)
