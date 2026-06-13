@@ -2243,7 +2243,6 @@ function OratorioApp() {
     selectedCanImplementationDispatch,
     selectedCanDecide,
     selectedHasSourceMetadata,
-    selectedBrief,
     selectedRoundHistory,
     selectedSourceActivity,
     visibleSourceActivity,

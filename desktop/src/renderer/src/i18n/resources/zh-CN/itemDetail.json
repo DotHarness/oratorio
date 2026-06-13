@@ -75,12 +75,7 @@
   "brief": {
     "title": "问题",
     "localDescription": "本地任务描述。",
-    "sourceDescription": "来自源系统的 issue 或 PR 上下文。",
-    "summary": "摘要",
-    "keyDetails": "关键细节",
-    "whyItMatters": "重要原因",
-    "desiredOutcome": "期望结果",
-    "rawSourceBody": "原始来源正文"
+    "sourceDescription": "来自源系统的 issue 或 PR 上下文。"
   },
   "source": {
     "title": "来源",
@@ -94,7 +89,6 @@
   "sourceActivity": {
     "title": "来源动态",
     "description": "已导入的来源变更可用于审计。",
-    "history": "来源更新历史",
     "showMore": "显示另外 {{count}} 条来源事件"
   },
   "sourceComments": {

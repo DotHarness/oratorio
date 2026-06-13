@@ -39,7 +39,6 @@ import i18n from '../i18n'
 import { draftSuggestionDiffLines } from '../suggestionDiff'
 import { ProductSection, ProductTextarea } from '../ui'
 import type {
-  BriefFields,
   DeliveryPolicy,
   FollowUpDraft,
   ReReviewInfo,
@@ -109,7 +108,6 @@ export type ItemDetailViewProps = {
   selectedCanImplementationDispatch: boolean
   selectedCanDecide: boolean
   selectedHasSourceMetadata: boolean
-  selectedBrief: BriefFields
   selectedRoundHistory: RoundHistory[]
   selectedSourceActivity: TimelineEvent[]
   visibleSourceActivity: TimelineEvent[]
@@ -260,7 +258,6 @@ export function ItemDetailView({
   selectedCanImplementationDispatch,
   selectedCanDecide,
   selectedHasSourceMetadata,
-  selectedBrief,
   selectedRoundHistory,
   selectedSourceActivity,
   visibleSourceActivity,
@@ -566,37 +563,7 @@ export function ItemDetailView({
                 title={t('brief.title')}
                 description={selectedIsLocalTask ? t('brief.localDescription') : t('brief.sourceDescription')}
               >
-                <InfoRowGroup className="brief-definition-rows">
-                  {selectedBrief.summary ? (
-                    <InfoRow label={t('brief.summary')} multiline>
-                      <MarkdownBlock value={selectedBrief.summary} className="description-markdown" compact />
-                    </InfoRow>
-                  ) : null}
-                  {selectedBrief.keyDetails ? (
-                    <InfoRow label={t('brief.keyDetails')} multiline>
-                      <MarkdownBlock value={selectedBrief.keyDetails} className="description-markdown" compact />
-                    </InfoRow>
-                  ) : null}
-                  {selectedBrief.whyItMatters ? (
-                    <InfoRow label={t('brief.whyItMatters')} multiline>
-                      <MarkdownBlock value={selectedBrief.whyItMatters} className="description-markdown" compact />
-                    </InfoRow>
-                  ) : null}
-                  {selectedBrief.desiredOutcome ? (
-                    <InfoRow label={t('brief.desiredOutcome')} multiline>
-                      <MarkdownBlock value={selectedBrief.desiredOutcome} className="description-markdown" compact />
-                    </InfoRow>
-                  ) : null}
-                </InfoRowGroup>
-                {!selectedBrief.keyDetails && !selectedBrief.whyItMatters && !selectedBrief.desiredOutcome ? (
-                  <details className="technical-disclosure">
-                    <summary>
-                      <Code2 size={15} />
-                      {t('brief.rawSourceBody')}
-                    </summary>
-                    <MarkdownBlock value={selectedItem.description} className="event-markdown" compact />
-                  </details>
-                ) : null}
+                <MarkdownBlock value={selectedItem.description} className="description-markdown" compact />
               </SectionBlock>
             ) : null}
 
@@ -628,43 +595,38 @@ export function ItemDetailView({
                 description={t('sourceActivity.description')}
                 action={<span className="count-badge">{selectedSourceActivity.length}</span>}
               >
-                <details className="audit-details section-disclosure source-activity-disclosure">
-                  <summary>
-                    <span>{t('sourceActivity.history')}</span>
-                  </summary>
-                  <div className="source-activity-list">
-                    {visibleSourceActivity.map((event) => (
-                      <article className="source-activity-row" key={event.id}>
-                        <span className="activity-time">{event.time}</span>
-                        <div className="activity-main">
-                          <strong>{event.title}</strong>
-                          <MarkdownBlock value={event.body} className="activity-markdown" compact />
-                        </div>
-                        <span className="activity-actor">{event.actor}</span>
-                      </article>
-                    ))}
-                    {hiddenSourceActivity.length > 0 ? (
-                      <details className="source-activity-more">
-                        <summary>
-                          <ChevronRight size={15} />
-                          {t('sourceActivity.showMore', { count: hiddenSourceActivity.length })}
-                        </summary>
-                        <div className="source-activity-list compact">
-                          {hiddenSourceActivity.map((event) => (
-                            <article className="source-activity-row" key={event.id}>
-                              <span className="activity-time">{event.time}</span>
-                              <div className="activity-main">
-                                <strong>{event.title}</strong>
-                                <MarkdownBlock value={event.body} className="activity-markdown" compact />
-                              </div>
-                              <span className="activity-actor">{event.actor}</span>
-                            </article>
-                          ))}
-                        </div>
-                      </details>
-                    ) : null}
-                  </div>
-                </details>
+                <div className="source-activity-list">
+                  {visibleSourceActivity.map((event) => (
+                    <article className="source-activity-row" key={event.id}>
+                      <span className="activity-time">{event.time}</span>
+                      <div className="activity-main">
+                        <strong>{event.title}</strong>
+                        <MarkdownBlock value={event.body} className="activity-markdown" compact />
+                      </div>
+                      <span className="activity-actor">{event.actor}</span>
+                    </article>
+                  ))}
+                  {hiddenSourceActivity.length > 0 ? (
+                    <details className="source-activity-more">
+                      <summary>
+                        <ChevronRight size={15} />
+                        {t('sourceActivity.showMore', { count: hiddenSourceActivity.length })}
+                      </summary>
+                      <div className="source-activity-list compact">
+                        {hiddenSourceActivity.map((event) => (
+                          <article className="source-activity-row" key={event.id}>
+                            <span className="activity-time">{event.time}</span>
+                            <div className="activity-main">
+                              <strong>{event.title}</strong>
+                              <MarkdownBlock value={event.body} className="activity-markdown" compact />
+                            </div>
+                            <span className="activity-actor">{event.actor}</span>
+                          </article>
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
+                </div>
               </SectionBlock>
             ) : null}
 

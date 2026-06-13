@@ -75,12 +75,7 @@
   "brief": {
     "title": "Problem",
     "localDescription": "Local task description.",
-    "sourceDescription": "Issue or PR context from the originating source.",
-    "summary": "Summary",
-    "keyDetails": "Key details",
-    "whyItMatters": "Why it matters",
-    "desiredOutcome": "Desired outcome",
-    "rawSourceBody": "Raw source body"
+    "sourceDescription": "Issue or PR context from the originating source."
   },
   "source": {
     "title": "Source",
@@ -94,7 +89,6 @@
   "sourceActivity": {
     "title": "Source activity",
     "description": "Imported source changes are available for audit.",
-    "history": "Source update history",
     "showMore": "Show {{count}} more source events"
   },
   "sourceComments": {

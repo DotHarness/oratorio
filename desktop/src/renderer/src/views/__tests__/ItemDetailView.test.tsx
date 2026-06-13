@@ -468,12 +468,6 @@ function renderDetailElement(overrides: Partial<ComponentProps<typeof ItemDetail
       selectedCanImplementationDispatch
       selectedCanDecide
       selectedHasSourceMetadata={false}
-      selectedBrief={{
-        summary: 'Keep the current review detail stable while splitting modules.',
-        keyDetails: '',
-        whyItMatters: '',
-        desiredOutcome: '',
-      }}
       selectedRoundHistory={[]}
       selectedSourceActivity={[]}
       visibleSourceActivity={[]}

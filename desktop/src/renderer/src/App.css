@@ -2874,8 +2874,11 @@ textarea::placeholder {
   margin-top: 10px;
 }
 
+/* Solo comment button is a 34px control with its label vertically centered, so the
+   full 14px grid gap reads as ~22px of space above the label — visibly looser than the
+   gap between the cards above. Pull it up to balance the perceived spacing. */
 .task-status-comment-action--solo {
-  margin-top: 0;
+  margin-top: -8px;
 }
 
 /* Ghost emphasis for the comment action — lowest weight in the drawer */
