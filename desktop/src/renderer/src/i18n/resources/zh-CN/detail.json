@@ -26,15 +26,7 @@
   },
   "result": {
     "title": "结果",
-    "description": "等待操作员评审的智能体产物。",
-    "countsAria": "评审结果数量",
-    "reviewDrafts_one": "{{count}} 份评审草稿",
-    "reviewDrafts_other": "{{count}} 份评审草稿",
-    "implementationDrafts_one": "{{count}} 份实现草稿",
-    "implementationDrafts_other": "{{count}} 份实现草稿",
-    "followUpDrafts_one": "{{count}} 个后续项",
-    "followUpDrafts_other": "{{count}} 个后续项",
-    "open": "打开结果"
+    "description": "等待操作员评审的智能体产物。"
   },
   "run": {
     "attempt": "{{kind}} 第 {{attempt}} 次尝试",

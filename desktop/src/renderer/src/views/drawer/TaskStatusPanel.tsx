@@ -19,6 +19,7 @@ const liveActivityIcons: Record<LiveActivityKind, ReactNode> = {
 
 type TaskStatusPanelProps = {
   item: WorkItem | null | undefined
+  loading?: boolean
   run?: Run
   liveActivity?: LiveActivity | null
   brief: BriefFields
@@ -72,8 +73,56 @@ function latestEntry<T>(items: T[]) {
   return items.length > 0 ? items[items.length - 1] : null
 }
 
+function TaskStatusSkeletonCard({ children }: { children: ReactNode }) {
+  return (
+    <div className="task-status-skeleton-card">
+      <div className="task-status-skeleton-head">
+        <span className="skeleton-block task-status-skeleton-icon" />
+        <div className="task-status-skeleton-lines">
+          <span className="skeleton-block task-status-skeleton-title" />
+          <span className="skeleton-block task-status-skeleton-desc" />
+        </div>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// Detail-fetch placeholder: flat blocks that mirror the drawer's card rhythm
+// (summary · action · artifacts) until the full item detail resolves.
+function TaskStatusSkeleton({ label }: { label: string }) {
+  return (
+    <div className="task-status-panel" role="status" aria-busy="true" aria-label={label}>
+      <TaskStatusSkeletonCard>
+        <div className="task-status-skeleton-body">
+          <span className="skeleton-block task-status-skeleton-line" />
+          <span className="skeleton-block task-status-skeleton-line task-status-skeleton-line--short" />
+        </div>
+      </TaskStatusSkeletonCard>
+      <TaskStatusSkeletonCard>
+        <div className="task-status-skeleton-body">
+          <span className="skeleton-block task-status-skeleton-button task-status-skeleton-button--tall" />
+          <div className="task-status-skeleton-grid">
+            <span className="skeleton-block task-status-skeleton-button" />
+            <span className="skeleton-block task-status-skeleton-button" />
+          </div>
+        </div>
+      </TaskStatusSkeletonCard>
+      <TaskStatusSkeletonCard>
+        <div className="task-status-skeleton-grid">
+          <span className="skeleton-block task-status-skeleton-tile" />
+          <span className="skeleton-block task-status-skeleton-tile" />
+          <span className="skeleton-block task-status-skeleton-tile" />
+          <span className="skeleton-block task-status-skeleton-tile" />
+        </div>
+      </TaskStatusSkeletonCard>
+    </div>
+  )
+}
+
 export function TaskStatusPanel({
   item,
+  loading = false,
   run,
   liveActivity,
   brief,
@@ -102,6 +151,10 @@ export function TaskStatusPanel({
     setRejectNote('')
   }, [item?.id])
 
+  if (loading) {
+    return <TaskStatusSkeleton label={t('loading.title')} />
+  }
+
   if (!item) {
     return (
       <div className="task-status-panel">
@@ -121,6 +174,15 @@ export function TaskStatusPanel({
     latestFollowUpDraft?.body?.trim() ||
     ''
   const resultPreview = latestResultSummary ? summaryPreviewLines(latestResultSummary).slice(0, 2) : []
+  const resultOutcome = resultPreview.join(' ')
+  // Sentiment only applies when the headline result is a review draft; major+minor finding
+  // counts are the reliable structured signal (the summary text is free-form).
+  const resultSentiment = latestReviewDraft
+    ? (latestReviewDraft.majorCount ?? 0) + (latestReviewDraft.minorCount ?? 0) > 0
+      ? 'warn'
+      : 'ok'
+    : null
+  const resultTone = resultSentiment === 'warn' ? 'amber' : resultSentiment === 'ok' ? 'green' : 'slate'
   const reviewNextAction = actionableReviewNextAction(item)
   const canShowReReviewAction = Boolean(reReviewInfo && canDispatch && item.state !== 'archived')
   const canShowNextAction = canDispatch && item.state !== 'archived' && item.state !== 'awaitingReview' && !reviewNextAction && !canShowReReviewAction
@@ -157,28 +219,20 @@ export function TaskStatusPanel({
 
       {hasDrafts ? (
         <SectionBlock
-          tone="slate"
+          className="task-status-result-section"
+          tone={resultTone}
           icon={<Sparkles size={16} />}
           title={t('result.title')}
-          description={t('result.description')}
-        >
-          <div className="task-status-result">
-            <div className="task-status-result-facts" aria-label={t('result.countsAria')}>
-              {item.reviewDrafts.length > 0 ? <span>{t('result.reviewDrafts', { count: item.reviewDrafts.length })}</span> : null}
-              {item.implementationDrafts.length > 0 ? <span>{t('result.implementationDrafts', { count: item.implementationDrafts.length })}</span> : null}
-              {item.followUpDrafts.length > 0 ? <span>{t('result.followUpDrafts', { count: item.followUpDrafts.length })}</span> : null}
-            </div>
-            {resultPreview.length > 0 ? (
-              <ul className="task-status-result-preview">
-                {resultPreview.map((line, index) => <li key={`${index}-${line}`}>{line}</li>)}
-              </ul>
-            ) : null}
-            <button className="secondary-button task-status-result-action" onClick={() => onOpenDetailStage('review')}>
-              <PanelRightOpen size={15} />
-              {t('result.open')}
-            </button>
-          </div>
-        </SectionBlock>
+          description={
+            resultOutcome ? (
+              <span className={`task-status-result-outcome${resultSentiment ? ` task-status-result-outcome--${resultSentiment}` : ''}`}>
+                {resultOutcome}
+              </span>
+            ) : (
+              t('result.description')
+            )
+          }
+        />
       ) : null}
 
       {canShowRunStatus && run ? (

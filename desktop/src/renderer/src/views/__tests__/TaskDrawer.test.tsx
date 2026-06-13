@@ -26,7 +26,7 @@ describe('TaskDrawer', () => {
     expect(screen.getByRole('complementary', { name: /Task drawer for DEF-1/ })).toBeInTheDocument()
     expect(screen.getByText('Status panel content')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Open detail page' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open detail page' }))
     expect(onOpenDetailPage).toHaveBeenCalled()
 
     fireEvent.keyDown(window, { key: 'Escape' })

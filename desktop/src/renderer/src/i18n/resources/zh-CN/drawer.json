@@ -8,8 +8,8 @@
   "closeDrawer": "关闭任务抽屉",
   "localShort": "本地",
   "moreActions": "更多任务操作",
+  "openDetail": "打开详情页",
   "menu": {
-    "openDetail": "打开详情页",
     "openSource": "打开来源",
     "editLocal": "编辑本地任务",
     "reopen": "重新打开任务",

@@ -27,9 +27,9 @@
     "startingSource": "正在启动来源同步",
     "syncingSources": "正在同步来源",
     "syncSources": "同步来源",
-    "startingGitHub": "正在启动 GitHub 拉取",
-    "pullingGitHub": "正在拉取 GitHub",
-    "pullGitHub": "拉取 GitHub",
+    "startingGitHub": "正在启动拉取",
+    "pullingGitHub": "正在拉取",
+    "pullGitHub": "拉取",
     "syncTitle": "同步已配置的 GitHub 与 GitLab 来源"
   },
   "filters": {

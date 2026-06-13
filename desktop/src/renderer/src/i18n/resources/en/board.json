@@ -27,9 +27,9 @@
     "startingSource": "Starting source sync",
     "syncingSources": "Syncing sources",
     "syncSources": "Sync sources",
-    "startingGitHub": "Starting GitHub pull",
-    "pullingGitHub": "Pulling GitHub",
-    "pullGitHub": "Pull GitHub",
+    "startingGitHub": "Starting pull",
+    "pullingGitHub": "Pulling",
+    "pullGitHub": "Pull",
     "syncTitle": "Sync configured GitHub and GitLab sources"
   },
   "filters": {

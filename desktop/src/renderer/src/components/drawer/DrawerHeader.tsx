@@ -1,4 +1,4 @@
-import { Archive, ArchiveRestore, CircleDot, Clipboard, ExternalLink, GitPullRequest, MoreHorizontal, PanelRightOpen, Pencil, X } from 'lucide-react'
+import { Archive, ArchiveRestore, CircleDot, Clipboard, ExternalLink, GitPullRequest, Maximize2, MoreHorizontal, Pencil, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { ActionIcon } from '../primitives/ActionIcon'
 import { Tooltip } from '../primitives/Tooltip'
@@ -75,6 +75,14 @@ export function DrawerHeader({
         <p className="task-drawer-state-copy">{stateCopy(item.state)}</p>
       </div>
       <div className="task-drawer-actions">
+        <ActionIcon
+          label={t('openDetail')}
+          title={t('openDetail')}
+          onClick={onOpenDetailPage}
+          disabled={!onOpenDetailPage}
+        >
+          <Maximize2 size={16} />
+        </ActionIcon>
         <div className="action-menu-wrap">
           <ActionIcon
             label={t('moreActions')}
@@ -87,10 +95,6 @@ export function DrawerHeader({
           </ActionIcon>
           {actionMenuOpen ? (
             <div className="action-menu task-drawer-action-menu" role="menu">
-              <button role="menuitem" onClick={onOpenDetailPage} disabled={!onOpenDetailPage}>
-                <PanelRightOpen size={15} />
-                {t('menu.openDetail')}
-              </button>
               {item.externalUrl ? (
                 <a role="menuitem" href={item.externalUrl} target="_blank" rel="noreferrer">
                   <ExternalLink size={15} />

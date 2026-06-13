@@ -2654,47 +2654,101 @@ textarea::placeholder {
   overflow-wrap: anywhere;
 }
 
-.task-status-result {
-  display: grid;
-  gap: 10px;
-}
-
-.task-status-result-facts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.task-status-result-facts span {
-  border: 1px solid var(--border-default);
-  border-radius: 999px;
-  padding: 4px 8px;
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-tertiary) 46%, transparent);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.task-status-result-preview {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.45;
-  list-style: none;
-}
-
-.task-status-result-preview li {
+/* Result is a header-only "what the agent found" glance: the finding renders as the
+   section subtitle, weighted up and tinted by sentiment (amber = issues, green = none). */
+.task-status-result-outcome {
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.task-status-result-action {
-  width: 100%;
+.task-status-result-outcome--warn {
+  color: color-mix(in srgb, var(--warning) 86%, var(--text-primary));
+}
+
+.task-status-result-outcome--ok {
+  color: color-mix(in srgb, var(--success) 80%, var(--text-primary));
+}
+
+/* Drawer detail-fetch skeleton — card chrome mirrors .task-status-panel .product-section,
+   blocks use the shared .skeleton-block primitive. */
+.task-status-skeleton-card {
+  display: grid;
+  gap: 14px;
+  padding: 15px;
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-secondary) 78%, transparent);
+}
+
+.task-status-skeleton-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.task-status-skeleton-lines {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 8px;
+  min-width: 0;
+}
+
+.task-status-skeleton-body {
+  display: grid;
+  gap: 9px;
+}
+
+.task-status-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.task-status-skeleton-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+}
+
+.task-status-skeleton-title {
+  width: 42%;
+  height: 12px;
+}
+
+.task-status-skeleton-desc {
+  width: 78%;
+  height: 12px;
+}
+
+.task-status-skeleton-line {
+  width: 90%;
+  height: 12px;
+}
+
+.task-status-skeleton-line--short {
+  width: 70%;
+}
+
+.task-status-skeleton-button {
+  height: 34px;
+  border-radius: 8px;
+}
+
+.task-status-skeleton-button--tall {
+  height: 40px;
+}
+
+.task-status-skeleton-tile {
+  height: 52px;
+  border-radius: 12px;
 }
 
 .task-status-link {
@@ -2874,11 +2928,14 @@ textarea::placeholder {
   margin-top: 10px;
 }
 
-/* Solo comment button is a 34px control with its label vertically centered, so the
-   full 14px grid gap reads as ~22px of space above the label — visibly looser than the
-   gap between the cards above. Pull it up to balance the perceived spacing. */
-.task-status-comment-action--solo {
-  margin-top: -8px;
+/* Solo comment button is a direct grid child of the panel, so the 14px row-gap alone
+   already matches the card-to-card spacing above it. It must NOT inherit the 10px top
+   margin from `.secondary-button` (which is defined later in this file and would otherwise
+   win the cascade by source order), because that margin stacks on top of the grid gap and
+   reads as ~24px — visibly looser than the gaps above. Scope this to the panel so it beats
+   `.secondary-button` on specificity and pins the gap to a clean 14px. */
+.task-status-panel > .task-status-comment-action--solo {
+  margin-top: 0;
 }
 
 /* Ghost emphasis for the comment action — lowest weight in the drawer */
@@ -5507,14 +5564,17 @@ textarea::placeholder {
   gap: 8px;
 }
 
+/* Shared skeleton primitive: a flat block that pulses opacity (matches dotcraft's Skeleton). */
+.skeleton-block {
+  display: block;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
 .source-comment-skeleton {
-  animation: skeleton-pulse 1.2s ease-in-out infinite;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--bg-secondary) 62%, transparent),
-    color-mix(in srgb, var(--bg-elevated) 72%, transparent),
-    color-mix(in srgb, var(--bg-secondary) 62%, transparent)
-  );
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+  background: var(--bg-tertiary);
   border-radius: 8px;
   display: block;
   height: 56px;
@@ -5581,11 +5641,11 @@ textarea::placeholder {
 @keyframes skeleton-pulse {
   0%,
   100% {
-    opacity: 0.55;
+    opacity: 0.45;
   }
 
   50% {
-    opacity: 1;
+    opacity: 0.85;
   }
 }
 
@@ -9247,23 +9307,8 @@ textarea:focus-visible {
 }
 
 .onboarding-figure[data-status="loading"] .onboarding-figure-fallback {
-  background: linear-gradient(
-    100deg,
-    color-mix(in srgb, var(--bg-primary) 78%, transparent) 30%,
-    color-mix(in srgb, var(--border-active) 40%, transparent) 50%,
-    color-mix(in srgb, var(--bg-primary) 78%, transparent) 70%
-  );
-  background-size: 200% 100%;
-  animation: onboarding-shimmer 1.2s ease-in-out infinite;
-}
-
-@keyframes onboarding-shimmer {
-  from {
-    background-position: 200% 0;
-  }
-  to {
-    background-position: -200% 0;
-  }
+  background: var(--bg-tertiary);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
 }
 
 .onboarding-copy {

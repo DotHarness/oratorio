@@ -257,6 +257,7 @@ function OratorioApp() {
   const [closedError, setClosedError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedDetail, setSelectedDetail] = useState<WorkItem | null>(null)
+  const [detailError, setDetailError] = useState(false)
   const [liveActivity, setLiveActivity] = useState<LiveActivity | null>(null)
   const [query, setQuery] = useState('')
   const [repositoryFilter, setRepositoryFilter] = useState('all')
@@ -490,6 +491,10 @@ function OratorioApp() {
       ? selectedDetail
       : selectedListItem ?? items[0]
   const selectedDetailItem = selectedDetailMatches ? selectedDetail : null
+  // Show the drawer skeleton while the full detail for the current selection is in flight.
+  // Derived from the missing match (so switching cards skeletons immediately) and cleared on
+  // fetch failure, so it never gets stuck behind a failed request.
+  const selectedDetailLoading = selectedId !== null && !selectedDetailMatches && !detailError
   const selectedRun = selectedItem ? latestRun(selectedItem) : undefined
   const selectedReviewStage = selectedItem
     ? routeDetailStage ?? reviewStageByItem[selectedItem.id] ?? defaultReviewStage(selectedItem, selectedRun)
@@ -1076,7 +1081,11 @@ function OratorioApp() {
     }
 
     setError(null)
-    void refreshDetail(item).catch((reason) => setError(errorMessage(reason)))
+    setDetailError(false)
+    void refreshDetail(item).catch((reason) => {
+      setDetailError(true)
+      setError(errorMessage(reason))
+    })
   }, [knownItems, refreshDetail, selectedId])
 
   useEffect(() => {
@@ -2462,6 +2471,7 @@ function OratorioApp() {
               statusContent={
                 <TaskStatusPanel
                   item={selectedItem}
+                  loading={selectedDetailLoading}
                   run={selectedRun}
                   liveActivity={selectedRun && liveActivity?.runId === selectedRun.runId ? liveActivity : null}
                   brief={selectedBrief}

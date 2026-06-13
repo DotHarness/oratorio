@@ -8,8 +8,8 @@
   "closeDrawer": "Close task drawer",
   "localShort": "local",
   "moreActions": "More task actions",
+  "openDetail": "Open detail page",
   "menu": {
-    "openDetail": "Open detail page",
     "openSource": "Open source",
     "editLocal": "Edit local task",
     "reopen": "Reopen task",

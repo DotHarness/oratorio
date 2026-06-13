@@ -26,15 +26,7 @@
   },
   "result": {
     "title": "Result",
-    "description": "Agent outputs ready for operator review.",
-    "countsAria": "Review result counts",
-    "reviewDrafts_one": "{{count}} review draft",
-    "reviewDrafts_other": "{{count}} review drafts",
-    "implementationDrafts_one": "{{count}} implementation draft",
-    "implementationDrafts_other": "{{count}} implementation drafts",
-    "followUpDrafts_one": "{{count}} follow-up",
-    "followUpDrafts_other": "{{count}} follow-ups",
-    "open": "Open result"
+    "description": "Agent outputs ready for operator review."
   },
   "run": {
     "attempt": "{{kind}} attempt {{attempt}}",

@@ -38,6 +38,32 @@ describe('TaskStatusPanel', () => {
     expect(screen.getByRole('tooltip')).toHaveTextContent(/manual delivery/)
   })
 
+  it('renders a loading skeleton while the detail fetch is in flight', () => {
+    const { container } = render(
+      <TaskStatusPanel
+        item={makeItem()}
+        loading
+        run={undefined}
+        brief={{ summary: 'Compact board brief.', keyDetails: '', whyItMatters: '', desiredOutcome: '' }}
+        runnerMode="appServer"
+        canDispatch
+        canImplementationDispatch
+        isPullRequest={false}
+        reReviewInfo={null}
+        onDispatchRound={vi.fn()}
+        onDispatchImplementationRound={vi.fn()}
+        onReReviewPullRequest={vi.fn()}
+        onOpenDetailStage={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true')
+    expect(container.querySelectorAll('.task-status-skeleton-card')).toHaveLength(3)
+    // Real content is suppressed while the skeleton is shown.
+    expect(screen.queryByRole('heading', { name: 'Summary' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Compact board brief.')).not.toBeInTheDocument()
+  })
+
   it('opens detail stages from artifact navigation controls', () => {
     const onOpenDetailStage = vi.fn()
     render(

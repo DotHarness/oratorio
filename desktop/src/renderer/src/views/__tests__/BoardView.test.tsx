@@ -130,7 +130,7 @@ describe('BoardView', () => {
 
     renderBoard([item], { syncGitHubSource })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Pull GitHub' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pull' }))
 
     expect(syncGitHubSource).toHaveBeenCalledOnce()
   })
@@ -141,7 +141,7 @@ describe('BoardView', () => {
 
     renderBoard([item], { syncGitHubSource, githubSyncJob: activeGitHubSyncJob })
 
-    expect(screen.getByRole('button', { name: 'Pulling GitHub' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Pulling' })).toBeDisabled()
     expect(syncGitHubSource).not.toHaveBeenCalled()
   })
 

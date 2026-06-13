@@ -28,7 +28,7 @@ describe('DrawerHeader', () => {
     fireEvent.click(screen.getByRole('button', { name: 'More task actions' }))
 
     expect(onToggleActionMenu).toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Open detail page' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open detail page' }))
     expect(onOpenDetailPage).toHaveBeenCalled()
     expect(screen.getByRole('menuitem', { name: 'Edit local task' })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: 'Archive task' })).toBeInTheDocument()
