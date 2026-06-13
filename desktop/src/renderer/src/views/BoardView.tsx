@@ -1,6 +1,6 @@
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd'
 import type { DropResult, DraggableProvided } from '@hello-pangea/dnd'
-import { CircleDot, Download, FileText, Folder, GitPullRequest, Plus, RefreshCw, Search, Settings } from 'lucide-react'
+import { CircleDot, FileText, Folder, GitPullRequest, Plus, RefreshCw, Search, Settings } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -50,7 +50,6 @@ type BoardViewProps = {
   closedLoading: boolean
   closedError: string | null
   loadMoreClosedItems: () => void
-  refreshClosedItems: () => void
   selectedItem: WorkItem | null | undefined
   openItemFromQueue: (item: WorkItem) => void
   runnerMode: RunnerMode
@@ -86,7 +85,6 @@ export function BoardView({
   closedLoading,
   closedError,
   loadMoreClosedItems,
-  refreshClosedItems,
   selectedItem,
   openItemFromQueue,
   runnerMode,
@@ -157,7 +155,6 @@ export function BoardView({
     : githubStatus.configured ? pullGitHubLabel : githubStatus.message
 
   const syncing = isSyncing || githubSyncActive
-  const [refreshing, setRefreshing] = useState(false)
   const [justSynced, setJustSynced] = useState(false)
   const previousSyncingRef = useRef(syncing)
 
@@ -172,17 +169,6 @@ export function BoardView({
     }
     previousSyncingRef.current = syncing
   }, [syncing])
-
-  // Spin the refresh icon in place (no toast) for at least one beat so the
-  // action reads as "working" even when the underlying fetch resolves fast.
-  const handleRefresh = useCallback(() => {
-    setRefreshing(true)
-    const startedAt = Date.now()
-    void Promise.resolve(isActiveView ? refreshAll() : refreshClosedItems()).finally(() => {
-      const elapsed = Date.now() - startedAt
-      window.setTimeout(() => setRefreshing(false), Math.max(0, 500 - elapsed))
-    })
-  }, [isActiveView, refreshAll, refreshClosedItems])
 
   useEffect(() => {
     if (!closedLoading) {
@@ -287,10 +273,7 @@ export function BoardView({
             onClick={() => void syncGitHubSource()}
             disabled={!canPullGitHub}
           >
-            {syncing ? <RefreshCw size={16} className="spin-icon" /> : <Download size={16} />}
-          </ActionIcon>
-          <ActionIcon label={t('board:actions.refresh')} onClick={handleRefresh}>
-            <RefreshCw size={16} className={refreshing ? 'spin-icon' : undefined} />
+            <RefreshCw size={16} className={syncing ? 'spin-icon' : undefined} />
           </ActionIcon>
           <ActionIcon label={t('board:actions.settings')} onClick={openSettings} dataTour="settings-gear">
             <Settings size={16} />

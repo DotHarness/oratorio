@@ -433,7 +433,6 @@ function boardElement(
       closedLoading={false}
       closedError={null}
       loadMoreClosedItems={vi.fn()}
-      refreshClosedItems={vi.fn()}
       selectedItem={null}
       openItemFromQueue={vi.fn()}
       runnerMode="mock"

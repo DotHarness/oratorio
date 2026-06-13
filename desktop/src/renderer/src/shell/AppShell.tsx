@@ -2437,7 +2437,6 @@ function OratorioApp() {
             closedLoading={closedLoading}
             closedError={closedError}
             loadMoreClosedItems={loadMoreClosedItems}
-            refreshClosedItems={() => void refreshCurrentListView()}
             selectedItem={selectedItem}
             openItemFromQueue={openItemFromQueue}
             runnerMode={runnerMode}
