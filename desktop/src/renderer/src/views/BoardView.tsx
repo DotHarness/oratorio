@@ -1,5 +1,5 @@
 import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd'
-import type { DropResult, DraggableProvided } from '@hello-pangea/dnd'
+import type { DropResult, DraggableProvided, DragStart, DragUpdate } from '@hello-pangea/dnd'
 import { CircleDot, FileText, Folder, GitPullRequest, Plus, RefreshCw, Search, Settings } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
@@ -13,9 +13,10 @@ import { UndoToastHost } from '../components/board/UndoToastHost'
 import { RequestChangesModal } from '../components/board/RequestChangesModal'
 import { CancelRunModal } from '../components/board/CancelRunModal'
 import { useBoardCommander } from '../hooks/useBoardCommander'
+import { resolveDrag } from '../lib/dragMatrix'
 import { sortItemsForBoard } from '../lib/sortOrder'
 import { parseTaskSearchQuery, taskMatchesSearch } from '../lib/taskSearch'
-import type { GitHubSourceStatus, GitHubSyncJob, MockOutcome, RunnerMode, UiNotice, WorkItem } from '../lib/types'
+import type { GitHubSourceStatus, GitHubSyncJob, MockOutcome, RunnerMode, TaskStatus, UiNotice, WorkItem } from '../lib/types'
 import {
   activeTaskStatusColumns,
   cardCheckBadge,
@@ -62,6 +63,57 @@ type BoardViewProps = {
 
 export type BoardViewTestApi = {
   handleDragEnd: (result: DropResult) => void
+}
+
+type DropIndicatorState = {
+  droppableId: string
+  top: number
+  left: number
+  width: number
+  height: number
+}
+
+const DROP_SLOT_GAP_FALLBACK = 12
+
+// Compute where the dragged card would land inside a column, in the column's own
+// scroll coordinates. The dragged card is taken out of flow (position: fixed) during a
+// drag, so the remaining cards' layout offsets already collapse to the "card removed"
+// positions — indexing them by the destination index lands exactly on the open slot.
+function measureDropSlot(draggableId: string, droppableId: string, index: number): Omit<DropIndicatorState, 'droppableId'> | null {
+  if (typeof document === 'undefined') {
+    return null
+  }
+
+  const dragged = document.querySelector<HTMLElement>(`[data-rfd-draggable-id="${draggableId}"]`)
+  const list = document.querySelector<HTMLElement>(`[data-rfd-droppable-id="${droppableId}"]`)
+  if (!dragged || !list) {
+    return null
+  }
+
+  const listStyle = window.getComputedStyle(list)
+  const paddingTop = parseFloat(listStyle.paddingTop) || 0
+  const paddingLeft = parseFloat(listStyle.paddingLeft) || 0
+  const paddingRight = parseFloat(listStyle.paddingRight) || 0
+  const height = dragged.offsetHeight
+  const width = list.clientWidth - paddingLeft - paddingRight
+
+  const cards = Array.from(list.children).filter(
+    (el): el is HTMLElement =>
+      el instanceof HTMLElement && el.getAttribute('data-rfd-draggable-id') !== null && el.getAttribute('data-rfd-draggable-id') !== draggableId,
+  )
+
+  if (cards.length === 0) {
+    return { top: paddingTop, left: paddingLeft, width, height }
+  }
+
+  if (index >= cards.length) {
+    const last = cards[cards.length - 1]
+    const gap = parseFloat(window.getComputedStyle(last).marginBottom) || DROP_SLOT_GAP_FALLBACK
+    return { top: last.offsetTop + last.offsetHeight + gap, left: paddingLeft, width, height }
+  }
+
+  const target = cards[Math.max(0, index)]
+  return { top: target.offsetTop, left: paddingLeft, width, height }
 }
 
 export function BoardView({
@@ -119,6 +171,56 @@ export function BoardView({
       dragApiRef.current = null
     }
   }, [commander.handleDragEnd, dragApiRef])
+
+  const [dropIndicator, setDropIndicator] = useState<DropIndicatorState | null>(null)
+  const itemById = useMemo(() => new Map(commander.boardItems.map((item) => [item.id, item])), [commander.boardItems])
+
+  // Mirror the open slot the dnd library is making room for. The library reserves space
+  // with an invisible placeholder at the list tail, so we draw our own marker at the real
+  // insertion point and hide it whenever the drop would be rejected.
+  const refreshDropIndicator = useCallback(
+    (draggableId: string, fromStatus: TaskStatus, destination: { droppableId: string; index: number } | null) => {
+      if (!destination) {
+        setDropIndicator(null)
+        return
+      }
+
+      const item = itemById.get(draggableId)
+      if (item && resolveDrag(fromStatus, destination.droppableId as TaskStatus, item).kind === 'invalid') {
+        setDropIndicator(null)
+        return
+      }
+
+      const rect = measureDropSlot(draggableId, destination.droppableId, destination.index)
+      setDropIndicator(rect ? { droppableId: destination.droppableId, ...rect } : null)
+    },
+    [itemById],
+  )
+
+  const handleDragStart = useCallback(
+    (start: DragStart) => {
+      refreshDropIndicator(start.draggableId, start.source.droppableId as TaskStatus, {
+        droppableId: start.source.droppableId,
+        index: start.source.index,
+      })
+    },
+    [refreshDropIndicator],
+  )
+
+  const handleDragUpdate = useCallback(
+    (update: DragUpdate) => {
+      refreshDropIndicator(update.draggableId, update.source.droppableId as TaskStatus, update.destination ?? null)
+    },
+    [refreshDropIndicator],
+  )
+
+  const handleDragEnd = useCallback(
+    (result: DropResult) => {
+      setDropIndicator(null)
+      commander.handleDragEnd(result)
+    },
+    [commander.handleDragEnd],
+  )
 
   const isActiveView = viewMode === 'active'
   const viewItems = isActiveView ? commander.boardItems : closedItems
@@ -282,7 +384,7 @@ export function BoardView({
       </div>
 
       {isActiveView ? (
-        <DragDropContext onDragEnd={commander.handleDragEnd}>
+        <DragDropContext onDragStart={handleDragStart} onDragUpdate={handleDragUpdate} onDragEnd={handleDragEnd}>
           <div className="board-columns" aria-label={t('board:aria.statusColumns')} data-tour="board-columns">
             {activeTaskStatusColumns().map((column) => {
               const columnItems = itemsByStatus.get(column.id) ?? []
@@ -302,7 +404,9 @@ export function BoardView({
                         {...provided.droppableProps}
                         className={`board-column-list${snapshot.isDraggingOver ? ' is-drag-over' : ''}`}
                       >
-                        {columnItems.length === 0 ? <p className="board-empty">{t('board:empty')}</p> : null}
+                        {columnItems.length === 0 && dropIndicator?.droppableId !== column.id ? (
+                          <p className="board-empty">{t('board:empty')}</p>
+                        ) : null}
                         {columnItems.map((item, index) => (
                           <Draggable key={item.id} draggableId={item.id} index={index} isDragDisabled={item.taskStatus === 'done'}>
                             {(dragProvided, dragSnapshot) => (
@@ -318,6 +422,18 @@ export function BoardView({
                           </Draggable>
                         ))}
                         {provided.placeholder}
+                        {dropIndicator?.droppableId === column.id ? (
+                          <div
+                            className="board-drop-indicator"
+                            aria-hidden="true"
+                            style={{
+                              top: dropIndicator.top,
+                              left: dropIndicator.left,
+                              width: dropIndicator.width,
+                              height: dropIndicator.height,
+                            }}
+                          />
+                        ) : null}
                       </div>
                     )}
                   </Droppable>
