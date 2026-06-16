@@ -2,12 +2,10 @@
 #
 # Oratorio headless backend image.
 #
-# IMPORTANT: the build context must be the directory that contains BOTH the
-# `oratorio/` and `dotcraft/` checkouts (they must sit side by side), because
-# server/Oratorio.Server.csproj references ../../dotcraft/sdk/.../DotCraft.Sdk.csproj
-# by path. The companion docker-compose.yml already sets `context: ../../..`.
+# The build context is the Oratorio repository root. DotCraft.Sdk is restored
+# from NuGet during the server publish.
 #
-#   docker build -f oratorio/deploy/docker/Dockerfile -t oratorio-server ../../..
+#   docker build -f deploy/docker/Dockerfile -t oratorio-server .
 #
 # ---------------------------------------------------------------------------
 # Build stage: compile + publish a self-contained linux-x64 build.
@@ -16,10 +14,8 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG TARGETARCH=amd64
 WORKDIR /src
 
-# Copy only what the server build needs, preserving the sibling layout the
-# project reference expects (oratorio + dotcraft as siblings under /src).
-COPY dotcraft/sdk/dotnet/ ./dotcraft/sdk/dotnet/
-COPY oratorio/server/ ./oratorio/server/
+# Copy only what the server build needs.
+COPY server/ ./oratorio/server/
 
 # Drop any host-built bin/obj that may have been copied in so the linux build
 # starts clean (host obj may carry a different RID / Windows paths).
@@ -44,7 +40,7 @@ RUN apt-get update \
 
 WORKDIR /opt/oratorio
 COPY --from=build /out/ ./
-COPY oratorio/deploy/docker/oratorio-entrypoint.sh /usr/local/bin/oratorio-entrypoint.sh
+COPY deploy/docker/oratorio-entrypoint.sh /usr/local/bin/oratorio-entrypoint.sh
 RUN chmod +x /usr/local/bin/oratorio-entrypoint.sh /opt/oratorio/oratorio-server
 
 ENV ASPNETCORE_URLS=http://0.0.0.0:5087 \

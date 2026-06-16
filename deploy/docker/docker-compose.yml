@@ -38,12 +38,11 @@ services:
 
   oratorio:
     image: ghcr.io/dotharness/oratorio:latest
-    # To build from source instead of pulling GHCR, check out dotcraft/ next to
-    # oratorio/ (the server references the DotCraft SDK by relative path), then
-    # uncomment this block and run `docker compose up -d --build`:
+    # To build from source instead of pulling GHCR, uncomment this block and run
+    # `docker compose up -d --build`:
     # build:
-    #   context: ../../..
-    #   dockerfile: oratorio/deploy/docker/Dockerfile
+    #   context: ../..
+    #   dockerfile: deploy/docker/Dockerfile
     depends_on:
       - dotcraft
     environment:

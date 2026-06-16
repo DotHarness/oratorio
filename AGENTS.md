@@ -6,7 +6,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 Oratorio is an agent-addressable project board with two cooperating processes:
 
-- **`server/Oratorio.Server.csproj`** — ASP.NET Core 10 (net10.0) headless backend. Owns durable state in SQLite (EF Core), source sync (GitHub/GitLab), DotCraft AppServer dispatch, review/implementation/follow-up drafts, worktree management, and the `/api/v1/*` + realtime board stream endpoints. References `..\..\dotcraft\sdk\dotnet\src\DotCraft.Sdk\DotCraft.Sdk.csproj` — the sibling `dotcraft/` repo must be checked out next to `oratorio/` for the backend to build.
+- **`server/Oratorio.Server.csproj`** — ASP.NET Core 10 (net10.0) headless backend. Owns durable state in SQLite (EF Core), source sync (GitHub/GitLab), DotCraft AppServer dispatch, review/implementation/follow-up drafts, worktree management, and the `/api/v1/*` + realtime board stream endpoints. Consumes `DotCraft.Sdk` from NuGet.
 - **`desktop/`** — Electron + React 19 + Vite + TypeScript renderer. `electron-vite` splits the project into `src/main` (Electron main), `src/preload`, and `src/renderer/src` (React). The desktop shell launches/reuses the local backend via `OratorioServerManager` and talks to it over HTTP + WebSocket. Tests use Vitest with jsdom.
 - **`tests/Oratorio.Server.Tests/`** — xUnit + `Microsoft.AspNetCore.Mvc.Testing` integration tests against the real `Program`.
 
@@ -72,7 +72,7 @@ The renderer is intentionally narrow — board, cards, status-only drawer, setti
 
 ## Working In This Repo
 
-- The DotCraft SDK is consumed via project reference, not NuGet. If `dotnet build` fails resolving `DotCraft.Sdk`, check that `../dotcraft/` is checked out alongside `oratorio/`.
+- The DotCraft SDK is consumed from NuGet as `DotCraft.Sdk`; no sibling `dotcraft/` checkout is required for builds.
 - `desktop/resources/server/` is build output — do not commit it (it is gitignored) and do not edit files inside it; they are overwritten by `build.bat`.
 - `.scratch/` is the local Markdown issue tracker for agent-driven feature work (`.scratch/<feature-slug>/PRD.md` + `issues/`). It is gitignored. Feature work is expected to land there before code.
 - Avoid introducing new top-level renderer routes — the frontend spec calls out that absent features should be omitted, not shown as "coming soon".

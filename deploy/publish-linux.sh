@@ -5,8 +5,7 @@
 # Mirrors the server publish step in build.bat, but targets Linux instead of
 # Windows. Produces a folder you can drop onto a server (systemd) or copy into a
 # container image. Works from any host with the .NET 10 SDK installed (including
-# Windows / macOS) as long as the sibling dotcraft repo is checked out next to
-# oratorio so the DotCraft.Sdk project reference resolves.
+# Windows / macOS).
 #
 # Usage:
 #   deploy/publish-linux.sh [--rid linux-x64] [--single-file] [--out <dir>]
@@ -34,11 +33,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROJECT="$REPO_ROOT/server/Oratorio.Server.csproj"
 OUT="${OUT:-$REPO_ROOT/build/release/server-$RID}"
-
-if [ ! -d "$REPO_ROOT/../dotcraft" ]; then
-  echo "WARNING: ../dotcraft was not found next to oratorio." >&2
-  echo "         The DotCraft.Sdk project reference will fail to resolve." >&2
-fi
 
 echo "====================================="
 echo " Publishing Oratorio.Server ($RID)"

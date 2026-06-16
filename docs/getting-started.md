@@ -24,7 +24,7 @@ The fastest path is the release installer:
 |----------|------|
 | Windows | `Oratorio-*.exe` from [GitHub Releases](https://github.com/DotHarness/oratorio/releases) |
 
-To build from source, install the [.NET 10 SDK](https://dotnet.microsoft.com/download) and Node.js, clone [DotCraft](https://github.com/DotHarness/dotcraft) alongside `oratorio/` (Oratorio uses the DotCraft SDK directly), then run from the Oratorio repo root:
+To build from source, install the [.NET 10 SDK](https://dotnet.microsoft.com/download) and Node.js, then run from the Oratorio repo root:
 
 ```powershell
 .\dev.bat

@@ -16,10 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.1" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\dotcraft\sdk\dotnet\src\DotCraft.Sdk\DotCraft.Sdk.csproj" />
+    <PackageReference Include="DotCraft.Sdk" Version="0.1.0" />
   </ItemGroup>
 
   <ItemGroup>
