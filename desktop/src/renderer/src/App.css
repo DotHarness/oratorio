@@ -2605,7 +2605,7 @@ textarea::placeholder {
    old single-line subtitle so streamed output stays readable, and clamped so it
    never grows unbounded as the run streams. */
 .task-status-run-feed {
-  min-height: 64px;
+  height: 96px;
   padding: 10px 12px;
   border: 1px solid var(--border-default);
   border-radius: 8px;
