@@ -2601,18 +2601,16 @@ textarea::placeholder {
   flex-shrink: 0;
 }
 
-/* Live agent feed: a fixed-height body area under the run header. Taller than the
-   old single-line subtitle so streamed output stays readable, and clamped so it
-   never grows unbounded as the run streams. */
+/* Live agent feed: body text under the run header, styled like a section
+   description (no inset box — that read as a card-in-a-card). Fixed height so the
+   card does not jump as the tail streams in; the live line is clamped to the same
+   line budget so long output never overflows the reserved area. */
 .task-status-run-feed {
-  height: 96px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  background: var(--bg-primary);
+  height: 72px;
+  margin-top: 4px;
   color: var(--text-secondary);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.45;
   overflow: hidden;
   overflow-wrap: anywhere;
 }
