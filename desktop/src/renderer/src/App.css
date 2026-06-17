@@ -2601,9 +2601,18 @@ textarea::placeholder {
   flex-shrink: 0;
 }
 
-.task-status-run-progress {
-  display: grid;
-  gap: 10px;
+/* Live agent feed: body text under the run header, styled like a section
+   description (no inset box — that read as a card-in-a-card). Fixed height so the
+   card does not jump as the tail streams in; the live line is clamped to the same
+   line budget so long output never overflows the reserved area. */
+.task-status-run-feed {
+  height: 72px;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .task-status-panel .task-status-run-section .section-block-title-group {
@@ -2614,19 +2623,14 @@ textarea::placeholder {
   min-width: 0;
 }
 
-.task-status-panel .task-status-run-section--live .section-block-description,
-.task-status-live-line {
+.task-status-run-feed .task-status-live-line {
+  display: -webkit-box;
   min-width: 0;
-  width: 100%;
   max-width: 100%;
   overflow: hidden;
-  overflow-wrap: normal;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.task-status-live-line {
-  display: block;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }
 
 .task-status-run-actions {

@@ -31,7 +31,6 @@
   "run": {
     "attempt": "{{kind}} attempt {{attempt}}",
     "waiting": "Waiting for runner update.",
-    "progress": "Run progress",
     "activity": {
       "thinking": "Thinking",
       "writing": "Writing",
@@ -43,6 +42,11 @@
   "reReview": {
     "title": "Review latest commit",
     "button": "Re-review {{target}}"
+  },
+  "archive": {
+    "title": "Archive task",
+    "description": "This task is closed — file it away to clear it from the active board.",
+    "button": "Archive"
   },
   "start": {
     "implementation": "Start implementation",

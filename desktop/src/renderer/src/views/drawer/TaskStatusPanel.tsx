@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Activity, Bot, Brain, CheckCircle2, ClipboardList, GitBranch, GitPullRequest, MessageSquare, PanelRightOpen, Pencil, Play, ShieldCheck, Sparkles, Terminal, Wrench, XCircle } from 'lucide-react'
+import { Activity, Archive, Bot, Brain, CheckCircle2, ClipboardList, GitBranch, GitPullRequest, MessageSquare, PanelRightOpen, Pencil, Play, ShieldCheck, Sparkles, Terminal, Wrench, XCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { MarkdownBlock } from '../../components/primitives/MarkdownBlock'
 import { SectionBlock } from '../../components/primitives/SectionBlock'
@@ -27,8 +27,10 @@ type TaskStatusPanelProps = {
   canDispatch: boolean
   canImplementationDispatch: boolean
   canDecide?: boolean
+  canArchive?: boolean
   isPullRequest: boolean
   reReviewInfo?: ReReviewInfo | null
+  onArchive?: () => void
   onDispatchRound: () => void
   onDispatchImplementationRound: (deliveryPolicy?: DeliveryPolicy) => void
   onReReviewPullRequest: () => void
@@ -130,8 +132,10 @@ export function TaskStatusPanel({
   canDispatch,
   canImplementationDispatch,
   canDecide = false,
+  canArchive = false,
   isPullRequest,
   reReviewInfo,
+  onArchive,
   onDispatchRound,
   onDispatchImplementationRound,
   onReReviewPullRequest,
@@ -185,6 +189,9 @@ export function TaskStatusPanel({
   const resultTone = resultSentiment === 'warn' ? 'amber' : resultSentiment === 'ok' ? 'green' : 'slate'
   const reviewNextAction = actionableReviewNextAction(item)
   const canShowReReviewAction = Boolean(reReviewInfo && canDispatch && item.state !== 'archived')
+  // Closed work (approved/rejected) gets an explicit Archive action above any re-run/re-review
+  // CTA, so filing it away no longer requires the overflow menu.
+  const canShowArchiveAction = Boolean(canArchive && onArchive && (item.state === 'approved' || item.state === 'rejected'))
   const canShowNextAction = canDispatch && item.state !== 'archived' && item.state !== 'awaitingReview' && !reviewNextAction && !canShowReReviewAction
   const canShowDecisionAction = item.state === 'awaitingReview'
   const canShowRunStatus = Boolean(run && shouldShowRunDiagnostics(item, run))
@@ -241,18 +248,26 @@ export function TaskStatusPanel({
           tone="slate"
           icon={runStatusIcon}
           title={t('run.attempt', { kind: runnerKindLabel(run.runnerKind), attempt: run.attempt })}
-          description={runStatusDescription}
           action={<span className={`status-chip ${run.status}`}>{runStatusLabel(run.status)}</span>}
         >
-          <div className="run-progress task-status-run-progress">
-            <div className="run-progress-head">
-              <span>{runnerKindLabel(run.runnerKind)}</span>
-              <strong>{runStatusLabel(run.status)}</strong>
-            </div>
-            <div className="progress-track" aria-label={t('run.progress')}>
-              <span style={{ width: `${run.progressPercent}%` }} />
-            </div>
+          <div className="task-status-run-feed" aria-live="polite">
+            {runStatusDescription}
           </div>
+        </SectionBlock>
+      ) : null}
+
+      {canShowArchiveAction ? (
+        <SectionBlock
+          className="task-status-next-action task-status-archive-action"
+          tone="slate"
+          icon={<Archive size={16} />}
+          title={t('archive.title')}
+          description={t('archive.description')}
+        >
+          <button className="secondary-button" onClick={onArchive} disabled={!canArchive}>
+            <Archive size={16} />
+            {t('archive.button')}
+          </button>
         </SectionBlock>
       ) : null}
 
