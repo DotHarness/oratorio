@@ -2601,9 +2601,20 @@ textarea::placeholder {
   flex-shrink: 0;
 }
 
-.task-status-run-progress {
-  display: grid;
-  gap: 10px;
+/* Live agent feed: a fixed-height body area under the run header. Taller than the
+   old single-line subtitle so streamed output stays readable, and clamped so it
+   never grows unbounded as the run streams. */
+.task-status-run-feed {
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .task-status-panel .task-status-run-section .section-block-title-group {
@@ -2614,19 +2625,14 @@ textarea::placeholder {
   min-width: 0;
 }
 
-.task-status-panel .task-status-run-section--live .section-block-description,
-.task-status-live-line {
+.task-status-run-feed .task-status-live-line {
+  display: -webkit-box;
   min-width: 0;
-  width: 100%;
   max-width: 100%;
   overflow: hidden;
-  overflow-wrap: normal;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.task-status-live-line {
-  display: block;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }
 
 .task-status-run-actions {

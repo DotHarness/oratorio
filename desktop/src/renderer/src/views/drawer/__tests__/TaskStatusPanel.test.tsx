@@ -129,7 +129,8 @@ describe('TaskStatusPanel', () => {
     )
 
     expect(screen.getByText('DotCraft attempt 1')).toBeInTheDocument()
-    expect(screen.getByLabelText('Run progress')).toBeInTheDocument()
+    // The run section shows the heartbeat status in its body feed, not a progress bar.
+    expect(screen.getByText('DotCraft agent is producing output.')).toBeInTheDocument()
     expect(screen.queryByText('Thread')).not.toBeInTheDocument()
     expect(screen.queryByText('Worktree')).not.toBeInTheDocument()
     expect(screen.queryByText('Snapshot')).not.toBeInTheDocument()
@@ -328,7 +329,7 @@ describe('TaskStatusPanel', () => {
     expect(onReReviewPullRequest).toHaveBeenCalledOnce()
   })
 
-  it('shows the live activity verb and tail as a single clipped line while a run streams', () => {
+  it('shows the live activity verb and tail in the run feed while a run streams', () => {
     const longTail = 'updating the retry path with enough streamed detail to overflow the compact drawer status line desktopActivation.tsx'.repeat(3)
 
     render(
@@ -353,6 +354,8 @@ describe('TaskStatusPanel', () => {
     expect(liveLine).toBeInTheDocument()
     expect(liveLine).toHaveTextContent(`Writing · ${longTail}`)
     expect(liveLine?.closest('section')).toHaveClass('task-status-run-section', 'task-status-run-section--live')
+    // The live feed now lives in the run section body, not as the section subtitle.
+    expect(liveLine?.parentElement).toHaveClass('task-status-run-feed')
     expect(screen.getByText(/updating the retry path/)).toHaveClass('task-status-live-tail')
     expect(screen.queryByText('DotCraft agent is producing output.')).not.toBeInTheDocument()
   })
@@ -379,6 +382,54 @@ describe('TaskStatusPanel', () => {
     expect(screen.getByText('DotCraft agent is producing output.')).toBeInTheDocument()
     expect(document.querySelector('.task-status-run-section')).toBeInTheDocument()
     expect(document.querySelector('.task-status-run-section--live')).not.toBeInTheDocument()
+  })
+
+  it('promotes an explicit archive action for closed work', () => {
+    const onArchive = vi.fn()
+    const { rerender } = render(
+      <TaskStatusPanel
+        item={makeItem({ state: 'approved', taskStatus: 'done' })}
+        run={undefined}
+        brief={{ summary: '', keyDetails: '', whyItMatters: '', desiredOutcome: '' }}
+        runnerMode="appServer"
+        canDispatch={false}
+        canImplementationDispatch={false}
+        canArchive
+        isPullRequest={false}
+        reReviewInfo={null}
+        onArchive={onArchive}
+        onDispatchRound={vi.fn()}
+        onDispatchImplementationRound={vi.fn()}
+        onReReviewPullRequest={vi.fn()}
+        onOpenDetailStage={vi.fn()}
+      />,
+    )
+
+    const archiveButton = screen.getByRole('button', { name: 'Archive' })
+    fireEvent.click(archiveButton)
+    expect(onArchive).toHaveBeenCalledOnce()
+
+    // An open task is not closed work, so archive stays in the overflow menu only.
+    rerender(
+      <TaskStatusPanel
+        item={makeItem({ state: 'discovered' })}
+        run={undefined}
+        brief={{ summary: '', keyDetails: '', whyItMatters: '', desiredOutcome: '' }}
+        runnerMode="appServer"
+        canDispatch={false}
+        canImplementationDispatch={false}
+        canArchive
+        isPullRequest={false}
+        reReviewInfo={null}
+        onArchive={onArchive}
+        onDispatchRound={vi.fn()}
+        onDispatchImplementationRound={vi.fn()}
+        onReReviewPullRequest={vi.fn()}
+        onOpenDetailStage={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument()
   })
 })
 

@@ -311,22 +311,26 @@ Status defaults to a Problem / Result / Action / Stats hierarchy:
 - **Stats** shows compact counts for review drafts, implementation drafts,
   follow-ups, source writes, and comments.
 
-Status may show the latest run kind, attempt, status, and progress only while a
-run is active or failed/cancelled/timed out. While a run is active, Status may
-also surface a single-line live activity indicator in place of the static
-heartbeat message: a short activity verb derived from the current AppServer item
-(e.g. Thinking, Running command, Writing), optionally followed by a truncated,
-muted tail of the latest streamed agent text. This is an ephemeral status line,
-not an AppServer conversation row — it is at most one line, replaced in place as
-the run streams, never persisted, and cleared the moment the run ends. The
-drawer must not stack multiple items, render markdown, show roles/timestamps, or
-retain history; the full conversation stays in DotCraft Desktop and the detail
-page. Successful run summaries are hidden
+Status may show the latest run kind, attempt, and status only while a run is
+active or failed/cancelled/timed out. It must not render a run progress bar: the
+percentage duplicates the status label and the active-or-not signal, so it adds
+no operator value. While a run is active, Status surfaces a live activity
+indicator in the run section body (not as the section subtitle): a short
+activity verb derived from the current AppServer item (e.g. Thinking, Running
+command, Writing), optionally followed by a muted tail of the latest streamed
+agent text. This is an ephemeral status feed, not an AppServer conversation
+row — it renders the single current activity in a fixed-height body area that may
+wrap and clamp the latest output to a few lines, is replaced in place as the run
+streams, never persisted, and cleared the moment the run ends. The drawer must
+not stack multiple items, render markdown, show roles/timestamps, or retain
+history; the full conversation stays in DotCraft Desktop and the detail page. Successful run summaries are hidden
 from the default drawer because the review draft or follow-up draft is the
 operator-facing result. Status may also show board-safe actions such as
 dispatch, retry, archive, reopen, edit local task, re-review PR, and copy task
 id when backend gates allow them, plus a persistent `Open detail page` action in
-the drawer overflow menu.
+the drawer overflow menu. For closed work — an `Approved` or `Rejected` task —
+Status may promote `Archive` to an explicit `Action` section above any re-run or
+re-review action, so filing completed work no longer requires the overflow menu.
 
 Status must not show:
 

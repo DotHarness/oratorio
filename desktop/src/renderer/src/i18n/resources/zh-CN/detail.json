@@ -31,7 +31,6 @@
   "run": {
     "attempt": "{{kind}} 第 {{attempt}} 次尝试",
     "waiting": "正在等待运行器更新。",
-    "progress": "运行进度",
     "activity": {
       "thinking": "思考中",
       "writing": "撰写中",
@@ -43,6 +42,11 @@
   "reReview": {
     "title": "评审最新提交",
     "button": "重新评审 {{target}}"
+  },
+  "archive": {
+    "title": "归档任务",
+    "description": "该任务已结束，归档以将其移出活动看板。",
+    "button": "归档"
   },
   "start": {
     "implementation": "开始实现",

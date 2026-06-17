@@ -2478,8 +2478,10 @@ function OratorioApp() {
                   canDispatch={selectedCanDispatch}
                   canImplementationDispatch={selectedCanImplementationDispatch}
                   canDecide={selectedCanDecide}
+                  canArchive={selectedCanArchive}
                   isPullRequest={selectedIsPullRequest}
                   reReviewInfo={selectedReReviewInfo}
+                  onArchive={() => void archiveSelectedItem()}
                   onDispatchRound={dispatchRound}
                   onDispatchImplementationRound={dispatchImplementationRound}
                   onReReviewPullRequest={reReviewPullRequest}
