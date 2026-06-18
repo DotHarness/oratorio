@@ -29,7 +29,8 @@
     "description": "Agent outputs ready for operator review."
   },
   "run": {
-    "attempt": "{{kind}} attempt {{attempt}}",
+    "agent": "Agent",
+    "round": "Round {{round}}",
     "waiting": "Waiting for runner update.",
     "activity": {
       "thinking": "Thinking",

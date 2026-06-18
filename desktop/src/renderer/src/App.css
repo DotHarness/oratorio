@@ -2615,12 +2615,18 @@ textarea::placeholder {
   overflow-wrap: anywhere;
 }
 
-.task-status-panel .task-status-run-section .section-block-title-group {
-  align-items: flex-start;
+/* The run header carries no description line, so center the icon, title, and status
+   pills on a single row instead of top-aligning them to a second line that is gone. */
+.task-status-panel .task-status-run-section .section-block-head {
+  align-items: center;
 }
 
-.task-status-panel .task-status-run-section .section-block-title-group > div {
-  min-width: 0;
+/* Round indicator sits left of the run status pill; muted so the live status reads
+   as the primary signal. Only rendered past the first round. */
+.status-chip.task-status-round-chip {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-tertiary) 58%, transparent);
+  font-variant-numeric: tabular-nums;
 }
 
 .task-status-run-feed .task-status-live-line {
@@ -2910,12 +2916,12 @@ textarea::placeholder {
   gap: 8px;
 }
 
+/* Reject sits on the card's natural 12px grid gap — looser than the 8px Approve↔Request
+   pairing above, so the destructive action still reads as set apart without a heavy
+   divider line and the wide gap it created. */
 .task-status-danger-zone {
   display: grid;
   gap: 9px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-default);
 }
 
 .task-status-reject-trigger {
@@ -2952,21 +2958,16 @@ textarea::placeholder {
 
 .task-status-comment-action {
   width: 100%;
-  margin-top: 10px;
 }
 
-/* Solo comment button is a direct grid child of the panel, so the 14px row-gap alone
-   already matches the card-to-card spacing above it. It must NOT inherit the 10px top
-   margin from `.secondary-button` (which is defined later in this file and would otherwise
-   win the cascade by source order), because that margin stacks on top of the grid gap and
-   reads as ~24px — visibly looser than the gaps above. Scope this to the panel so it beats
-   `.secondary-button` on specificity and pins the gap to a clean 14px. */
-.task-status-panel > .task-status-comment-action--solo {
-  margin-top: 0;
-}
-
-/* Ghost emphasis for the comment action — lowest weight in the drawer */
+/* Spacing above the comment action is owned entirely by the surrounding grid gap (12px
+   inside the artifacts card, 14px when it sits solo as a direct panel child). Zero the
+   10px top margin it would otherwise inherit from `.secondary-button` so it does not stack
+   on the gap and read looser than the card's other rows. Panel scope beats `.secondary-button`
+   on specificity regardless of source order. */
 .task-status-panel .task-status-comment-action {
+  margin-top: 0;
+  /* Ghost emphasis — lowest weight in the drawer */
   border-style: dashed;
   border-color: var(--border-default);
   color: var(--text-secondary);
