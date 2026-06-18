@@ -29,7 +29,8 @@
     "description": "等待操作员评审的智能体产物。"
   },
   "run": {
-    "attempt": "{{kind}} 第 {{attempt}} 次尝试",
+    "agent": "智能体",
+    "round": "第 {{round}} 轮",
     "waiting": "正在等待运行器更新。",
     "activity": {
       "thinking": "思考中",

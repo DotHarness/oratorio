@@ -128,7 +128,7 @@ describe('TaskStatusPanel', () => {
       />,
     )
 
-    expect(screen.getByText('DotCraft attempt 1')).toBeInTheDocument()
+    expect(screen.getByText('Agent')).toBeInTheDocument()
     // The run section shows the heartbeat status in its body feed, not a progress bar.
     expect(screen.getByText('DotCraft agent is producing output.')).toBeInTheDocument()
     expect(screen.queryByText('Thread')).not.toBeInTheDocument()
@@ -137,6 +137,47 @@ describe('TaskStatusPanel', () => {
     expect(screen.queryByTitle(threadId)).not.toBeInTheDocument()
     expect(screen.queryByText('example-owner/oratorio')).not.toBeInTheDocument()
     expect(screen.queryByText('feature/drawer-slim')).not.toBeInTheDocument()
+  })
+
+  it('shows a round pill beside the run status only past the first round', () => {
+    const { rerender } = render(
+      <TaskStatusPanel
+        item={makeItem({ state: 'running', round: 1 })}
+        run={makeRun({ status: 'running' })}
+        brief={{ summary: '', keyDetails: '', whyItMatters: '', desiredOutcome: '' }}
+        runnerMode="appServer"
+        canDispatch={false}
+        canImplementationDispatch={false}
+        isPullRequest={false}
+        reReviewInfo={null}
+        onDispatchRound={vi.fn()}
+        onDispatchImplementationRound={vi.fn()}
+        onReReviewPullRequest={vi.fn()}
+        onOpenDetailStage={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Agent')).toBeInTheDocument()
+    expect(screen.queryByText('Round 1')).not.toBeInTheDocument()
+
+    rerender(
+      <TaskStatusPanel
+        item={makeItem({ state: 'running', round: 3 })}
+        run={makeRun({ status: 'running' })}
+        brief={{ summary: '', keyDetails: '', whyItMatters: '', desiredOutcome: '' }}
+        runnerMode="appServer"
+        canDispatch={false}
+        canImplementationDispatch={false}
+        isPullRequest={false}
+        reReviewInfo={null}
+        onDispatchRound={vi.fn()}
+        onDispatchImplementationRound={vi.fn()}
+        onReReviewPullRequest={vi.fn()}
+        onOpenDetailStage={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Round 3')).toBeInTheDocument()
   })
 
   it('prioritizes unresolved review actions in the drawer primary CTA', () => {

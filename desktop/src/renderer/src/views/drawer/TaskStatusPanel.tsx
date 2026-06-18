@@ -7,7 +7,7 @@ import { SectionBlock } from '../../components/primitives/SectionBlock'
 import { Tooltip } from '../../components/primitives/Tooltip'
 import type { BriefFields, DeliveryPolicy, ReReviewInfo, ReviewStageId, Run, RunnerMode, WorkItem } from '../../lib/types'
 import type { LiveActivity, LiveActivityKind } from '../../lib/liveActivity'
-import { isActiveRun, runnerKindLabel, runnerModeLabel, runStatusLabel, summaryPreviewLines } from '../../lib/format'
+import { isActiveRun, runnerModeLabel, runStatusLabel, summaryPreviewLines } from '../../lib/format'
 
 const liveActivityIcons: Record<LiveActivityKind, ReactNode> = {
   thinking: <Brain size={16} />,
@@ -247,8 +247,15 @@ export function TaskStatusPanel({
           className={runSectionClassName}
           tone="slate"
           icon={runStatusIcon}
-          title={t('run.attempt', { kind: runnerKindLabel(run.runnerKind), attempt: run.attempt })}
-          action={<span className={`status-chip ${run.status}`}>{runStatusLabel(run.status)}</span>}
+          title={t('run.agent')}
+          action={
+            <>
+              {item.round > 1 ? (
+                <span className="status-chip task-status-round-chip">{t('run.round', { round: item.round })}</span>
+              ) : null}
+              <span className={`status-chip ${run.status}`}>{runStatusLabel(run.status)}</span>
+            </>
+          }
         >
           <div className="task-status-run-feed" aria-live="polite">
             {runStatusDescription}
@@ -527,7 +534,7 @@ export function TaskStatusPanel({
         </SectionBlock>
       ) : (
         <button
-          className="secondary-button task-status-comment-action task-status-comment-action--solo"
+          className="secondary-button task-status-comment-action"
           onClick={() => onOpenDetailStage('review', { focus: 'discussionComposer' })}
         >
           <MessageSquare size={15} />
