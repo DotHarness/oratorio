@@ -198,7 +198,7 @@ public sealed class GitLabApiClient(
             var separator = pathAndQuery.Contains('?') ? '&' : '?';
             using var request = CreateRequest(HttpMethod.Get, $"{pathAndQuery}{separator}page={page}", project);
             using var response = await httpClientFactory.CreateClient("GitLab").SendAsync(request, ct);
-            response.EnsureSuccessStatusCode();
+            EnsureGitLabSuccess(response);
 
             var pageItems = await response.Content.ReadFromJsonAsync<IReadOnlyList<T>>(JsonOptions, ct) ?? [];
             results.AddRange(pageItems);
@@ -212,6 +212,19 @@ public sealed class GitLabApiClient(
         }
 
         return results;
+    }
+
+    private static void EnsureGitLabSuccess(HttpResponseMessage response)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        throw new HttpRequestException(
+            $"GitLab API request failed with {(int)response.StatusCode} ({response.ReasonPhrase}).",
+            null,
+            response.StatusCode);
     }
 
     private async Task<GitLabWriteResponse> SendJsonAsync(HttpMethod method, string pathAndQuery, object payload, GitLabProjectRef project, CancellationToken ct)

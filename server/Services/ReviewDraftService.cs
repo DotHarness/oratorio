@@ -13,6 +13,7 @@ namespace Oratorio.Server.Services;
 public sealed class ReviewDraftService(
     OratorioDbContext db,
     IReviewDiffProvider reviewDiffs,
+    IReviewLocalDiffProvider localDiffs,
     GitHubWriteService gitHubWrites,
     GitLabWriteService gitLabWrites,
     IGitLabApiClient gitLab,
@@ -328,13 +329,18 @@ public sealed class ReviewDraftService(
             throw OratorioApiException.Conflict("gitlabDiffRefsRequired", "GitLab review draft publication requires merge request diff refs.");
         }
 
-        var diffs = await gitLab.ListMergeRequestDiffsAsync(project, iid, ct);
-        var anchorMap = BuildGitLabAnchorMapFromDiffs(diffs);
-        var comments = new List<object>();
-        foreach (var comment in acceptedComments)
+        IReadOnlyList<GitLabMergeRequestDiff>? diffs = null;
+        ReviewDiffAnchorMap anchorMap;
+        string? diffReadFailure = null;
+        try
         {
-            var diff = FindGitLabDiff(diffs, comment.Path);
-            if (diff is null)
+            diffs = await gitLab.ListMergeRequestDiffsAsync(project, iid, ct);
+            anchorMap = BuildGitLabAnchorMapFromDiffs(diffs);
+        }
+        catch (HttpRequestException ex)
+        {
+            diffReadFailure = BuildGitLabDiffUnavailableDiagnostic(ex);
+            if (draft.Run is null)
             {
                 return CreateFailedGitLabPublishWrite(
                     draft,
@@ -342,22 +348,51 @@ public sealed class ReviewDraftService(
                     iid,
                     headSha,
                     now,
-                    "gitlabDiffAnchorMissing",
-                    $"GitLab diff no longer contains {comment.Path}.");
+                    "reviewDiffUnavailable",
+                    "GitLab merge request diff validation is unavailable and the review run is not available for local fallback.");
+            }
+
+            anchorMap = await BuildLocalFallbackAnchorMapAsync(
+                draft.Run,
+                acceptedComments.Select(x => x.Path).Distinct(StringComparer.Ordinal).ToArray(),
+                diffReadFailure,
+                ct);
+        }
+
+        var comments = new List<object>();
+        foreach (var comment in acceptedComments)
+        {
+            var diff = diffs is null ? null : FindGitLabDiff(diffs, comment.Path);
+            if (diff is null)
+            {
+                if (diffs is not null)
+                {
+                    return CreateFailedGitLabPublishWrite(
+                        draft,
+                        project,
+                        iid,
+                        headSha,
+                        now,
+                        "gitlabDiffAnchorMissing",
+                        $"GitLab diff no longer contains {comment.Path}.");
+                }
             }
 
             if (!anchorMap.TryGetAnchors(comment.Path, out var anchors) ||
                 !anchors.TryGetPosition(comment.Side, comment.Line, out var linePosition) ||
                 (linePosition.OldLine is null && linePosition.NewLine is null))
             {
+                var (code, message) = diffs is null
+                    ? ("reviewDiffUnavailable", $"{diffReadFailure} Local git diff fallback could not resolve {comment.Path}:{comment.Line}.")
+                    : ("gitlabDiffAnchorMissing", $"GitLab diff no longer contains a commentable position for {comment.Path}:{comment.Line}.");
                 return CreateFailedGitLabPublishWrite(
                     draft,
                     project,
                     iid,
                     headSha,
                     now,
-                    "gitlabDiffAnchorMissing",
-                    $"GitLab diff no longer contains a commentable position for {comment.Path}:{comment.Line}.");
+                    code,
+                    message);
             }
 
             comments.Add(new
@@ -369,8 +404,8 @@ public sealed class ReviewDraftService(
                     baseSha,
                     headSha,
                     startSha,
-                    oldPath = diff.OldPath,
-                    newPath = diff.NewPath,
+                    oldPath = diff?.OldPath ?? comment.Path,
+                    newPath = diff?.NewPath ?? comment.Path,
                     oldLine = linePosition.OldLine,
                     newLine = linePosition.NewLine
                 }
@@ -916,28 +951,63 @@ public sealed class ReviewDraftService(
                 throw OratorioApiException.Conflict("invalidGitLabTarget", "The source item is not a valid GitLab merge request target.");
             }
 
-            return await BuildGitLabAnchorMapAsync(project, iid, ct);
+            return await BuildGitLabAnchorMapAsync(run, project, iid, requestedPaths, ct);
         }
 
         throw OratorioApiException.Conflict("reviewDraftUnsupportedItem", "Review drafts are only supported for GitHub pull request and GitLab merge request runs.");
     }
 
-    private async Task<ReviewDiffAnchorMap> BuildGitLabAnchorMapAsync(GitLabProjectRef project, int iid, CancellationToken ct)
+    private async Task<ReviewDiffAnchorMap> BuildGitLabAnchorMapAsync(OratorioRun run, GitLabProjectRef project, int iid, IReadOnlyList<string> requestedPaths, CancellationToken ct)
     {
         IReadOnlyList<GitLabMergeRequestDiff> diffs;
         try
         {
             diffs = await gitLab.ListMergeRequestDiffsAsync(project, iid, ct);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            return new ReviewDiffAnchorMap(
-                [],
-                new Dictionary<string, ReviewDiffFileAnchors>(StringComparer.Ordinal),
-                ["reviewDiffUnavailable: GitLab merge request diff validation is unavailable; inline comments were preserved but skipped."]);
+            return await BuildLocalFallbackAnchorMapAsync(run, requestedPaths, BuildGitLabDiffUnavailableDiagnostic(ex), ct);
         }
 
         return BuildGitLabAnchorMapFromDiffs(diffs);
+    }
+
+    private async Task<ReviewDiffAnchorMap> BuildLocalFallbackAnchorMapAsync(
+        OratorioRun run,
+        IReadOnlyList<string> requestedPaths,
+        string unavailableDiagnostic,
+        CancellationToken ct)
+    {
+        var changedPaths = new HashSet<string>(StringComparer.Ordinal);
+        var files = new Dictionary<string, ReviewDiffFileAnchors>(StringComparer.Ordinal);
+        var patchUnavailablePaths = new HashSet<string>(StringComparer.Ordinal);
+        var recoveredCount = 0;
+
+        foreach (var path in requestedPaths.Distinct(StringComparer.Ordinal))
+        {
+            changedPaths.Add(path);
+            var patch = await localDiffs.GetFilePatchAsync(run, path, ct);
+            if (string.IsNullOrWhiteSpace(patch))
+            {
+                patchUnavailablePaths.Add(path);
+                continue;
+            }
+
+            files[path] = ReviewDiffProvider.BuildAnchorsFromPatch(patch);
+            recoveredCount++;
+        }
+
+        var diagnostics = new List<string>();
+        if (recoveredCount == 0)
+        {
+            diagnostics.Add(unavailableDiagnostic);
+        }
+        else if (patchUnavailablePaths.Count > 0)
+        {
+            diagnostics.Add("reviewDiffFallbackPartial: GitLab merge request diff API was unavailable; local git diff fallback resolved some requested files, and unresolved inline comments were skipped.");
+        }
+
+        return new ReviewDiffAnchorMap(changedPaths, files, diagnostics, patchUnavailablePaths);
     }
 
     private static ReviewDiffAnchorMap BuildGitLabAnchorMapFromDiffs(IEnumerable<GitLabMergeRequestDiff> diffs)
@@ -998,6 +1068,12 @@ public sealed class ReviewDraftService(
 
     private static bool IsDiffUnavailableDiagnostic(string diagnostic) =>
         diagnostic.StartsWith("reviewDiffUnavailable:", StringComparison.Ordinal);
+
+    private static string BuildGitLabDiffUnavailableDiagnostic(HttpRequestException ex)
+    {
+        var detail = ex.StatusCode.HasValue ? $" with HTTP status {(int)ex.StatusCode.Value}" : "";
+        return $"reviewDiffUnavailable: GitLab merge request diff validation is unavailable{detail}; inline comments were preserved but skipped unless local git diff fallback can resolve them.";
+    }
 
     private static string BuildInlineCommentBody(OratorioReviewDraftComment comment, bool gitLab = false)
     {
