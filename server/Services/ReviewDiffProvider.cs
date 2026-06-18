@@ -114,17 +114,21 @@ public sealed class ReviewDiffProvider(
 
             if (value.StartsWith("+", StringComparison.Ordinal))
             {
-                anchors.AddRight(right++, value[1..]);
+                anchors.AddRight(right, value[1..], null, right);
+                right++;
             }
             else if (value.StartsWith("-", StringComparison.Ordinal))
             {
-                anchors.AddLeft(left++, value[1..]);
+                anchors.AddLeft(left, value[1..], left, null);
+                left++;
             }
             else
             {
                 var text = value.Length == 0 ? "" : value[1..];
-                anchors.AddLeft(left++, text);
-                anchors.AddRight(right++, text);
+                anchors.AddLeft(left, text, left, right);
+                anchors.AddRight(right, text, left, right);
+                left++;
+                right++;
             }
         }
     }
@@ -342,29 +346,46 @@ public sealed class ReviewDiffFileAnchors
 {
     private readonly HashSet<int> _left = [];
     private readonly HashSet<int> _right = [];
+    private readonly Dictionary<int, ReviewDiffLinePosition> _leftPositions = [];
+    private readonly Dictionary<int, ReviewDiffLinePosition> _rightPositions = [];
     private readonly Dictionary<int, string> _rightText = [];
 
     public IReadOnlySet<int> Left => _left;
     public IReadOnlySet<int> Right => _right;
 
-    internal void AddLeft(int line, string text)
+    internal void AddLeft(int line, string text, int? oldLine = null, int? newLine = null)
     {
         if (line > 0)
         {
             _left.Add(line);
+            _leftPositions[line] = new ReviewDiffLinePosition(oldLine ?? line, newLine);
         }
     }
 
-    internal void AddRight(int line, string text)
+    internal void AddRight(int line, string text, int? oldLine = null, int? newLine = null)
     {
         if (line > 0)
         {
             _right.Add(line);
+            _rightPositions[line] = new ReviewDiffLinePosition(oldLine, newLine ?? line);
             _rightText[line] = text;
         }
     }
 
     public bool Has(string side, int line) => side == "LEFT" ? _left.Contains(line) : _right.Contains(line);
+
+    public bool TryGetPosition(string side, int line, out ReviewDiffLinePosition position)
+    {
+        var positions = side == "LEFT" ? _leftPositions : _rightPositions;
+        if (positions.TryGetValue(line, out var found))
+        {
+            position = found;
+            return true;
+        }
+
+        position = new ReviewDiffLinePosition(null, null);
+        return false;
+    }
 
     public bool TryGetRightTextRange(int startLine, int endLine, out string text)
     {
@@ -391,7 +412,7 @@ public sealed class ReviewDiffFileAnchors
 
     public IReadOnlyList<ReviewDiffTextMatch> FindRightTextMatches(string text)
     {
-        var lines = text.Split('\n');
+        var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
         if (lines.Length == 0)
         {
             return [];
@@ -432,5 +453,7 @@ public sealed class ReviewDiffFileAnchors
         return matches;
     }
 }
+
+public sealed record ReviewDiffLinePosition(int? OldLine, int? NewLine);
 
 public sealed record ReviewDiffTextMatch(int StartLine, int EndLine);

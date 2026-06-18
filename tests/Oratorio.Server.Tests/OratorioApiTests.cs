@@ -5524,6 +5524,7 @@ internal enum FakeAppServerOutcome
     SubmitAmbiguousSuggestionTextReviewDraft,
     SubmitMismatchedSuggestionCountReviewDraft,
     SubmitMultiLineReviewDraft,
+    SubmitContextLineReviewDraft,
     SubmitNoOpReviewDraft,
     SubmitImplementationDraft,
     SubmitFollowUpDraft,
@@ -5784,7 +5785,7 @@ internal sealed class FakeAppServerClient(
             _notifications.Writer.TryWrite(Notification("turn/completed", new { threadId, turnId, summary = "DotCraft analysis complete." }));
             _notifications.Writer.TryComplete();
         }
-        else if (outcome is FakeAppServerOutcome.SubmitReviewDraft or FakeAppServerOutcome.SubmitDef208BadAnchorReviewDraft or FakeAppServerOutcome.SubmitRetryAnchorReviewDraft or FakeAppServerOutcome.SubmitCleanReviewDraft or FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft or FakeAppServerOutcome.SubmitInvalidReviewDraft or FakeAppServerOutcome.SubmitLegacyReviewDraft or FakeAppServerOutcome.SubmitMissingSuggestionOldTextReviewDraft or FakeAppServerOutcome.SubmitSuggestionTextNotFoundReviewDraft or FakeAppServerOutcome.SubmitAmbiguousSuggestionTextReviewDraft or FakeAppServerOutcome.SubmitMismatchedSuggestionCountReviewDraft or FakeAppServerOutcome.SubmitMultiLineReviewDraft or FakeAppServerOutcome.SubmitNoOpReviewDraft)
+        else if (outcome is FakeAppServerOutcome.SubmitReviewDraft or FakeAppServerOutcome.SubmitDef208BadAnchorReviewDraft or FakeAppServerOutcome.SubmitRetryAnchorReviewDraft or FakeAppServerOutcome.SubmitCleanReviewDraft or FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft or FakeAppServerOutcome.SubmitInvalidReviewDraft or FakeAppServerOutcome.SubmitLegacyReviewDraft or FakeAppServerOutcome.SubmitMissingSuggestionOldTextReviewDraft or FakeAppServerOutcome.SubmitSuggestionTextNotFoundReviewDraft or FakeAppServerOutcome.SubmitAmbiguousSuggestionTextReviewDraft or FakeAppServerOutcome.SubmitMismatchedSuggestionCountReviewDraft or FakeAppServerOutcome.SubmitMultiLineReviewDraft or FakeAppServerOutcome.SubmitContextLineReviewDraft or FakeAppServerOutcome.SubmitNoOpReviewDraft)
         {
             _ = Task.Run(async () =>
             {
@@ -5935,6 +5936,21 @@ internal sealed class FakeAppServerClient(
                                 {
                                     oldText = "        return token;\n        return refreshed;",
                                     newText = "        return refreshed;\n        return token;"
+                                }
+                            }
+                        },
+                        FakeAppServerOutcome.SubmitContextLineReviewDraft => new object[]
+                        {
+                            new
+                            {
+                                severity = "RED",
+                                title = "Context line needs explicit handling",
+                                body = "The replacement targets an unchanged diff context line.",
+                                path = "src/Auth/RefreshTokenStore.cs",
+                                suggestion = new
+                                {
+                                    oldText = "line89",
+                                    newText = "line89 fixed"
                                 }
                             }
                         },

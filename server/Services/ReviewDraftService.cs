@@ -216,6 +216,13 @@ public sealed class ReviewDraftService(
         draft.SourceWrite = write;
         draft.SourceWriteId = write.WriteId;
         draft.UpdatedAt = now;
+        if (write.Status == SourceWriteStatus.Failed)
+        {
+            draft.Status = ReviewDraftStatus.PublishFailed;
+            AddTimeline(draft.Item, draft.Round, null, TimelineEventKind.SourceWriteFailed, $"{sourceActor} review draft publish failed", write.ErrorMessage, now);
+            return;
+        }
+
         AddTimeline(draft.Item, draft.Round, null, TimelineEventKind.SourceWriteQueued, $"{sourceActor} review draft publish queued", null, now);
 
         var blocked = PublishBlockReason(draft, enforceAutoPublishGates);
@@ -322,11 +329,37 @@ public sealed class ReviewDraftService(
         }
 
         var diffs = await gitLab.ListMergeRequestDiffsAsync(project, iid, ct);
+        var anchorMap = BuildGitLabAnchorMapFromDiffs(diffs);
         var comments = new List<object>();
         foreach (var comment in acceptedComments)
         {
-            var diff = FindGitLabDiff(diffs, comment.Path)
-                ?? throw OratorioApiException.Conflict("gitlabDiffAnchorMissing", $"GitLab diff no longer contains {comment.Path}.");
+            var diff = FindGitLabDiff(diffs, comment.Path);
+            if (diff is null)
+            {
+                return CreateFailedGitLabPublishWrite(
+                    draft,
+                    project,
+                    iid,
+                    headSha,
+                    now,
+                    "gitlabDiffAnchorMissing",
+                    $"GitLab diff no longer contains {comment.Path}.");
+            }
+
+            if (!anchorMap.TryGetAnchors(comment.Path, out var anchors) ||
+                !anchors.TryGetPosition(comment.Side, comment.Line, out var linePosition) ||
+                (linePosition.OldLine is null && linePosition.NewLine is null))
+            {
+                return CreateFailedGitLabPublishWrite(
+                    draft,
+                    project,
+                    iid,
+                    headSha,
+                    now,
+                    "gitlabDiffAnchorMissing",
+                    $"GitLab diff no longer contains a commentable position for {comment.Path}:{comment.Line}.");
+            }
+
             comments.Add(new
             {
                 findingId = comment.DraftCommentId,
@@ -338,8 +371,8 @@ public sealed class ReviewDraftService(
                     startSha,
                     oldPath = diff.OldPath,
                     newPath = diff.NewPath,
-                    oldLine = comment.Side == "LEFT" ? comment.Line : (int?)null,
-                    newLine = comment.Side == "RIGHT" ? comment.Line : (int?)null
+                    oldLine = linePosition.OldLine,
+                    newLine = linePosition.NewLine
                 }
             });
         }
@@ -360,6 +393,33 @@ public sealed class ReviewDraftService(
             UpdatedAt = now
         };
     }
+
+    private static OratorioSourceWriteLog CreateFailedGitLabPublishWrite(
+        OratorioReviewDraft draft,
+        GitLabProjectRef project,
+        int iid,
+        string? headSha,
+        DateTimeOffset now,
+        string code,
+        string message) =>
+        new()
+        {
+            ItemId = draft.ItemId,
+            RoundId = draft.RoundId,
+            Source = "gitlab",
+            Kind = SourceWriteKind.MergeRequestDiscussion,
+            Intent = "reviewDraftPublish",
+            Status = SourceWriteStatus.Failed,
+            Repository = project.ProjectPath,
+            Number = iid,
+            HeadSha = headSha,
+            RequestJson = JsonSerializer.Serialize(new { body = draft.SummaryBody, comments = Array.Empty<object>(), error = code }, JsonOptions),
+            ErrorCode = code,
+            ErrorMessage = message,
+            CreatedAt = now,
+            UpdatedAt = now,
+            CompletedAt = now
+        };
 
     private static (string Code, string Message)? PublishBlockReason(OratorioReviewDraft draft, bool enforceAutoPublishGates)
     {
@@ -877,6 +937,11 @@ public sealed class ReviewDraftService(
                 ["reviewDiffUnavailable: GitLab merge request diff validation is unavailable; inline comments were preserved but skipped."]);
         }
 
+        return BuildGitLabAnchorMapFromDiffs(diffs);
+    }
+
+    private static ReviewDiffAnchorMap BuildGitLabAnchorMapFromDiffs(IEnumerable<GitLabMergeRequestDiff> diffs)
+    {
         var changedPaths = new HashSet<string>(StringComparer.Ordinal);
         var files = new Dictionary<string, ReviewDiffFileAnchors>(StringComparer.Ordinal);
         var diagnostics = new List<string>();
