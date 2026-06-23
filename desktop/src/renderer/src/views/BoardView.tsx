@@ -16,6 +16,7 @@ import { useBoardCommander } from '../hooks/useBoardCommander'
 import { resolveDrag } from '../lib/dragMatrix'
 import { sortItemsForBoard } from '../lib/sortOrder'
 import { parseTaskSearchQuery, taskMatchesSearch } from '../lib/taskSearch'
+import { sourceProjectMatchesFilter } from '../lib/sourceProjects'
 import type { GitHubSourceStatus, GitHubSyncJob, MockOutcome, RunnerMode, TaskStatus, UiNotice, WorkItem } from '../lib/types'
 import {
   activeTaskStatusColumns,
@@ -230,7 +231,7 @@ export function BoardView({
   const filteredItems = useMemo(
     () =>
       viewItems.filter((item) => {
-        const matchesRepository = repositoryFilter === 'all' || item.repository === repositoryFilter
+        const matchesRepository = sourceProjectMatchesFilter(item.repository, repositoryFilter, item.sourceKey)
         const matchesAssignee = assigneeFilter === 'all' || item.assignee === assigneeFilter
 
         return matchesRepository && matchesAssignee && taskMatchesSearch(item, parsedSearchQuery)

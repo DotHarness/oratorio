@@ -73,6 +73,31 @@ describe('AppShell local task created notice', () => {
     expect(await screen.findByRole('option', { name: 'example-owner/oratorio' })).toBeInTheDocument()
   })
 
+  it('deduplicates source projects and shows compact GitLab labels in the repository filter', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/v1/tasks')) {
+        return jsonResponse({ tasks: [], nextCursor: null })
+      }
+      const sourceResponse = sourceApiResponseWithSelectorProjects(url)
+      if (sourceResponse) {
+        return sourceResponse
+      }
+
+      return defaultAppShellResponse(url)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<AppShell />)
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => isSourcesListUrl(String(input)))).toBe(true))
+    fireEvent.click(await screen.findByRole('button', { name: 'Repository filter' }))
+
+    expect(screen.getAllByRole('option', { name: 'owner-alpha/repo-alpha' })).toHaveLength(1)
+    expect(screen.getByRole('option', { name: 'team-alpha/project-alpha' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /gitlab:gitlab\.example\.test/ })).not.toBeInTheDocument()
+  })
+
   it('keeps the initial launch cover until the first board refresh paints', async () => {
     vi.useFakeTimers()
     const taskList = deferred<Response>()
@@ -937,6 +962,50 @@ function sourceApiResponseWithProjects(url: string) {
             projectPath: 'group/project',
             key: 'gitlab:gitlab.example.test/group/project',
             displayName: 'group/project',
+          },
+        ]),
+      ],
+    })
+  }
+
+  return null
+}
+
+function sourceApiResponseWithSelectorProjects(url: string) {
+  if (url.includes('/api/v1/sources/github/status')) {
+    return jsonResponse({
+      configured: true,
+      enabled: true,
+      repositories: ['owner-alpha/repo-alpha'],
+      lastSyncAt: null,
+      writesEnabled: false,
+      writeConfigured: false,
+      message: 'ok',
+    })
+  }
+  if (url.includes('/api/v1/sources/github/sync-jobs/active') || url.includes('/api/v1/sources/sync-jobs/active')) {
+    return jsonResponse(null)
+  }
+  if (isSourcesListUrl(url)) {
+    return jsonResponse({
+      generatedAt: '2026-05-10T00:00:00Z',
+      providers: [
+        sourceProviderStatus('github', 'GitHub', 'https://api.github.com', [
+          {
+            provider: 'github',
+            instance: 'github.com',
+            projectPath: 'owner-alpha/repo-alpha',
+            key: 'github:github.com/owner-alpha/repo-alpha',
+            displayName: 'owner-alpha/repo-alpha',
+          },
+        ]),
+        sourceProviderStatus('gitlab', 'GitLab', 'https://gitlab.example.test', [
+          {
+            provider: 'gitlab',
+            instance: 'gitlab.example.test',
+            projectPath: 'group-alpha/team-alpha/project-alpha',
+            key: 'gitlab:gitlab.example.test/group-alpha/team-alpha/project-alpha',
+            displayName: 'group-alpha/team-alpha/project-alpha',
           },
         ]),
       ],

@@ -115,6 +115,9 @@ public sealed record SourceProjectKey(string Provider, string Instance, string P
             leftCandidates.Overlaps(rightCandidates);
     }
 
+    public static IReadOnlyCollection<string> RepositoryQueryCandidates(string? value) =>
+        RoutingCandidates(value).ToArray();
+
     public static string? NormalizeGitHubRepository(string? repository)
     {
         if (string.IsNullOrWhiteSpace(repository))

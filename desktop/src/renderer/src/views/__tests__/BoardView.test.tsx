@@ -17,7 +17,7 @@ function makeItem(overrides: Partial<WorkItem> & { id: string; title: string; sh
     number: overrides.number ?? overrides.shortId,
     title: overrides.title,
     description: overrides.description ?? 'A task description.',
-    repository: overrides.repository ?? 'example-owner/oratorio',
+    repository: overrides.repository ?? 'owner-alpha/repo-alpha',
     source: overrides.source ?? 'Local',
     state: overrides.state ?? 'discovered',
     shortId: overrides.shortId,
@@ -111,6 +111,49 @@ describe('BoardView', () => {
     expect(within(reviewColumn).getByText('Review generated patch')).toBeInTheDocument()
     expect(reviewColumn.querySelector('[data-task-card="DEF-3"]')).toBeInTheDocument()
     expect(within(reviewColumn).getByText('1')).toBeInTheDocument()
+  })
+
+  it('shows deduplicated compact source project options in the repository filter', () => {
+    renderBoard([], {
+      repositories: [
+        'owner-alpha/repo-alpha',
+        'github:github.com/owner-alpha/repo-alpha',
+        'gitlab:gitlab.example.test/group-alpha/team-alpha/project-alpha',
+      ],
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Repository filter' }))
+
+    expect(screen.getAllByRole('option', { name: 'owner-alpha/repo-alpha' })).toHaveLength(1)
+    expect(screen.getByRole('option', { name: 'team-alpha/project-alpha' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /gitlab:gitlab\.example\.test/ })).not.toBeInTheDocument()
+  })
+
+  it('matches canonical GitHub repository filters against legacy repository items', () => {
+    const matching = makeItem({
+      id: 'match-1',
+      title: 'Matching legacy repository',
+      shortId: 'DEF-10',
+      taskStatus: 'todo',
+      sourceKey: 'github',
+      repository: 'owner-alpha/repo-alpha',
+    })
+    const other = makeItem({
+      id: 'other-1',
+      title: 'Different repository',
+      shortId: 'DEF-11',
+      taskStatus: 'todo',
+      sourceKey: 'github',
+      repository: 'owner-beta/repo-beta',
+    })
+
+    renderBoard([matching, other], {
+      repositoryFilter: 'github:github.com/owner-alpha/repo-alpha',
+      repositories: ['github:github.com/owner-alpha/repo-alpha', 'owner-beta/repo-beta'],
+    })
+
+    expect(screen.getByText('Matching legacy repository')).toBeInTheDocument()
+    expect(screen.queryByText('Different repository')).not.toBeInTheDocument()
   })
 
   it('opens the selected task when a card is clicked', () => {
@@ -419,7 +462,7 @@ function boardElement(
       query=""
       setQuery={vi.fn()}
       repositoryFilter="all"
-      repositories={['example-owner/oratorio']}
+      repositories={['owner-alpha/repo-alpha']}
       setRepositoryFilter={vi.fn()}
       openCreateLocalTask={vi.fn()}
       refreshAll={vi.fn(async () => undefined)}
@@ -448,7 +491,7 @@ function boardElement(
 const githubStatus: GitHubSourceStatus = {
   available: true,
   configured: true,
-  repositories: ['example-owner/oratorio'],
+  repositories: ['owner-alpha/repo-alpha'],
   lastSyncAt: null,
   message: 'GitHub source read integration is available.',
   writesEnabled: false,

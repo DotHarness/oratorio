@@ -352,6 +352,27 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
+    public async Task ListTasks_RepositoryFilterMatchesCanonicalGitHubKeyForLegacyRepository()
+    {
+        await using var app = new TestOratorioApp();
+        var client = app.CreateClient();
+
+        var created = await CreateLocalTaskAsync(
+            client,
+            "Filter canonical project key",
+            repository: "owner-alpha/repo-alpha");
+
+        var list = await client.GetFromJsonAsync<TaskListResponse>(
+            "/api/v1/tasks?repository=github:github.com/owner-alpha/repo-alpha",
+            JsonOptions);
+
+        Assert.NotNull(list);
+        var item = Assert.Single(list.Tasks);
+        Assert.Equal(created.Item.ItemId, item.ItemId);
+        Assert.Equal("owner-alpha/repo-alpha", item.Repository);
+    }
+
+    [Fact]
     public async Task LocalTask_DispatchAndReview_UsesExistingLifecycle()
     {
         await using var app = new TestOratorioApp();

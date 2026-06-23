@@ -8,6 +8,7 @@ using Oratorio.Server.DotCraft;
 using Oratorio.Server.GitLab;
 using Oratorio.Server.GitHub;
 using Oratorio.Server.Realtime;
+using Oratorio.Server.Sources;
 
 namespace Oratorio.Server.Services;
 
@@ -66,7 +67,10 @@ public sealed class OratorioService(
 
         if (!string.IsNullOrWhiteSpace(repository))
         {
-            query = query.Where(x => x.Repository == repository);
+            var repositories = SourceProjectKey.RepositoryQueryCandidates(repository);
+            query = repositories.Count > 0
+                ? query.Where(x => x.Repository != null && repositories.Contains(x.Repository))
+                : query.Where(x => x.Repository == repository);
         }
 
         if (!string.IsNullOrWhiteSpace(assignee))

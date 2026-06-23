@@ -33,6 +33,7 @@ import { useBoardStream } from '../hooks/useBoardStream'
 import { reduceLiveActivity, type LiveActivity } from '../lib/liveActivity'
 import { applyBoardEvent } from '../lib/sortOrder'
 import { parseTaskSearchQuery, taskSearchApiSource } from '../lib/taskSearch'
+import { hostFromUrl, providerLabel, sourceProjectAliases, sourceProjectDisplayLabel } from '../lib/sourceProjects'
 import { DesktopTitlebar } from './DesktopTitlebar'
 import type {
   BoardEvent,
@@ -2881,7 +2882,7 @@ function buildLocalTaskSourceProjectOptions(
   }
 
   for (const item of knownItems) {
-    addOption(item.repository, sourceProjectOptionLabel(item.repository), sourceProjectOptionAliases(item.repository), 2)
+    addOption(item.repository, sourceProjectDisplayLabel(item.repository), sourceProjectAliases(item.repository), 2)
   }
 
   return options
@@ -2901,47 +2902,8 @@ function sourceProjectOptionValue(
   return instance ? `${provider.provider}:${instance}/${project.projectPath}` : project.projectPath
 }
 
-function sourceProjectOptionLabel(value: string | null | undefined) {
-  const parsed = parseCanonicalSourceProject(value)
-  return parsed ? `${providerLabel(parsed.provider)}: ${parsed.projectPath}` : value ?? ''
-}
-
-function sourceProjectOptionAliases(value: string | null | undefined) {
-  const parsed = parseCanonicalSourceProject(value)
-  if (parsed) {
-    return [parsed.projectPath]
-  }
-
-  return value ? [`github:github.com/${value}`] : []
-}
-
-function parseCanonicalSourceProject(value: string | null | undefined) {
-  const match = value?.trim().match(/^([^:]+):([^/]+)\/(.+)$/)
-  if (!match) {
-    return null
-  }
-
-  return {
-    provider: match[1],
-    instance: match[2],
-    projectPath: match[3],
-  }
-}
-
 function normalizeSourceProjectAlias(value: string) {
   return value.toLocaleLowerCase()
-}
-
-function hostFromUrl(value: string | null | undefined) {
-  if (!value) {
-    return ''
-  }
-
-  try {
-    return new URL(value).host
-  } catch {
-    return value.replace(/^https?:\/\//i, '').split('/')[0] ?? ''
-  }
 }
 
 function applyGitHubSyncRepositoryUpdate(current: GitHubSyncJob | null, update: GitHubSyncRepositoryRun): GitHubSyncJob | null {
@@ -2990,13 +2952,6 @@ function applySourceSyncProjectUpdate(current: SourceSyncJob | null, update: Sou
     skipped: projects.reduce((sum, run) => sum + run.skipped, 0),
     updatedAt: update.updatedAt,
   }
-}
-
-function providerLabel(provider: string) {
-  const normalized = provider.toLocaleLowerCase()
-  if (normalized === 'github') return 'GitHub'
-  if (normalized === 'gitlab') return 'GitLab'
-  return provider
 }
 
 function formatRepositoryNames(runs: GitHubSyncRepositoryRun[], fallback = i18n.t('common:shell.syncFallback.repositories')) {

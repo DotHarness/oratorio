@@ -5,6 +5,7 @@ import { Tooltip } from './Tooltip'
 export type DropdownSelectOption = {
   value: string
   label: string
+  tooltip?: string
 }
 
 type DropdownSelectProps = {
@@ -188,7 +189,7 @@ export function DropdownSelect({
 
   return (
     <div className={`select-control${className ? ` ${className}` : ''}`} ref={rootRef} onKeyDown={handleKeyDown}>
-      {showTooltip ? <Tooltip content={label}>{trigger}</Tooltip> : trigger}
+      {showTooltip ? <Tooltip content={selectedOption.tooltip ?? label}>{trigger}</Tooltip> : trigger}
       {isOpen ? (
         <div className={`repository-select-menu${menuPlacement === 'up' ? ' drop-up' : ''}${menuClassName ? ` ${menuClassName}` : ''}`} role="listbox" aria-label={label}>
           {options.map((option, index) => {
@@ -210,7 +211,7 @@ export function DropdownSelect({
               </button>
             )
 
-            return showTooltip ? <Tooltip key={option.value} content={option.label}>{optionButton}</Tooltip> : optionButton
+            return showTooltip ? <Tooltip key={option.value} content={option.tooltip ?? option.label}>{optionButton}</Tooltip> : optionButton
           })}
         </div>
       ) : null}
