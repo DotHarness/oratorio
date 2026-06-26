@@ -116,6 +116,15 @@
   --glass-highlight: color-mix(in srgb, #ffffff 6%, transparent);
   --drawer-edge: color-mix(in srgb, var(--text-primary) 16%, transparent);
   --drawer-top-highlight: color-mix(in srgb, #ffffff 8%, transparent);
+  --drawer-edge-glow:
+    linear-gradient(
+      180deg,
+      transparent 16%,
+      color-mix(in srgb, var(--text-primary) 46%, transparent) 50%,
+      transparent 84%
+    );
+  --diff-add-bg: color-mix(in srgb, var(--success) 15%, transparent);
+  --diff-remove-bg: color-mix(in srgb, var(--error) 15%, transparent);
   --glass-shadow-soft:
     0 16px 42px rgba(0, 0, 0, 0.22),
     inset 0 1px 0 var(--glass-highlight);
@@ -814,6 +823,15 @@
   --glass-highlight: rgba(255, 255, 255, 0.72);
   --drawer-edge: color-mix(in srgb, var(--text-primary) 12%, transparent);
   --drawer-top-highlight: rgba(255, 255, 255, 0.9);
+  --drawer-edge-glow:
+    linear-gradient(
+      180deg,
+      transparent 16%,
+      color-mix(in srgb, var(--text-primary) 34%, transparent) 50%,
+      transparent 84%
+    );
+  --diff-add-bg: color-mix(in srgb, var(--success) 12%, transparent);
+  --diff-remove-bg: color-mix(in srgb, var(--error) 10%, transparent);
   --glass-shadow-soft:
     0 8px 18px -6px rgba(15, 23, 42, 0.16),
     inset 0 1px 0 var(--glass-highlight);
@@ -2464,16 +2482,6 @@ textarea::placeholder {
   box-shadow: var(--drawer-shadow);
 }
 
-.task-drawer::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 1px;
-  background: var(--drawer-top-highlight);
-  pointer-events: none;
-  z-index: 9;
-}
-
 .task-drawer-resize-handle {
   position: absolute;
   z-index: 8;
@@ -2484,8 +2492,27 @@ textarea::placeholder {
   cursor: col-resize;
 }
 
-.task-drawer-resize-handle:hover {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+/* Resize divider: an edge highlight that lights up the drawer's own left edge
+   on hover/drag — a thin neutral gradient that fades in (brightest at center,
+   fading toward the top and bottom), rather than a flat accent overlay painted
+   across the whole grab strip. */
+.task-drawer-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--drawer-edge-glow);
+  opacity: 0;
+  transition: opacity 150ms ease;
+  pointer-events: none;
+}
+
+.task-drawer-resize-handle:hover::after,
+.task-drawer-resize-handle:active::after {
+  opacity: 1;
 }
 
 .task-drawer-header {
@@ -2498,6 +2525,10 @@ textarea::placeholder {
   border-radius: var(--panel-radius) 0 0 0;
   padding: 18px 18px 14px;
   background: color-mix(in srgb, var(--bg-primary) 92%, var(--bg-secondary));
+  /* Top edge highlight rides the header's rounded top-left corner via an inset
+     shadow, so it no longer overshoots the curve as a doubled hairline the way
+     a full-width absolutely-positioned line did. */
+  box-shadow: inset 0 1px 0 0 var(--drawer-top-highlight);
 }
 
 .task-drawer-title-group {
@@ -5451,10 +5482,10 @@ textarea::placeholder {
   display: grid;
   gap: 8px;
   border: 0;
-  border-left: 2px solid color-mix(in srgb, var(--success) 34%, transparent);
+  border-left: 2px solid var(--border-default);
   border-radius: 7px;
   padding: 9px 10px 10px 11px;
-  background: color-mix(in srgb, var(--success) 5%, var(--bg-secondary));
+  background: var(--bg-secondary);
 }
 
 .draft-suggestion-header {
@@ -5487,64 +5518,71 @@ textarea::placeholder {
 }
 
 .draft-suggestion-diff {
-  display: grid;
   overflow: auto;
+  max-height: 360px;
+  border: 1px solid var(--border-default);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--success) 7%, var(--bg-primary));
-}
-
-.draft-suggestion-line {
-  display: grid;
-  grid-template-columns: 22px 42px minmax(0, 1fr);
-  min-width: 0;
-  border-top: 1px solid color-mix(in srgb, var(--success) 12%, transparent);
-  background: color-mix(in srgb, var(--success) 10%, transparent);
-  color: color-mix(in srgb, var(--success) 50%, var(--text-primary));
+  background: var(--bg-primary);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
   font-size: 12px;
   line-height: 1.55;
 }
 
-.draft-suggestion-line:first-child {
-  border-top: 0;
+.draft-suggestion-line {
+  display: flex;
+  align-items: flex-start;
 }
 
-.draft-suggestion-line.removed {
-  border-top-color: color-mix(in srgb, var(--danger) 12%, transparent);
-  background: color-mix(in srgb, var(--danger) 8%, transparent);
-  color: color-mix(in srgb, var(--danger) 48%, var(--text-primary));
+.draft-suggestion-line.add {
+  background: var(--diff-add-bg);
 }
 
-.draft-suggestion-line.removed .draft-suggestion-marker {
-  color: color-mix(in srgb, var(--danger) 68%, var(--text-secondary));
+.draft-suggestion-line.remove {
+  background: var(--diff-remove-bg);
 }
 
-.draft-suggestion-marker,
-.draft-suggestion-number {
-  padding: 2px 7px;
-  color: color-mix(in srgb, var(--success) 72%, var(--text-secondary));
-  font-family: var(--font-mono);
+.draft-suggestion-gutter {
+  flex-shrink: 0;
+  width: 40px;
+  padding: 1px 6px 1px 0;
+  color: var(--text-dimmed);
+  font-size: 11px;
+  text-align: right;
   user-select: none;
 }
 
-.draft-suggestion-marker {
+.draft-suggestion-sign {
+  flex-shrink: 0;
+  width: 16px;
+  padding: 1px 0;
+  color: var(--text-dimmed);
   text-align: center;
+  user-select: none;
 }
 
-.draft-suggestion-number {
-  border-right: 1px solid color-mix(in srgb, var(--success) 16%, transparent);
-  color: color-mix(in srgb, var(--text-secondary) 74%, transparent);
-  text-align: right;
+.draft-suggestion-line.add .draft-suggestion-sign {
+  color: var(--success);
+}
+
+.draft-suggestion-line.remove .draft-suggestion-sign {
+  color: var(--error);
 }
 
 .draft-suggestion-code {
+  flex: 1;
   min-width: 0;
   border: 0;
-  padding: 2px 9px;
+  padding: 1px 10px 1px 4px;
   color: var(--text-primary);
   background: transparent;
-  font-family: var(--font-mono);
-  overflow-wrap: anywhere;
+  font-family: inherit;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+
+.draft-suggestion-line.remove .draft-suggestion-code {
+  color: var(--text-secondary);
 }
 
 .review-draft-actions {

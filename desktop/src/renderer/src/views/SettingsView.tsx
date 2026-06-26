@@ -816,7 +816,7 @@ export function SettingsView({
   const bridgeActions = shouldShowStartServer ? (
     <button
       type="button"
-      className="secondary-button inline compact-row-action settings-action-button"
+      className="primary-button inline compact-row-action settings-action-button"
       disabled={isStartingAppServer}
       onClick={() => void startAndRefreshDotCraftAppServer()}
     >
@@ -928,8 +928,6 @@ export function SettingsView({
     const active = isActiveSourceSyncJob(job)
     const failedRuns = job?.projects.filter((run) => run.status === 'failed') ?? []
     const canSync = Boolean(provider?.readCapability.available) && !active && !isSyncing && !serverRestartPending
-    const stateTone: 'ok' | 'warn' | 'muted' = configured ? 'ok' : provider?.readCapability.available ? 'warn' : 'muted'
-    const stateLabel = configured ? t('sources.card.stateConfigured') : provider?.readCapability.available ? t('sources.card.stateReady') : t('sources.card.stateNeedsSetup')
     const projectTerm = providerId === 'gitlab' ? t('sources.card.termProjects') : t('sources.card.termRepositories')
     const reviewTargetTerm = providerId === 'gitlab' ? t('sources.card.reviewMRs') : t('sources.card.reviewPRs')
     const metaText = provider
@@ -949,7 +947,6 @@ export function SettingsView({
             <small>{endpoint || name}</small>
           </span>
           <span className="provider-settings-actions">
-            <StatusPill tone={stateTone} label={stateLabel} />
             {configured ? (
               <button className="primary-button inline compact-row-action settings-action-button" type="button" disabled={!canSync} onClick={() => void syncSource(providerId, 'incremental')}>
                 <RefreshCw size={14} className={active || isSyncing ? 'spin-icon' : undefined} />
@@ -1138,7 +1135,7 @@ export function SettingsView({
                     label={t('onboarding:replay.label')}
                     description={t('onboarding:replay.description')}
                     control={
-                      <button type="button" className="secondary-button inline compact-row-action settings-action-button" onClick={onReplayOnboarding}>
+                      <button type="button" className="primary-button inline compact-row-action settings-action-button" onClick={onReplayOnboarding}>
                         <RotateCcw size={14} />
                         {t('onboarding:replay.button')}
                       </button>
@@ -1970,7 +1967,7 @@ function RepositoryAllowlistCard({
           <small>{normalized.length === 1 ? t('review.allowlistCard.includedSingular', { count: normalized.length }) : t('review.allowlistCard.includedPlural', { count: normalized.length })}</small>
           <small>{description}</small>
         </span>
-        <button className="secondary-button inline compact-row-action settings-action-button" type="button" disabled={manageDisabled} onClick={onManage}>
+        <button className="primary-button inline compact-row-action settings-action-button" type="button" disabled={manageDisabled} onClick={onManage}>
           <ListChecks size={14} />
           {t('review.allowlistCard.manage')}
         </button>

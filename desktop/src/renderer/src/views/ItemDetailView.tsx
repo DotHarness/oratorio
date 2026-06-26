@@ -185,9 +185,10 @@ function DraftSuggestionPreview({ comment }: { comment: ReviewDraftComment }) {
       </div>
       <div className="draft-suggestion-diff" aria-label={i18n.t('itemDetail:suggestion.diffAria')}>
         {lines.map((line, index) => (
-          <div className={`draft-suggestion-line ${line.marker === '-' ? 'removed' : 'added'}`} key={`${line.lineNumber ?? 'line'}-${index}`}>
-            <span className="draft-suggestion-marker" aria-hidden="true">{line.marker}</span>
-            <span className="draft-suggestion-number" aria-hidden="true">{line.lineNumber ?? ''}</span>
+          <div className={`draft-suggestion-line ${line.type}`} key={`${line.type}-${line.oldLineNumber ?? line.newLineNumber ?? 'line'}-${index}`}>
+            <span className="draft-suggestion-gutter" aria-hidden="true">{line.oldLineNumber ?? ''}</span>
+            <span className="draft-suggestion-gutter" aria-hidden="true">{line.newLineNumber ?? ''}</span>
+            <span className="draft-suggestion-sign" aria-hidden="true">{line.type === 'add' ? '+' : line.type === 'remove' ? '-' : ' '}</span>
             <code className="draft-suggestion-code">{line.text || ' '}</code>
           </div>
         ))}
