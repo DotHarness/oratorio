@@ -10,8 +10,8 @@
     <RootNamespace>Oratorio.Server</RootNamespace>
     <!-- Headless API: no static web assets, so skip the .staticwebassets.*.json manifest. -->
     <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
-    <AssemblyVersion>0.1.4</AssemblyVersion>
-    <Version>0.1.4</Version>
+    <AssemblyVersion>0.1.5</AssemblyVersion>
+    <Version>0.1.5</Version>
   </PropertyGroup>
 
   <ItemGroup>
