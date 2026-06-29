@@ -46,5 +46,13 @@ export function shouldActivateWindowForAppBindingUrls(urls: readonly string[]): 
 }
 
 export function canDeliverAppBindingHandoffs(status: AppBindingHandoffDeliveryStatus | null | undefined): boolean {
-  return status?.state === 'running' && status.backendKind !== 'remote' && Boolean(status.serverUrl?.trim())
+  return status?.state === 'running' && Boolean(status.serverUrl?.trim())
+}
+
+export function canDeliverAppBindingHandoff(url: string, status: AppBindingHandoffDeliveryStatus | null | undefined): boolean {
+  if (appBindingOperation(url) === 'open') {
+    return true
+  }
+
+  return canDeliverAppBindingHandoffs(status)
 }

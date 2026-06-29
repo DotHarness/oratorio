@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::{
     collections::BTreeSet,
     fmt, fs,
@@ -5,6 +7,8 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
+#[cfg(unix)]
+use std::{fs::OpenOptions, io::Write};
 
 use anyhow::{Context, Result, bail};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -31,6 +35,10 @@ pub struct GithubProject {
 
 impl GithubProject {
     pub fn key(&self) -> String {
+        format!("github:github.com/{}/{}", self.owner, self.repo)
+    }
+
+    pub fn legacy_key(&self) -> String {
         format!("github:{}/{}", self.owner, self.repo)
     }
 
@@ -42,8 +50,12 @@ impl GithubProject {
         format!("git@github.com:{}/{}.git", self.owner, self.repo)
     }
 
-    pub fn workspace_dir_name(&self) -> &str {
-        &self.repo
+    pub fn workspace_dir_name(&self) -> String {
+        format!(
+            "{}__{}",
+            sanitize_workspace_segment(&self.owner),
+            sanitize_workspace_segment(&self.repo)
+        )
     }
 }
 
@@ -224,6 +236,7 @@ pub struct AutomationConfig {
 }
 
 pub fn build_deployment(options: &DeploymentOptions) -> Result<GeneratedDeployment> {
+    validate_workspace_dir_names(&options.repos)?;
     let config = build_config(options);
     let config = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
     Ok(GeneratedDeployment {
@@ -234,10 +247,10 @@ pub fn build_deployment(options: &DeploymentOptions) -> Result<GeneratedDeployme
 }
 
 pub fn build_config(options: &DeploymentOptions) -> ConfigDocument {
+    let repos = unique_sorted(options.repos.clone());
     let mut doc = ConfigDocument::default();
     doc.oratorio.github.repositories = unique_sorted(
-        options
-            .repos
+        repos
             .iter()
             .map(GithubProject::repository)
             .collect::<Vec<_>>(),
@@ -247,8 +260,7 @@ pub fn build_config(options: &DeploymentOptions) -> ConfigDocument {
         doc.oratorio.github.app_id = Some(app.app_id.clone());
         doc.oratorio.github.private_key_path = Some(app.private_key_path.clone());
         doc.oratorio.github.installation_profiles = unique_sorted(
-            options
-                .repos
+            repos
                 .iter()
                 .map(|repo| GitHubInstallationProfile {
                     instance: "github.com".to_string(),
@@ -261,34 +273,39 @@ pub fn build_config(options: &DeploymentOptions) -> ConfigDocument {
     }
 
     doc.oratorio.dotcraft.app_server_url = format!("ws://dotcraft:{}/ws", options.appserver_port);
-    doc.oratorio.dotcraft.repository_workspace_routes = options
-        .repos
+    doc.oratorio.dotcraft.repository_workspace_routes = repos
         .iter()
         .map(|repo| RepositoryWorkspaceRoute {
             project: repo.key(),
-            workspace_path: format!("/workspace/{}", repo.workspace_dir_name()),
+            workspace_path: workspace_path(repo),
         })
         .collect();
 
     if options.auto_review {
         doc.oratorio.automation.auto_review_repositories =
-            options.repos.iter().map(GithubProject::key).collect();
+            repos.iter().map(GithubProject::key).collect();
     }
 
     doc
 }
 
-pub fn add_github_repo(doc: &mut ConfigDocument, repo: &GithubProject, auto_review: bool) {
+pub fn add_github_repo(
+    doc: &mut ConfigDocument,
+    repo: &GithubProject,
+    auto_review: bool,
+) -> Result<()> {
+    ensure_workspace_route_available(doc, repo)?;
+
     push_unique(&mut doc.oratorio.github.repositories, repo.repository());
-    push_unique(
-        &mut doc.oratorio.automation.auto_review_repositories,
-        repo.key(),
-    );
-    if !auto_review {
-        doc.oratorio
-            .automation
-            .auto_review_repositories
-            .retain(|value| !value.eq_ignore_ascii_case(&repo.key()));
+    doc.oratorio
+        .automation
+        .auto_review_repositories
+        .retain(|value| !repo.matches_project_key(value));
+    if auto_review {
+        push_unique(
+            &mut doc.oratorio.automation.auto_review_repositories,
+            repo.key(),
+        );
     }
 
     if let Some(route) = doc
@@ -296,18 +313,21 @@ pub fn add_github_repo(doc: &mut ConfigDocument, repo: &GithubProject, auto_revi
         .dotcraft
         .repository_workspace_routes
         .iter_mut()
-        .find(|route| route.project.eq_ignore_ascii_case(&repo.key()))
+        .find(|route| repo.matches_project_key(&route.project))
     {
-        route.workspace_path = format!("/workspace/{}", repo.workspace_dir_name());
+        route.project = repo.key();
+        route.workspace_path = workspace_path(repo);
     } else {
         doc.oratorio
             .dotcraft
             .repository_workspace_routes
             .push(RepositoryWorkspaceRoute {
                 project: repo.key(),
-                workspace_path: format!("/workspace/{}", repo.workspace_dir_name()),
+                workspace_path: workspace_path(repo),
             });
     }
+
+    Ok(())
 }
 
 pub fn read_config(path: &Path) -> Result<ConfigDocument> {
@@ -320,8 +340,9 @@ pub fn write_generated(paths: &DeploymentPaths, generated: &GeneratedDeployment)
     fs::create_dir_all(&paths.root)?;
     fs::create_dir_all(&paths.workspace)?;
     fs::create_dir_all(&paths.secrets)?;
+    secure_secrets_dir(&paths.secrets)?;
     fs::write(&paths.compose, &generated.compose)?;
-    fs::write(&paths.env, &generated.env)?;
+    write_secret_file(&paths.env, &generated.env)?;
     fs::write(&paths.config, &generated.config)?;
     fs::write(
         paths.root.join(".gitignore"),
@@ -449,6 +470,106 @@ fn push_unique(values: &mut Vec<String>, value: String) {
     }
 }
 
+fn workspace_path(repo: &GithubProject) -> String {
+    format!("/workspace/{}", repo.workspace_dir_name())
+}
+
+fn sanitize_workspace_segment(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| match ch {
+            'A'..='Z' => ch.to_ascii_lowercase(),
+            'a'..='z' | '0'..='9' | '.' | '_' | '-' => ch,
+            _ => '-',
+        })
+        .collect()
+}
+
+impl GithubProject {
+    fn matches_project_key(&self, value: &str) -> bool {
+        value.eq_ignore_ascii_case(&self.key())
+            || value.eq_ignore_ascii_case(&self.legacy_key())
+            || value.eq_ignore_ascii_case(&self.repository())
+    }
+}
+
+fn validate_workspace_dir_names(repos: &[GithubProject]) -> Result<()> {
+    let mut seen: Vec<(String, String)> = Vec::new();
+    for repo in repos {
+        let dir = repo.workspace_dir_name();
+        if let Some((existing_key, _)) = seen
+            .iter()
+            .find(|(_, existing_dir)| existing_dir.eq_ignore_ascii_case(&dir))
+        {
+            if !repo.matches_project_key(existing_key) {
+                bail!(
+                    "workspace directory collision: {} and {} both map to workspace/{}",
+                    existing_key,
+                    repo.key(),
+                    dir
+                );
+            }
+        } else {
+            seen.push((repo.key(), dir));
+        }
+    }
+
+    Ok(())
+}
+
+fn ensure_workspace_route_available(doc: &ConfigDocument, repo: &GithubProject) -> Result<()> {
+    let desired_path = workspace_path(repo);
+    if let Some(route) = doc
+        .oratorio
+        .dotcraft
+        .repository_workspace_routes
+        .iter()
+        .find(|route| {
+            route.workspace_path.eq_ignore_ascii_case(&desired_path)
+                && !repo.matches_project_key(&route.project)
+        })
+    {
+        bail!(
+            "workspace route collision: {} already maps to {}",
+            route.project,
+            desired_path
+        );
+    }
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn secure_secrets_dir(path: &Path) -> Result<()> {
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+        .with_context(|| format!("failed to secure {}", path.display()))
+}
+
+#[cfg(not(unix))]
+fn secure_secrets_dir(_path: &Path) -> Result<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn write_secret_file(path: &Path, contents: &str) -> Result<()> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)
+        .with_context(|| format!("failed to write {}", path.display()))?;
+    file.write_all(contents.as_bytes())
+        .with_context(|| format!("failed to write {}", path.display()))?;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+        .with_context(|| format!("failed to secure {}", path.display()))
+}
+
+#[cfg(not(unix))]
+fn write_secret_file(path: &Path, contents: &str) -> Result<()> {
+    fs::write(path, contents).with_context(|| format!("failed to write {}", path.display()))
+}
+
 fn unique_sorted<T>(values: Vec<T>) -> Vec<T>
 where
     T: Ord,
@@ -490,8 +611,10 @@ mod tests {
     #[test]
     fn parses_github_project_keys() {
         let project: GithubProject = "github:DotHarness/oratorio".parse().unwrap();
-        assert_eq!(project.key(), "github:DotHarness/oratorio");
+        assert_eq!(project.key(), "github:github.com/DotHarness/oratorio");
+        assert_eq!(project.legacy_key(), "github:DotHarness/oratorio");
         assert_eq!(project.repository(), "DotHarness/oratorio");
+        assert_eq!(project.workspace_dir_name(), "dotharness__oratorio");
         assert_eq!(
             project.default_clone_url(),
             "git@github.com:DotHarness/oratorio.git"
@@ -512,7 +635,12 @@ mod tests {
         assert!(
             generated
                 .config
-                .contains("\"Project\": \"github:owner/repo-a\"")
+                .contains("\"Project\": \"github:github.com/owner/repo-a\"")
+        );
+        assert!(
+            generated
+                .config
+                .contains("\"WorkspacePath\": \"/workspace/owner__repo-a\"")
         );
         assert!(generated.config.contains("\"AutoReviewRepositories\""));
     }
@@ -521,7 +649,7 @@ mod tests {
     fn add_repo_updates_existing_config() {
         let mut doc = build_config(&options());
         let repo: GithubProject = "owner/repo-b".parse().unwrap();
-        add_github_repo(&mut doc, &repo, true);
+        add_github_repo(&mut doc, &repo, true).unwrap();
 
         assert_eq!(
             doc.oratorio.github.repositories,
@@ -532,9 +660,76 @@ mod tests {
                 .dotcraft
                 .repository_workspace_routes
                 .iter()
-                .any(|route| route.project == "github:owner/repo-b"
-                    && route.workspace_path == "/workspace/repo-b")
+                .any(|route| route.project == "github:github.com/owner/repo-b"
+                    && route.workspace_path == "/workspace/owner__repo-b")
         );
+    }
+
+    #[test]
+    fn add_repo_can_disable_auto_review() {
+        let mut doc = build_config(&options());
+        let repo: GithubProject = "owner/repo-b".parse().unwrap();
+        add_github_repo(&mut doc, &repo, false).unwrap();
+
+        assert!(
+            !doc.oratorio
+                .automation
+                .auto_review_repositories
+                .iter()
+                .any(|value| value == "github:github.com/owner/repo-b")
+        );
+        assert!(
+            doc.oratorio
+                .dotcraft
+                .repository_workspace_routes
+                .iter()
+                .any(|route| route.project == "github:github.com/owner/repo-b")
+        );
+    }
+
+    #[test]
+    fn add_repo_rejects_workspace_route_collision() {
+        let mut doc = build_config(&options());
+        doc.oratorio
+            .dotcraft
+            .repository_workspace_routes
+            .push(RepositoryWorkspaceRoute {
+                project: "github:github.com/alice/api".to_string(),
+                workspace_path: "/workspace/bob__api".to_string(),
+            });
+        let repo: GithubProject = "bob/api".parse().unwrap();
+
+        let error = add_github_repo(&mut doc, &repo, true).unwrap_err();
+
+        assert!(error.to_string().contains("workspace route collision"));
+    }
+
+    #[test]
+    fn build_deployment_rejects_workspace_directory_collision() {
+        let mut options = options();
+        options.repos = vec![
+            "owner/repo-name".parse().unwrap(),
+            "owner/repo name".parse().unwrap(),
+        ];
+
+        let error = build_deployment(&options).unwrap_err();
+
+        assert!(error.to_string().contains("workspace directory collision"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn generated_secret_files_are_private_on_unix() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = DeploymentPaths::new(root.path());
+        let generated = build_deployment(&options()).unwrap();
+
+        write_generated(&paths, &generated).unwrap();
+
+        let env_mode = fs::metadata(&paths.env).unwrap().permissions().mode() & 0o777;
+        let secrets_mode = fs::metadata(&paths.secrets).unwrap().permissions().mode() & 0o777;
+        assert_eq!(env_mode, 0o600);
+        assert_eq!(secrets_mode, 0o700);
     }
 
     #[test]

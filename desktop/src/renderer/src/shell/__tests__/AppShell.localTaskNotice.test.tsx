@@ -279,6 +279,46 @@ describe('AppShell local task created notice', () => {
     expect(screen.queryByRole('status', { name: 'Oratorio launch status' })).not.toBeInTheDocument()
   })
 
+  it('refreshes backend-scoped board state when the desktop server URL changes', async () => {
+    let serverStatusCallback: ((status: ReturnType<typeof desktopServerStatus>) => void) | null = null
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/v1/tasks')) {
+        const detail = url.includes('127.0.0.1:5088')
+          ? detailResponse('item-new', 'NEW-1', 'Task from new backend')
+          : detailResponse('item-old', 'OLD-1', 'Task from old backend')
+        return jsonResponse({ tasks: [detail.item], nextCursor: null })
+      }
+      return defaultAppShellResponse(url)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    Object.defineProperty(window, 'oratorioDesktop', {
+      configurable: true,
+      value: makeDesktopApi({
+        getStatus: vi.fn(async () => ({
+          appVersion: 'test',
+          platform: 'win32',
+          server: desktopServerStatus('running', { serverUrl: 'http://127.0.0.1:5087' }),
+          serverConnection: { serverMode: 'local', remoteServerUrl: null },
+        })),
+        onServerStatusChanged: vi.fn((callback: (status: ReturnType<typeof desktopServerStatus>) => void) => {
+          serverStatusCallback = callback
+          return vi.fn()
+        }),
+      }),
+    })
+
+    render(<AppShell />)
+    expect(await screen.findByText('Task from old backend')).toBeInTheDocument()
+
+    act(() => {
+      serverStatusCallback?.(desktopServerStatus('running', { serverUrl: 'http://127.0.0.1:5088' }))
+    })
+
+    expect(await screen.findByText('Task from new backend')).toBeInTheDocument()
+    expect(screen.queryByText('Task from old backend')).not.toBeInTheDocument()
+  })
+
   it('keeps the desktop launch cover visible when the server fails before the board loads', async () => {
     let serverStatusCallback: ((status: ReturnType<typeof desktopServerStatus>) => void) | null = null
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => defaultAppShellResponse(String(input)))
@@ -515,6 +555,76 @@ describe('AppShell local task created notice', () => {
     })
     expect(await screen.findByRole('dialog', { name: 'Connect DotCraft' })).toBeInTheDocument()
     expect(screen.getByText(/Allow DotCraft workspace/)).toBeInTheDocument()
+  })
+
+  it('allows open handoffs while connected to a remote backend', async () => {
+    let handoffCallback: ((url: string) => void) | null = null
+    const desktop = makeDesktopApi({
+      getStatus: vi.fn(async () => ({
+        appVersion: 'test',
+        platform: 'win32',
+        server: desktopServerStatus('running', {
+          serverUrl: 'http://127.0.0.1:5088',
+          backendKind: 'remote',
+          serverMode: 'remote',
+        }),
+        serverConnection: { serverMode: 'remote', remoteServerUrl: 'http://127.0.0.1:5088' },
+      })),
+      onAppBindingHandoff: vi.fn(async (callback: (url: string) => void) => {
+        handoffCallback = callback
+        return vi.fn()
+      }),
+    })
+    Object.defineProperty(window, 'oratorioDesktop', { configurable: true, value: desktop })
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => defaultAppShellResponse(String(input)))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<AppShell />)
+    await waitFor(() => expect(desktop.onAppBindingHandoff).toHaveBeenCalled())
+    await act(async () => {
+      handoffCallback?.('oratorio://open/task/ORA-1')
+    })
+
+    expect(window.location.hash).toBe('#/projects/default/tasks/ORA-1')
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/dotcraft/app-binding/inspect'),
+      expect.anything(),
+    )
+  })
+
+  it('shows an unsupported notice for remote app binding handoffs', async () => {
+    let handoffCallback: ((url: string) => void) | null = null
+    const desktop = makeDesktopApi({
+      getStatus: vi.fn(async () => ({
+        appVersion: 'test',
+        platform: 'win32',
+        server: desktopServerStatus('running', {
+          serverUrl: 'http://127.0.0.1:5088',
+          backendKind: 'remote',
+          serverMode: 'remote',
+        }),
+        serverConnection: { serverMode: 'remote', remoteServerUrl: 'http://127.0.0.1:5088' },
+      })),
+      onAppBindingHandoff: vi.fn(async (callback: (url: string) => void) => {
+        handoffCallback = callback
+        return vi.fn()
+      }),
+    })
+    Object.defineProperty(window, 'oratorioDesktop', { configurable: true, value: desktop })
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => defaultAppShellResponse(String(input)))
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<AppShell />)
+    await waitFor(() => expect(desktop.onAppBindingHandoff).toHaveBeenCalled())
+    await act(async () => {
+      handoffCallback?.('oratorio://dotcraft/connect?app=com.dotharness.oratorio&request=req-1&token=token-1')
+    })
+
+    expect(await screen.findByText('DotCraft App Binding is not available while Oratorio Desktop is connected to a remote backend.')).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/dotcraft/app-binding/inspect'),
+      expect.anything(),
+    )
   })
 
   it('auto-accepts bind handoffs without showing thread consent', async () => {

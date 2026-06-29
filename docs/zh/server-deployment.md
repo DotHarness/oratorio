@@ -50,8 +50,8 @@ oratorio server add-repo github:owner/repo-a
 oratorio server add-repo github:owner/repo-b
 ```
 
-每个仓库会 clone 到 `workspace/<repo>`，并在 `oratorio.config.json` 中映射
-到 `/workspace/<repo>`。
+每个仓库会 clone 到 `workspace/<owner>__<repo>`，并在
+`oratorio.config.json` 中映射到 `/workspace/<owner>__<repo>`。
 
 ## 首次运行
 

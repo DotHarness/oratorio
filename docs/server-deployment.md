@@ -51,8 +51,8 @@ oratorio server add-repo github:owner/repo-a
 oratorio server add-repo github:owner/repo-b
 ```
 
-Each repository is cloned into `workspace/<repo>` and mapped to
-`/workspace/<repo>` in `oratorio.config.json`.
+Each repository is cloned into `workspace/<owner>__<repo>` and mapped to
+`/workspace/<owner>__<repo>` in `oratorio.config.json`.
 
 ## First Run
 

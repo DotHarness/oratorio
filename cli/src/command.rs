@@ -55,11 +55,20 @@ pub struct AddRepoArgs {
     #[arg(long)]
     pub clone_url: Option<String>,
     /// Add the repository to the Auto Review allowlist.
-    #[arg(long, default_value_t = true)]
+    #[arg(long, default_value_t = true, action = clap::ArgAction::SetTrue)]
     pub auto_review: bool,
+    /// Do not add the repository to the Auto Review allowlist.
+    #[arg(long = "no-auto-review", action = clap::ArgAction::SetTrue)]
+    pub no_auto_review: bool,
     /// Print actions without writing config or cloning.
     #[arg(long)]
     pub dry_run: bool,
+}
+
+impl AddRepoArgs {
+    pub fn auto_review_enabled(&self) -> bool {
+        self.auto_review && !self.no_auto_review
+    }
 }
 
 #[derive(Args, Debug)]
@@ -148,7 +157,7 @@ pub fn init(args: InitArgs) -> Result<()> {
 pub fn add_repo(args: AddRepoArgs) -> Result<()> {
     let paths = DeploymentPaths::new(&args.dir);
     let mut config = read_config(&paths.config)?;
-    add_github_repo(&mut config, &args.repo, args.auto_review);
+    add_github_repo(&mut config, &args.repo, args.auto_review_enabled())?;
 
     let target = paths.workspace.join(args.repo.workspace_dir_name());
     let clone_url = args
@@ -238,4 +247,37 @@ fn ensure_prerequisites(require_docker: bool) -> Result<()> {
     }
 
     bail!("missing required command(s): {}", missing.join(", "))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[derive(Parser, Debug)]
+    struct AddRepoParser {
+        #[command(flatten)]
+        args: AddRepoArgs,
+    }
+
+    #[test]
+    fn add_repo_defaults_auto_review_on() {
+        let parsed = AddRepoParser::parse_from(["test", "owner/repo"]);
+
+        assert!(parsed.args.auto_review_enabled());
+    }
+
+    #[test]
+    fn add_repo_supports_no_auto_review() {
+        let parsed = AddRepoParser::parse_from(["test", "owner/repo", "--no-auto-review"]);
+
+        assert!(!parsed.args.auto_review_enabled());
+    }
+
+    #[test]
+    fn add_repo_preserves_auto_review_flag_compatibility() {
+        let parsed = AddRepoParser::parse_from(["test", "owner/repo", "--auto-review"]);
+
+        assert!(parsed.args.auto_review_enabled());
+    }
 }

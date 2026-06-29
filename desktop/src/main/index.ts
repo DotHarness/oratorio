@@ -7,7 +7,7 @@ import {
   type OratorioServerConnectionPreferences,
   type OratorioServerStatus
 } from './OratorioServerManager'
-import { appBindingProtocol, canDeliverAppBindingHandoffs, extractAppBindingUrls, shouldActivateWindowForAppBindingUrls } from './appBindingActivation'
+import { appBindingProtocol, canDeliverAppBindingHandoff, extractAppBindingUrls, shouldActivateWindowForAppBindingUrls } from './appBindingActivation'
 import { resolveDesktopPreferencesPath, resolveDesktopSettingsRoot } from './desktopPaths'
 import { buildRendererStartupQuery, buildRendererStartupUrl, resolveStartupTheme } from './startupTheme'
 import { buildStatusPageHtml, svgToDataUri, type StatusPageTheme } from './statusPage'
@@ -191,12 +191,9 @@ function registerIpc(): void {
     await shell.openExternal(url)
   })
   ipcMain.handle('desktop:get-pending-app-binding-urls', () => {
-    if (!canDeliverAppBindingHandoffs(serverManager?.getStatus())) {
-      return []
-    }
-
-    const urls = [...pendingAppBindingUrls]
-    pendingAppBindingUrls = []
+    const status = serverManager?.getStatus()
+    const urls = pendingAppBindingUrls.filter((url) => canDeliverAppBindingHandoff(url, status))
+    pendingAppBindingUrls = pendingAppBindingUrls.filter((url) => !canDeliverAppBindingHandoff(url, status))
     return urls
   })
   ipcMain.handle('desktop:select-directory', async (event, defaultPath?: string) => {
@@ -368,9 +365,9 @@ function queueAppBindingUrls(urls: readonly string[]): void {
 
 function flushPendingAppBindingUrls(win: BrowserWindow | null): void {
   if (!win || win.isDestroyed() || pendingAppBindingUrls.length === 0) return
-  if (!canDeliverAppBindingHandoffs(serverManager?.getStatus())) return
-  const urls = [...pendingAppBindingUrls]
-  pendingAppBindingUrls = []
+  const status = serverManager?.getStatus()
+  const urls = pendingAppBindingUrls.filter((url) => canDeliverAppBindingHandoff(url, status))
+  pendingAppBindingUrls = pendingAppBindingUrls.filter((url) => !canDeliverAppBindingHandoff(url, status))
   for (const url of urls) {
     win.webContents.send('desktop:app-binding-handoff', url)
   }

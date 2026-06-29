@@ -301,6 +301,7 @@ function OratorioApp() {
   const isDesktopShell = typeof window !== 'undefined' && Boolean(window.oratorioDesktop)
   const [serverBaseUrl, setServerBaseUrlState] = useState(() => getServerBaseUrl())
   const [desktopServerStatus, setDesktopServerStatus] = useState<OratorioServerStatus | null>(null)
+  const backendServerUrlRef = useRef<string | null>(serverBaseUrl || null)
   const [serverConnectionPreferences, setServerConnectionPreferences] = useState<OratorioServerConnectionPreferences>({
     serverMode: 'local',
     remoteServerUrl: null,
@@ -824,6 +825,34 @@ function OratorioApp() {
     }
   }, [refreshDotCraftStatus, refreshGitHubStatus, refreshGitHubSyncJob, refreshItems, refreshSourceProviders, refreshSourceSyncJobs, refreshSourceSyncSchedules])
 
+  const resetBackendScopedState = useCallback(() => {
+    detailRequestIdRef.current += 1
+    closedRequestIdRef.current += 1
+    selectedIdRef.current = null
+    selectedDetailRef.current = null
+    focusedRunIdRef.current = null
+    sourceProvidersRef.current = []
+    sourceDetailsAttemptedRef.current = new Set()
+    setItems([])
+    setClosedItems([])
+    setClosedNextCursor(null)
+    setClosedError(null)
+    setClosedLoading(false)
+    setSelectedId(null)
+    setSelectedDetail(null)
+    setDetailError(false)
+    setLiveActivity(null)
+    setGithubSyncJob(null)
+    setSourceProviders([])
+    setSourceSyncJobs({})
+    setSourceSyncSchedules({})
+    setSourceDetailsSyncingItemId(null)
+    setShowTechnicalEventsByRound({})
+    setReviewStageByItem({})
+    setActionMenuItemId(null)
+    setError(null)
+  }, [])
+
   const applyDesktopServerStatus = useCallback((status: OratorioServerStatus | null) => {
     if (!status) {
       return
@@ -843,14 +872,22 @@ function OratorioApp() {
     }
 
     if (status.state === 'running' && status.serverUrl) {
+      const previousServerUrl = backendServerUrlRef.current
+      const serverUrlChanged = Boolean(previousServerUrl && previousServerUrl !== status.serverUrl)
+      backendServerUrlRef.current = status.serverUrl
       setApiServerBaseUrl(status.serverUrl)
       setServerBaseUrlState(getServerBaseUrl())
       setServerConnectionError(null)
+      if (serverUrlChanged) {
+        resetBackendScopedState()
+        void refreshAll({ background: true })
+      }
       return
     }
 
     if (status.serverMode === 'remote' || status.backendKind === 'remote') {
       setApiServerBaseUrl(null)
+      backendServerUrlRef.current = null
       setServerBaseUrlState(getServerBaseUrl())
     }
 
@@ -866,7 +903,7 @@ function OratorioApp() {
     if (!initialRefreshStartedRef.current && initialLaunchPhase !== 'ready') {
       setInitialLaunchMessage(initialLaunchStartingMessage())
     }
-  }, [initialLaunchPhase])
+  }, [initialLaunchPhase, refreshAll, resetBackendScopedState, t])
 
   const applyStreamEvent = useCallback((event: BoardStreamEvent) => {
     if (event.type.startsWith('drawer/')) {
@@ -1291,15 +1328,32 @@ function OratorioApp() {
     }
   }, [isRemoteDesktopMode, markDotCraftAppBindingConnected, navigate, refreshAppBindingStatus, showNotice, t])
 
+  const canProcessAppBindingHandoff = useCallback((url: string) => {
+    if (routeFromOratorioOpenDeepLink(url)) {
+      return true
+    }
+
+    if (isRemoteDesktopMode && isDotCraftBindingHandoff(url)) {
+      return true
+    }
+
+    return canUseBackend
+  }, [canUseBackend, isRemoteDesktopMode])
+
   const drainPendingAppBindingHandoffs = useCallback(async () => {
-    if (!canUseBackend || drainingAppBindingHandoffsRef.current) {
+    if (drainingAppBindingHandoffsRef.current) {
       return
     }
 
     drainingAppBindingHandoffsRef.current = true
     try {
       while (pendingAppBindingHandoffUrlsRef.current.length > 0) {
-        const nextUrl = pendingAppBindingHandoffUrlsRef.current.shift()
+        const nextUrl = pendingAppBindingHandoffUrlsRef.current[0]
+        if (!nextUrl || !canProcessAppBindingHandoff(nextUrl)) {
+          break
+        }
+
+        pendingAppBindingHandoffUrlsRef.current.shift()
         if (nextUrl) {
           await inspectAppBindingHandoff(nextUrl)
         }
@@ -1307,7 +1361,7 @@ function OratorioApp() {
     } finally {
       drainingAppBindingHandoffsRef.current = false
     }
-  }, [canUseBackend, inspectAppBindingHandoff])
+  }, [canProcessAppBindingHandoff, inspectAppBindingHandoff])
 
   const handleAppBindingHandoff = useCallback((url: string) => {
     pendingAppBindingHandoffUrlsRef.current.push(url)
@@ -1320,7 +1374,7 @@ function OratorioApp() {
 
   useEffect(() => {
     const desktop = window.oratorioDesktop
-    if (!desktop?.onAppBindingHandoff || isRemoteDesktopMode) {
+    if (!desktop?.onAppBindingHandoff) {
       return
     }
 
@@ -1338,7 +1392,7 @@ function OratorioApp() {
       disposed = true
       unsubscribe?.()
     }
-  }, [handleAppBindingHandoff, isRemoteDesktopMode])
+  }, [handleAppBindingHandoff])
 
   const approveAppBindingHandoff = useCallback(async () => {
     if (!appBindingDialog || appBindingDialog.status !== 'ready') {
@@ -2966,9 +3020,11 @@ function formatAppBindingDate(value: string | null | undefined): string {
 function isDotCraftBindingHandoff(url: string): boolean {
   try {
     const parsed = new URL(url)
-    return parsed.protocol === 'oratorio:' && parsed.hostname === 'dotcraft' && parsed.pathname.replace(/^\/+/, '') === 'bind'
+    return parsed.protocol === 'oratorio:' &&
+      parsed.hostname === 'dotcraft' &&
+      ['bind', 'connect'].includes(parsed.pathname.replace(/^\/+/, ''))
   } catch {
-    return url.includes('oratorio://dotcraft/bind')
+    return url.includes('oratorio://dotcraft/bind') || url.includes('oratorio://dotcraft/connect')
   }
 }
 
