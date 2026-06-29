@@ -315,6 +315,9 @@ describe('AppShell local task created notice', () => {
       serverStatusCallback?.(desktopServerStatus('running', { serverUrl: 'http://127.0.0.1:5088' }))
     })
 
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => String(input).includes('127.0.0.1:5088/api/v1/tasks?'))).toBe(true)
+    })
     expect(await screen.findByText('Task from new backend')).toBeInTheDocument()
     expect(screen.queryByText('Task from old backend')).not.toBeInTheDocument()
   })

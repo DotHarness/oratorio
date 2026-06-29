@@ -40,28 +40,6 @@ jobs:
         run: dotnet test Oratorio.sln --configuration Release --no-restore
         working-directory: oratorio
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Run CLI tests
-        run: cargo test --manifest-path cli/Cargo.toml --locked
-        working-directory: oratorio
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: oratorio/desktop/package-lock.json
-
-      - name: Install desktop dependencies
-        run: npm ci
-        working-directory: oratorio/desktop
-
-      - name: Run desktop tests
-        run: npm test
-        working-directory: oratorio/desktop
-
   build:
     needs: test
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'build')

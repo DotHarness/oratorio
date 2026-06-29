@@ -347,11 +347,13 @@ function OratorioApp() {
   const sidebarResizeStart = useRef<{ x: number; width: number } | null>(null)
   const sidecarResizeStart = useRef<{ x: number; width: number } | null>(null)
   const drawerResizeStart = useRef<{ x: number; width: number } | null>(null)
+  const backendGenerationRef = useRef(0)
   const detailRequestIdRef = useRef(0)
   const closedRequestIdRef = useRef(0)
   const selectedIdRef = useRef<string | null>(null)
   const selectedDetailRef = useRef<WorkItem | null>(null)
   const focusedRunIdRef = useRef<string | null>(null)
+  const initialLaunchPhaseRef = useRef<InitialLaunchPhase>(initialLaunchPhase)
   const initialRefreshStartedRef = useRef(false)
   const noticeIdRef = useRef(0)
   const celebrationTimerRef = useRef<number | null>(null)
@@ -396,6 +398,8 @@ function OratorioApp() {
     message: 'DotCraft bridge status has not been loaded.',
   })
   const [dotcraftAppBindingStatus, setDotcraftAppBindingStatus] = useState<DotCraftAppBindingStatusResponse>(DEFAULT_APP_BINDING_STATUS)
+
+  initialLaunchPhaseRef.current = initialLaunchPhase
 
   useEffect(() => {
     const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
@@ -595,12 +599,17 @@ function OratorioApp() {
     })
   }, [knownItems])
 
+  const isCurrentBackendGeneration = useCallback((generation: number) => generation === backendGenerationRef.current, [])
+
   const refreshItems = useCallback(async () => {
+    const requestGeneration = backendGenerationRef.current
     const response = await apiGet<TaskListResponse>(taskListPath({ state: activeTaskStateQuery, limit: 100 }))
     const nextItems = response.tasks.map(itemSummaryToWorkItem).filter(isActiveBoardItem)
-    setItems(nextItems)
+    if (isCurrentBackendGeneration(requestGeneration)) {
+      setItems(nextItems)
+    }
     return nextItems
-  }, [])
+  }, [isCurrentBackendGeneration])
 
   const fetchClosedItems = useCallback(
     async (mode: BoardViewMode, options?: { append?: boolean; cursor?: string | null }) => {
@@ -693,8 +702,12 @@ function OratorioApp() {
   }, [])
 
   const refreshGitHubStatus = useCallback(async () => {
+    const requestGeneration = backendGenerationRef.current
     try {
       const status = await apiGet<GitHubSourceStatusResponse>('/sources/github/status')
+      if (!isCurrentBackendGeneration(requestGeneration)) {
+        return
+      }
       setGithubStatus({
         available: true,
         configured: status.configured ?? status.enabled ?? status.capabilities?.read ?? false,
@@ -705,6 +718,9 @@ function OratorioApp() {
         message: status.message ?? 'GitHub source read integration is available.',
       })
     } catch {
+      if (!isCurrentBackendGeneration(requestGeneration)) {
+        return
+      }
       setGithubStatus({
         available: false,
         configured: false,
@@ -715,30 +731,42 @@ function OratorioApp() {
         writeConfigured: false,
       })
     }
-  }, [])
+  }, [isCurrentBackendGeneration])
 
   const refreshGitHubSyncJob = useCallback(async () => {
+    const requestGeneration = backendGenerationRef.current
     try {
       const job = await apiGet<GitHubSyncJob | null>('/sources/github/sync-jobs/active')
+      if (!isCurrentBackendGeneration(requestGeneration)) {
+        return
+      }
       setGithubSyncJob((current) => job ?? (current && isActiveGitHubSyncStatus(current.status) ? null : current))
     } catch {
       // Sync progress is best-effort; source status still reports availability.
     }
-  }, [])
+  }, [isCurrentBackendGeneration])
 
   const refreshSourceProviders = useCallback(async () => {
+    const requestGeneration = backendGenerationRef.current
     try {
       const response = await apiGet<SourcesResponse>('/sources')
+      if (!isCurrentBackendGeneration(requestGeneration)) {
+        return
+      }
       const providers = response.providers ?? []
       sourceProvidersRef.current = providers
       setSourceProviders(providers)
     } catch {
+      if (!isCurrentBackendGeneration(requestGeneration)) {
+        return
+      }
       sourceProvidersRef.current = []
       setSourceProviders([])
     }
-  }, [])
+  }, [isCurrentBackendGeneration])
 
   const refreshSourceSyncJobs = useCallback(async () => {
+    const requestGeneration = backendGenerationRef.current
     const currentProviders = sourceProvidersRef.current
     const providers = currentProviders.length ? currentProviders.map((provider) => provider.provider) : ['github', 'gitlab']
     const entries = await Promise.all(providers.map(async (provider) => {
@@ -749,6 +777,9 @@ function OratorioApp() {
         return [provider, null] as const
       }
     }))
+    if (!isCurrentBackendGeneration(requestGeneration)) {
+      return
+    }
     setSourceSyncJobs((current) => {
       const next = { ...current }
       for (const [provider, job] of entries) {
@@ -756,20 +787,31 @@ function OratorioApp() {
       }
       return next
     })
-  }, [])
+  }, [isCurrentBackendGeneration])
 
   const refreshSourceSyncSchedules = useCallback(async () => {
+    const requestGeneration = backendGenerationRef.current
     try {
       const response = await apiGet<SourceSyncSchedulesResponse>('/sources/sync-schedules')
+      if (!isCurrentBackendGeneration(requestGeneration)) {
+        return
+      }
       setSourceSyncSchedules(Object.fromEntries((response.schedules ?? []).map((schedule) => [schedule.provider, schedule])))
     } catch {
+      if (!isCurrentBackendGeneration(requestGeneration)) {
+        return
+      }
       setSourceSyncSchedules({})
     }
-  }, [])
+  }, [isCurrentBackendGeneration])
 
   const refreshDotCraftStatus = useCallback(async () => {
+    const requestGeneration = backendGenerationRef.current
     try {
       const status = await apiGet<DotCraftStatusResponse>('/dotcraft/status')
+      if (!isCurrentBackendGeneration(requestGeneration)) {
+        return
+      }
       setDotcraftStatus({
         ...status,
         available: true,
@@ -777,6 +819,9 @@ function OratorioApp() {
         message: status.message ?? dotcraftHealthMessage(status.health ?? (status.connected ? 'connected' : status.configured ? 'configured' : 'unavailable')),
       })
     } catch {
+      if (!isCurrentBackendGeneration(requestGeneration)) {
+        return
+      }
       setDotcraftStatus({
         available: false,
         configured: false,
@@ -795,11 +840,15 @@ function OratorioApp() {
         message: 'DotCraft bridge API is not available on this backend yet.',
       })
     }
-  }, [])
+  }, [isCurrentBackendGeneration])
 
   const refreshAppBindingStatus = useCallback(async () => {
+    const requestGeneration = backendGenerationRef.current
     try {
       const status = await apiGet<DotCraftAppBindingStatusResponse>('/dotcraft/app-binding/status')
+      if (!isCurrentBackendGeneration(requestGeneration)) {
+        return
+      }
       setDotcraftAppBindingStatus({
         ...status,
         available: Boolean(status.available),
@@ -808,29 +857,38 @@ function OratorioApp() {
         message: status.message || 'DotCraft App Binding status is unavailable.',
       })
     } catch {
+      if (!isCurrentBackendGeneration(requestGeneration)) {
+        return
+      }
       setDotcraftAppBindingStatus({
         ...DEFAULT_APP_BINDING_STATUS,
         message: 'DotCraft App Binding status API is not available on this backend yet.',
       })
     }
-  }, [])
+  }, [isCurrentBackendGeneration])
 
   const refreshAll = useCallback(async (options?: { background?: boolean }) => {
     void options
+    const requestGeneration = backendGenerationRef.current
     setError(null)
     try {
       await Promise.all([refreshItems(), refreshGitHubStatus(), refreshSourceProviders(), refreshDotCraftStatus(), refreshGitHubSyncJob(), refreshSourceSyncJobs(), refreshSourceSyncSchedules()])
     } catch (reason) {
-      setError(errorMessage(reason))
+      if (isCurrentBackendGeneration(requestGeneration)) {
+        setError(errorMessage(reason))
+      }
     }
-  }, [refreshDotCraftStatus, refreshGitHubStatus, refreshGitHubSyncJob, refreshItems, refreshSourceProviders, refreshSourceSyncJobs, refreshSourceSyncSchedules])
+  }, [isCurrentBackendGeneration, refreshDotCraftStatus, refreshGitHubStatus, refreshGitHubSyncJob, refreshItems, refreshSourceProviders, refreshSourceSyncJobs, refreshSourceSyncSchedules])
 
   const resetBackendScopedState = useCallback(() => {
+    backendGenerationRef.current += 1
     detailRequestIdRef.current += 1
     closedRequestIdRef.current += 1
     selectedIdRef.current = null
     selectedDetailRef.current = null
     focusedRunIdRef.current = null
+    githubSyncStatusRef.current = null
+    sourceSyncStatusesRef.current = {}
     sourceProvidersRef.current = []
     sourceDetailsAttemptedRef.current = new Set()
     setItems([])
@@ -891,7 +949,8 @@ function OratorioApp() {
       setServerBaseUrlState(getServerBaseUrl())
     }
 
-    if (status.state === 'error' && initialLaunchPhase !== 'ready') {
+    const currentInitialLaunchPhase = initialLaunchPhaseRef.current
+    if (status.state === 'error' && currentInitialLaunchPhase !== 'ready') {
       setInitialLaunchMessage(
         status.errorMessage
           ? t('common:shell.couldNotStart', { message: status.errorMessage })
@@ -900,10 +959,10 @@ function OratorioApp() {
       return
     }
 
-    if (!initialRefreshStartedRef.current && initialLaunchPhase !== 'ready') {
+    if (!initialRefreshStartedRef.current && currentInitialLaunchPhase !== 'ready') {
       setInitialLaunchMessage(initialLaunchStartingMessage())
     }
-  }, [initialLaunchPhase, refreshAll, resetBackendScopedState, t])
+  }, [refreshAll, resetBackendScopedState, t])
 
   const applyStreamEvent = useCallback((event: BoardStreamEvent) => {
     if (event.type.startsWith('drawer/')) {
