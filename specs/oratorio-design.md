@@ -967,6 +967,12 @@ Required AppServer interactions:
 - subscribe to thread and turn events;
 - map turn completion, failure, cancellation, timeout, and disconnection into
   Oratorio run status;
+- when an Oratorio AppServer run timeout fires after a turn has started, request
+  a DotCraft turn interrupt and wait for a terminal notification or a short
+  bounded acknowledgement window before closing the run;
+- keep Oratorio's timeout budget authoritative: a DotCraft completion that
+  arrives after Oratorio has timed out is recorded as a late terminal signal and
+  must not convert the Oratorio run back to success;
 - record thread ID, turn ID, prompt context, summary, and error details.
 
 Prompt context for real AppServer rounds must include:
