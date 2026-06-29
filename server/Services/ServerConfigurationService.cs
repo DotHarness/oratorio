@@ -677,6 +677,11 @@ public sealed class ServerConfigurationService(
 
     private (bool Writable, string? DisabledReason) ResolveWritable(HttpContext context)
     {
+        if (!settingsOptions.CurrentValue.Writable)
+        {
+            return (false, "Server configuration writes are disabled for this deployment.");
+        }
+
         if (!IsLoopback(context.Connection.RemoteIpAddress))
         {
             return (false, "Server configuration writes require a loopback request.");

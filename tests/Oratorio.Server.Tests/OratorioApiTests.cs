@@ -551,6 +551,34 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
+    public async Task ServerConfigurationWrite_CanBeDisabledForServerDeployments()
+    {
+        var root = Directory.CreateTempSubdirectory("oratorio-disabled-write-");
+        var overlayPath = Path.Combine(root.FullName, "config.json");
+        await using var app = new TestOratorioApp(settings: new Dictionary<string, string?>
+        {
+            ["Oratorio:Settings:ConfigPath"] = overlayPath,
+            ["Oratorio:Settings:Writable"] = "false"
+        });
+        var client = app.CreateClient();
+
+        var configuration = await client.GetFromJsonAsync<ServerConfigurationResponse>(
+            "/api/v1/settings/server-configuration",
+            JsonOptions);
+        Assert.NotNull(configuration);
+        Assert.False(configuration!.Writable);
+        Assert.Equal("Server configuration writes are disabled for this deployment.", configuration.DisabledReason);
+
+        var response = await client.PutAsJsonAsync(
+            "/api/v1/settings/server-configuration",
+            new ServerConfigurationUpdateRequest(configuration.Revision, true, configuration.Configuration),
+            JsonOptions);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.False(File.Exists(overlayPath));
+    }
+
+    [Fact]
     public async Task ServerConfiguration_MigratesLegacyInstallationIdOnlyForSingleOwner()
     {
         await using var app = new TestOratorioApp(services =>
