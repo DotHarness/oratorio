@@ -96,7 +96,7 @@ available; the Oratorio renderer is not a standalone browser product.
 The Desktop titlebar owns only window and runtime controls:
 
 - back and forward navigation;
-- server status plus restart;
+- backend status with local restart or remote reconnect/change-address controls;
 - reload, force reload, DevTools, zoom, and fullscreen diagnostics;
 - minimize, maximize or restore, and close window controls.
 
@@ -105,6 +105,34 @@ product identity in the board header. New Task and Settings remain in the board
 header action group. The titlebar follows the active Oratorio light or dark
 theme after the app loads; startup and error pages may use a safe fallback
 theme before the renderer is available.
+
+Desktop backend connection modes:
+
+- `local` is the default mode and preserves the current Desktop behavior:
+  Desktop starts or reuses a local headless backend, passes the server URL to the
+  renderer, and may restart or shut down only the backend process it owns.
+- `remote` connects to a single Desktop-local `remoteServerUrl`. Desktop must
+  not spawn, restart, or shut down a backend in this mode.
+- Desktop-local preferences include `serverMode: "local" | "remote"` and
+  `remoteServerUrl: string | null`. These values are local Desktop preferences,
+  not backend Settings or the server configuration overlay.
+- Remote URLs are HTTP or HTTPS origins with no v1 path prefix or authentication
+  fields. Desktop validates a remote URL with `GET /health` and requires
+  `{ service: "oratorio", status: "ok" }` before treating it as connected.
+- The renderer derives API and realtime endpoints from the selected backend
+  base URL: `<baseUrl>/api/v1` for HTTP requests and
+  `ws(s)://<baseUrl>/api/v1/stream` for board updates.
+- Remote connection failure must not automatically fall back to local mode. The
+  startup or error surface stays in remote mode and offers reconnect,
+  change-address, and switch-to-local actions.
+- The desktop bridge status exposes backend ownership explicitly, such as
+  `backendKind: "managedLocal" | "reusedLocal" | "remote"`, instead of relying
+  on `reusedExistingServer` to distinguish remote and local ownership.
+- The titlebar and status menus distinguish local and remote backends. Restart
+  controls are shown only for local backends; remote mode uses reconnect and
+  change-address controls instead.
+- Remote address entry is available on startup/error connection surfaces and
+  from General local preferences after the renderer has loaded.
 
 ### 2.2 DotCraft App Binding UX
 
@@ -126,6 +154,10 @@ Deep-link behavior:
 - Deep links received during cold start or local server startup must be queued
   until the Desktop server URL is available; Oratorio must not inspect or approve
   App Binding requests before the server API can be reached.
+- Remote backend mode does not support DotCraft App Binding, embedded Oratorio
+  board surfaces, or App Binding surface re-announcement in v1. Connect and bind
+  handoffs received while Desktop is in remote mode must surface a clear
+  unsupported or unavailable state and must not approve the request.
 
 The Desktop titlebar may show a DotCraft connection affordance immediately to
 the left of the server status control. This affordance indicates the DotCraft
@@ -152,6 +184,10 @@ The embedded board is a read-only command and status surface. It may show board
 columns, compact task cards, connection/setup states, search, refresh, a compact
 selected-card peek, and explicit handoff actions back to Oratorio Desktop or to
 an existing DotCraft thread.
+
+Embedded board support is scoped to local backend mode for v1. Remote backend
+mode requires a separate App Binding surface and security contract before an
+embedded board may connect to a remote Oratorio backend.
 
 The embedded board must not duplicate Oratorio Desktop settings, the full Task
 Drawer, Task Detail, source write audit, review decisions, comments, drafts, or
@@ -543,7 +579,7 @@ destination.
 
 Allowed Settings content:
 
-- General local preferences such as theme;
+- General local preferences such as theme and Desktop backend connection mode;
 - Repository cards that combine GitHub repository identity, DotCraft workspace
   path, workspace/AppServer health, and a desktop folder picker when available;
 - GitHub installation profiles grouped by GitHub instance and owner inside
@@ -583,6 +619,19 @@ the top of Settings. Desktop builds offer a restart button through the desktop
 bridge when available; test or preview contexts without the bridge show the
 manual restart requirement. Saving settings must not use a native confirmation
 dialog.
+
+Remote backend mode treats server-admin configuration as read-only even when a
+tunnel makes the backend appear loopback-writable. Settings may show remote
+configuration, diagnostics, workspace inventory, and source status, but save
+controls for server configuration, secrets, workspace routing, worktree policy,
+and automation policy are disabled with copy that directs operators to manage
+the server through `.env`, environment variables, or a server-side overlay.
+Board, task, review, comment, and decision actions remain enabled when their API
+capabilities are available.
+
+Repository workspace paths shown in remote mode are remote host or container
+paths. The local Desktop folder picker is disabled in remote mode and must not
+write local filesystem paths into remote workspace mappings.
 
 Settings actions use one compact visual language. Group-level actions such as
 `Start server`, `Discard`, and `Save` live in the Settings group header action

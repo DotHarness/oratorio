@@ -100,6 +100,36 @@ flowchart LR
 | Worktree Manager   | Owns backend-managed worktree paths, branch naming, concurrency limits, cleanup, and restart reconciliation.                                     |
 | Hub Routing        | Maps source repositories to DotCraft workspaces and resolves AppServer endpoints through Hub when available.                                     |
 
+Runtime topology contract:
+
+- **Local-managed backend**: Oratorio Desktop launches, reuses, restarts, and
+  shuts down a local headless backend. The backend's workspace and worktree paths
+  are local to the operator machine.
+- **Remote-controlled backend**: Oratorio Desktop connects to one configured
+  remote headless backend URL over a private path such as SSH tunnel, VPN, or
+  equivalent loopback/private network access. The Desktop is only the board and
+  operator console; the remote backend still owns orchestration, durable state,
+  source sync, managed worktrees, AppServer dispatch, reconciliation, and source
+  writes.
+- Remote-controlled v1 does not define direct public internet exposure, API
+  authentication, browser CORS expansion, or WebSocket authentication. Those
+  require a separate security contract before a backend may be treated as a
+  public HTTPS service.
+- In a remote-controlled deployment, the Oratorio backend and DotCraft AppServer
+  must run where they can access the same repository workspace and managed
+  worktree filesystem paths. Containerized deployments must mount the shared
+  workspace at the same absolute path for both services. The local Desktop
+  filesystem is never used for remote AppServer execution.
+- Server-admin configuration for Docker or server deployments is applied on the
+  server side through environment variables, `.env`, or the server configuration
+  overlay. A remote-controlled Desktop treats server configuration as read-only;
+  board, task, review, and decision operations remain available when the backend
+  API is reachable.
+- Source webhooks are deployment-specific. Remote-controlled Desktop v1 does
+  not define exposing GitHub or GitLab webhook endpoints; operators may use
+  manual or scheduled sync unless their deployment separately provides a secure
+  webhook ingress.
+
 
 ---
 
@@ -1024,6 +1054,9 @@ Thread reuse contract:
   security boundary. Oratorio resolves a configured repository workspace path,
   asks Hub for the workspace's AppServer endpoint, then connects directly to that
   AppServer.
+- In remote-controlled Desktop topology, Hub discovery and explicit AppServer
+  endpoints are evaluated from the remote backend host or container, not from the
+  operator's local Desktop machine.
 - Repository workspace routing must support a single configured workspace and
   explicit `owner/name` to absolute workspace path mappings. There is no
   implicit fallback workspace route.
