@@ -66,6 +66,11 @@ describe('App Binding activation policy', () => {
       state: 'running',
       serverUrl: null
     })).toBe(false)
+    expect(canDeliverAppBindingHandoffs({
+      state: 'running',
+      serverUrl: 'http://127.0.0.1:5087',
+      backendKind: 'remote'
+    })).toBe(false)
     expect(canDeliverAppBindingHandoffs(null)).toBe(false)
   })
 })

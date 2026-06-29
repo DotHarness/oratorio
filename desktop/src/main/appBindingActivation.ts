@@ -3,6 +3,7 @@ export const appBindingProtocol = 'oratorio'
 export interface AppBindingHandoffDeliveryStatus {
   state?: string | null
   serverUrl?: string | null
+  backendKind?: string | null
 }
 
 export function extractAppBindingUrls(argv: readonly string[]): string[] {
@@ -45,5 +46,5 @@ export function shouldActivateWindowForAppBindingUrls(urls: readonly string[]): 
 }
 
 export function canDeliverAppBindingHandoffs(status: AppBindingHandoffDeliveryStatus | null | undefined): boolean {
-  return status?.state === 'running' && Boolean(status.serverUrl?.trim())
+  return status?.state === 'running' && status.backendKind !== 'remote' && Boolean(status.serverUrl?.trim())
 }

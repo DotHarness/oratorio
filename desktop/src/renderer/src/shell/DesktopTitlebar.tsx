@@ -11,6 +11,7 @@ import {
   RefreshCw,
   RotateCw,
   Server,
+  Settings,
   Square,
   X,
   ZoomIn,
@@ -22,11 +23,19 @@ import { Tooltip } from '../components/primitives/Tooltip'
 import type { DotCraftAppBindingStatusResponse } from '../lib/types'
 
 type OratorioServerState = 'stopped' | 'starting' | 'running' | 'error'
+type OratorioServerMode = 'local' | 'remote'
+type OratorioBackendKind = 'managedLocal' | 'reusedLocal' | 'remote'
+type OratorioServerConnectionPreferences = {
+  serverMode: OratorioServerMode
+  remoteServerUrl: string | null
+}
 
 type OratorioServerStatus = {
   state: OratorioServerState
   serverUrl: string | null
   reusedExistingServer: boolean
+  backendKind: OratorioBackendKind
+  serverMode: OratorioServerMode
   pid: number | null
   errorMessage: string | null
 }
@@ -42,6 +51,12 @@ type OratorioDesktopStatus = {
   appVersion: string
   platform: string
   server: OratorioServerStatus | null
+  serverConnection: OratorioServerConnectionPreferences
+}
+
+type OratorioDesktopServerConnectionUpdateResult = {
+  preferences: OratorioServerConnectionPreferences
+  status: OratorioServerStatus
 }
 
 type OratorioDesktopTheme = 'dark' | 'light'
@@ -50,6 +65,8 @@ type OratorioDesktopWindowCloseBehavior = 'minimizeToTray' | 'quitApp'
 type OratorioDesktopApi = {
   getStatus(): Promise<OratorioDesktopStatus>
   restartServer(): Promise<OratorioServerStatus>
+  getServerConnectionPreferences(): Promise<OratorioServerConnectionPreferences>
+  setServerConnectionPreferences(preferences: OratorioServerConnectionPreferences): Promise<OratorioDesktopServerConnectionUpdateResult>
   selectDirectory(defaultPath?: string): Promise<string | null>
   getTheme(): Promise<OratorioDesktopTheme | null>
   setTheme(theme: OratorioDesktopTheme): Promise<void>
@@ -158,10 +175,13 @@ export function DesktopTitlebar({ dotCraftAppBindingStatus = null, dotcraftIconS
   }
 
   const serverState = serverStatus?.state ?? 'stopped'
+  const backendKind = serverStatus?.backendKind ?? 'managedLocal'
+  const isRemoteBackend = backendKind === 'remote' || serverStatus?.serverMode === 'remote'
   const serverLabel = t(`titlebar.serverState.${serverState}`)
+  const backendLabel = t(`titlebar.backendKind.${backendKind}`)
   const serverTitle = serverStatus?.errorMessage
-    ? t('titlebar.serverErrorTitle', { label: serverLabel, message: serverStatus.errorMessage })
-    : t('titlebar.serverTitle', { label: serverLabel.toLowerCase() })
+    ? t('titlebar.serverErrorTitle', { label: backendLabel, message: serverStatus.errorMessage })
+    : t('titlebar.serverTitle', { label: backendLabel, state: serverLabel.toLowerCase() })
   const maximizeLabel = windowState.isMaximized ? t('titlebar.restoreWindow') : t('titlebar.maximizeWindow')
   const dotCraftTooltip = dotCraftAppBindingStatus?.connected
     ? dotCraftConnectionTooltip(dotCraftAppBindingStatus, t)
@@ -184,6 +204,10 @@ export function DesktopTitlebar({ dotCraftAppBindingStatus = null, dotcraftIconS
         setWindowState(nextState)
       }
     })
+  }
+
+  function openConnectionSettings(): void {
+    window.location.hash = '#/settings/general'
   }
 
   return (
@@ -224,12 +248,13 @@ export function DesktopTitlebar({ dotCraftAppBindingStatus = null, dotcraftIconS
             <div className="desktop-titlebar-menu-status">
               <span className={`desktop-status-dot ${serverState}`} aria-hidden="true" />
               <span>
-                <strong>{serverLabel}</strong>
+                <strong>{backendLabel}</strong>
                 <small>{serverStatus?.serverUrl ?? t('titlebar.localServer')}</small>
               </span>
             </div>
             {serverStatus?.errorMessage ? <p className="desktop-titlebar-menu-error">{serverStatus.errorMessage}</p> : null}
-            <DesktopTitlebarMenuItem icon={RotateCw} label={t('titlebar.restartServer')} onClick={() => invoke(() => desktop.restartServer())} />
+            <DesktopTitlebarMenuItem icon={RotateCw} label={isRemoteBackend ? t('titlebar.reconnectServer') : t('titlebar.restartServer')} onClick={() => invoke(() => desktop.restartServer())} />
+            {isRemoteBackend ? <DesktopTitlebarMenuItem icon={Settings} label={t('titlebar.connectionSettings')} onClick={() => invoke(openConnectionSettings)} /> : null}
           </div>
         ) : null}
 

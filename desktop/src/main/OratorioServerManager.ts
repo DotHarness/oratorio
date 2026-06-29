@@ -7,11 +7,20 @@ import type { App } from 'electron'
 import { resolveDesktopConfigPath, resolveDesktopStateRoot } from './desktopPaths'
 
 export type OratorioServerState = 'stopped' | 'starting' | 'running' | 'error'
+export type OratorioServerMode = 'local' | 'remote'
+export type OratorioBackendKind = 'managedLocal' | 'reusedLocal' | 'remote'
+
+export interface OratorioServerConnectionPreferences {
+  serverMode: OratorioServerMode
+  remoteServerUrl: string | null
+}
 
 export interface OratorioServerStatus {
   state: OratorioServerState
   serverUrl: string | null
   reusedExistingServer: boolean
+  backendKind: OratorioBackendKind
+  serverMode: OratorioServerMode
   pid: number | null
   errorMessage: string | null
 }
@@ -20,6 +29,7 @@ export interface OratorioServerManagerOptions {
   app: Pick<App, 'isPackaged' | 'getAppPath' | 'getPath'>
   resourcesPath: string
   env?: NodeJS.ProcessEnv
+  getConnectionPreferences?: () => OratorioServerConnectionPreferences
 }
 
 export interface ResolvedServerExecutable {
@@ -30,18 +40,26 @@ export interface ResolvedServerExecutable {
 const DEV_SERVER_URL = 'http://127.0.0.1:5087'
 const DESKTOP_SERVER_FILE = 'desktop-server.json'
 const HEALTH_TIMEOUT_MS = 30_000
+const REMOTE_HEALTH_TIMEOUT_MS = 10_000
 const HEALTH_POLL_MS = 250
 const SHUTDOWN_GRACE_MS = 1_500
+const DEFAULT_CONNECTION_PREFERENCES: OratorioServerConnectionPreferences = {
+  serverMode: 'local',
+  remoteServerUrl: null
+}
 
 export class OratorioServerManager extends EventEmitter {
   private readonly app: OratorioServerManagerOptions['app']
   private readonly resourcesPath: string
   private readonly env: NodeJS.ProcessEnv
+  private readonly getConnectionPreferences: () => OratorioServerConnectionPreferences
   private process: ChildProcess | null = null
   private status: OratorioServerStatus = {
     state: 'stopped',
     serverUrl: null,
     reusedExistingServer: false,
+    backendKind: 'managedLocal',
+    serverMode: 'local',
     pid: null,
     errorMessage: null
   }
@@ -52,6 +70,7 @@ export class OratorioServerManager extends EventEmitter {
     this.app = options.app
     this.resourcesPath = options.resourcesPath
     this.env = options.env ?? process.env
+    this.getConnectionPreferences = options.getConnectionPreferences ?? (() => DEFAULT_CONNECTION_PREFERENCES)
   }
 
   getStatus(): OratorioServerStatus {
@@ -63,16 +82,41 @@ export class OratorioServerManager extends EventEmitter {
       return this.getStatus()
     }
 
+    const connection = this.resolveConnectionPreferences()
     this.status = {
       state: 'starting',
-      serverUrl: null,
+      serverUrl: connection.serverMode === 'remote' ? connection.remoteServerUrl : null,
       reusedExistingServer: false,
+      backendKind: connection.serverMode === 'remote' ? 'remote' : 'managedLocal',
+      serverMode: connection.serverMode,
       pid: null,
       errorMessage: null
     }
     this.emit('status', this.getStatus())
 
     try {
+      if (connection.serverMode === 'remote') {
+        const serverUrl = normalizeRemoteServerUrl(connection.remoteServerUrl)
+        this.status = {
+          ...this.status,
+          serverUrl
+        }
+        this.emit('status', this.getStatus())
+        await waitForHealth(serverUrl, REMOTE_HEALTH_TIMEOUT_MS)
+
+        this.status = {
+          state: 'running',
+          serverUrl,
+          reusedExistingServer: true,
+          backendKind: 'remote',
+          serverMode: 'remote',
+          pid: null,
+          errorMessage: null
+        }
+        this.emit('status', this.getStatus())
+        return this.getStatus()
+      }
+
       const serverUrl = this.app.isPackaged
         ? `http://127.0.0.1:${await this.resolveLoopbackPort()}`
         : normalizeBaseUrl(this.env.ORATORIO_DESKTOP_SERVER_URL ?? DEV_SERVER_URL)
@@ -82,6 +126,8 @@ export class OratorioServerManager extends EventEmitter {
           state: 'running',
           serverUrl,
           reusedExistingServer: true,
+          backendKind: 'reusedLocal',
+          serverMode: 'local',
           pid: null,
           errorMessage: null
         }
@@ -96,6 +142,8 @@ export class OratorioServerManager extends EventEmitter {
         state: 'running',
         serverUrl,
         reusedExistingServer: false,
+        backendKind: 'managedLocal',
+        serverMode: 'local',
         pid: this.process?.pid ?? null,
         errorMessage: null
       }
@@ -121,10 +169,13 @@ export class OratorioServerManager extends EventEmitter {
   async shutdown(): Promise<void> {
     if (!this.process) {
       if (this.status.state !== 'running' || this.status.reusedExistingServer) {
+        const connection = this.resolveConnectionPreferences()
         this.status = {
           state: 'stopped',
           serverUrl: null,
           reusedExistingServer: false,
+          backendKind: connection.serverMode === 'remote' ? 'remote' : 'managedLocal',
+          serverMode: connection.serverMode,
           pid: null,
           errorMessage: null
         }
@@ -169,6 +220,8 @@ export class OratorioServerManager extends EventEmitter {
       state: 'stopped',
       serverUrl: null,
       reusedExistingServer: false,
+      backendKind: this.resolveConnectionPreferences().serverMode === 'remote' ? 'remote' : 'managedLocal',
+      serverMode: this.resolveConnectionPreferences().serverMode,
       pid: null,
       errorMessage: null
     }
@@ -243,6 +296,16 @@ export class OratorioServerManager extends EventEmitter {
 
   private resolveStateRoot(): string {
     return this.env.ORATORIO_STATE_ROOT?.trim() || resolveDesktopStateRoot(this.app)
+  }
+
+  private resolveConnectionPreferences(): OratorioServerConnectionPreferences {
+    const preferences = this.getConnectionPreferences()
+    return {
+      serverMode: preferences.serverMode === 'remote' ? 'remote' : 'local',
+      remoteServerUrl: typeof preferences.remoteServerUrl === 'string' && preferences.remoteServerUrl.trim()
+        ? preferences.remoteServerUrl.trim().replace(/\/+$/, '')
+        : null
+    }
   }
 
   // Reuse the same loopback port across restarts when it is still free, so the
@@ -365,6 +428,38 @@ function executableName(): string {
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, '')
+}
+
+export function normalizeRemoteServerUrl(value: string | null | undefined): string {
+  const trimmed = value?.trim()
+  if (!trimmed) {
+    throw new Error('Remote Oratorio server URL is not configured.')
+  }
+
+  let parsed: URL
+  try {
+    parsed = new URL(trimmed)
+  } catch {
+    throw new Error('Remote Oratorio server URL must be an absolute http or https URL.')
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Remote Oratorio server URL must use http or https.')
+  }
+
+  if (parsed.username || parsed.password) {
+    throw new Error('Remote Oratorio server URL must not include credentials.')
+  }
+
+  const path = parsed.pathname.replace(/\/+$/, '')
+  if (path && path !== '') {
+    throw new Error('Remote Oratorio server URL must not include a path.')
+  }
+
+  parsed.pathname = ''
+  parsed.search = ''
+  parsed.hash = ''
+  return normalizeBaseUrl(parsed.toString())
 }
 
 function sleep(ms: number): Promise<void> {

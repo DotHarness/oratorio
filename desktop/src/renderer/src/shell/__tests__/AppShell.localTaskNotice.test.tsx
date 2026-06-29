@@ -1468,6 +1468,8 @@ function desktopServerStatus(
   overrides: Partial<{
     serverUrl: string | null
     reusedExistingServer: boolean
+    backendKind: 'managedLocal' | 'reusedLocal' | 'remote'
+    serverMode: 'local' | 'remote'
     pid: number | null
     errorMessage: string | null
   }> = {},
@@ -1476,6 +1478,8 @@ function desktopServerStatus(
     state,
     serverUrl: state === 'running' ? 'http://127.0.0.1:5087' : null,
     reusedExistingServer: false,
+    backendKind: 'managedLocal' as const,
+    serverMode: 'local' as const,
     pid: null,
     errorMessage: null,
     ...overrides,
@@ -1491,13 +1495,25 @@ function makeDesktopApi(overrides: Partial<Record<string, unknown>> = {}) {
   }
 
   return {
-    getStatus: vi.fn(async () => ({ appVersion: 'test', platform: 'win32', server: null })),
+    getStatus: vi.fn(async () => ({ appVersion: 'test', platform: 'win32', server: null, serverConnection: { serverMode: 'local', remoteServerUrl: null } })),
     restartServer: vi.fn(async () => ({
       state: 'running',
       serverUrl: 'http://127.0.0.1:5087',
       reusedExistingServer: true,
+      backendKind: 'reusedLocal',
+      serverMode: 'local',
       pid: null,
       errorMessage: null,
+    })),
+    getServerConnectionPreferences: vi.fn(async () => ({ serverMode: 'local', remoteServerUrl: null })),
+    setServerConnectionPreferences: vi.fn(async (preferences: { serverMode: 'local' | 'remote'; remoteServerUrl: string | null }) => ({
+      preferences,
+      status: desktopServerStatus(preferences.serverMode === 'remote' ? 'error' : 'running', {
+        serverUrl: preferences.serverMode === 'remote' ? preferences.remoteServerUrl : 'http://127.0.0.1:5087',
+        backendKind: preferences.serverMode === 'remote' ? 'remote' : 'managedLocal',
+        serverMode: preferences.serverMode,
+        errorMessage: preferences.serverMode === 'remote' ? 'Remote unavailable.' : null,
+      }),
     })),
     getTheme: vi.fn(async () => null),
     setTheme: vi.fn(async () => undefined),

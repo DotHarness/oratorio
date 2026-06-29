@@ -1,7 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, Tray, type IpcMainInvokeEvent, type OpenDialogOptions } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
-import { OratorioServerManager, type OratorioServerStatus } from './OratorioServerManager'
+import {
+  OratorioServerManager,
+  normalizeRemoteServerUrl,
+  type OratorioServerConnectionPreferences,
+  type OratorioServerStatus
+} from './OratorioServerManager'
 import { appBindingProtocol, canDeliverAppBindingHandoffs, extractAppBindingUrls, shouldActivateWindowForAppBindingUrls } from './appBindingActivation'
 import { resolveDesktopPreferencesPath, resolveDesktopSettingsRoot } from './desktopPaths'
 import { buildRendererStartupQuery, buildRendererStartupUrl, resolveStartupTheme } from './startupTheme'
@@ -32,6 +37,8 @@ type DesktopTheme = StatusPageTheme
 type DesktopPreferences = {
   theme?: DesktopTheme
   closeBehavior?: OratorioWindowCloseBehavior
+  serverMode?: OratorioServerConnectionPreferences['serverMode']
+  remoteServerUrl?: string | null
 }
 
 app.setName('Oratorio')
@@ -101,7 +108,8 @@ async function boot(): Promise<void> {
   ensureTray()
   serverManager = new OratorioServerManager({
     app,
-    resourcesPath: process.resourcesPath
+    resourcesPath: process.resourcesPath,
+    getConnectionPreferences: getServerConnectionPreferences
   })
   serverManager.on('status', (status) => sendServerStatus(status))
   registerIpc()
@@ -147,8 +155,26 @@ function registerIpc(): void {
   ipcMain.handle('desktop:get-status', () => ({
     appVersion: app.getVersion(),
     platform: process.platform,
-    server: serverManager?.getStatus() ?? null
+    server: serverManager?.getStatus() ?? null,
+    serverConnection: getServerConnectionPreferences()
   }))
+  ipcMain.handle('desktop:get-server-connection-preferences', () => getServerConnectionPreferences())
+  ipcMain.handle('desktop:set-server-connection-preferences', async (_event, draft: Partial<OratorioServerConnectionPreferences>) => {
+    if (!serverManager) {
+      throw new Error('Server manager is not ready.')
+    }
+
+    const connection = normalizeServerConnectionDraft(draft)
+    writeDesktopPreferences({ ...readDesktopPreferences(), ...connection })
+    let status: OratorioServerStatus
+    try {
+      status = await serverManager.restart()
+    } catch {
+      status = serverManager.getStatus()
+    }
+    flushPendingAppBindingUrls(mainWindow)
+    return { preferences: connection, status }
+  })
   ipcMain.handle('desktop:restart-server', async () => {
     if (!serverManager) {
       throw new Error('Server manager is not ready.')
@@ -392,10 +418,38 @@ function readDesktopPreferences(): DesktopPreferences {
   try {
     const parsed = JSON.parse(readFileSync(preferencesPath, 'utf8')) as Partial<DesktopPreferences>
     const theme = parsed.theme === 'dark' || parsed.theme === 'light' ? parsed.theme : undefined
-    return { theme, closeBehavior: resolveWindowCloseBehavior(parsed) }
+    const closeBehavior = resolveWindowCloseBehavior(parsed)
+    const serverConnection = normalizeStoredServerConnection(parsed)
+    return { theme, closeBehavior, ...serverConnection }
   } catch {
     return {}
   }
+}
+
+function getServerConnectionPreferences(): OratorioServerConnectionPreferences {
+  return normalizeStoredServerConnection(readDesktopPreferences())
+}
+
+function normalizeStoredServerConnection(preferences: Partial<DesktopPreferences>): OratorioServerConnectionPreferences {
+  const serverMode = preferences.serverMode === 'remote' ? 'remote' : 'local'
+  const remoteServerUrl = typeof preferences.remoteServerUrl === 'string' && preferences.remoteServerUrl.trim()
+    ? preferences.remoteServerUrl.trim().replace(/\/+$/, '')
+    : null
+  return { serverMode, remoteServerUrl }
+}
+
+function normalizeServerConnectionDraft(draft: Partial<OratorioServerConnectionPreferences>): OratorioServerConnectionPreferences {
+  const current = getServerConnectionPreferences()
+  const serverMode = draft.serverMode === 'remote' ? 'remote' : 'local'
+  const remoteCandidate = draft.remoteServerUrl !== undefined ? draft.remoteServerUrl : current.remoteServerUrl
+  const remoteServerUrl = serverMode === 'remote'
+    ? (remoteCandidate?.trim() ? normalizeRemoteServerUrl(remoteCandidate) : null)
+    : (remoteCandidate?.trim() ? remoteCandidate.trim().replace(/\/+$/, '') : null)
+  if (serverMode === 'remote' && !remoteServerUrl) {
+    throw new Error('Remote Oratorio server URL is not configured.')
+  }
+
+  return { serverMode, remoteServerUrl }
 }
 
 function getStartupTheme(): DesktopTheme {

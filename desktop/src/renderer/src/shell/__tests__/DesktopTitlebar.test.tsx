@@ -87,14 +87,17 @@ function makeDesktopApi() {
   }
 
   return {
-    getStatus: vi.fn(async () => ({ appVersion: 'test', platform: 'win32', server: null })),
+    getStatus: vi.fn(async () => ({ appVersion: 'test', platform: 'win32', server: null, serverConnection: { serverMode: 'local', remoteServerUrl: null } })),
     restartServer: vi.fn(async () => ({
       state: 'running',
       serverUrl: 'http://127.0.0.1:5087',
       reusedExistingServer: true,
+      backendKind: 'reusedLocal',
+      serverMode: 'local',
       pid: null,
       errorMessage: null,
     })),
+    getServerConnectionPreferences: vi.fn(async () => ({ serverMode: 'local', remoteServerUrl: null })),
     getTheme: vi.fn(async () => null),
     setTheme: vi.fn(async () => undefined),
     getWindowCloseBehavior: vi.fn(async () => 'minimizeToTray' as const),

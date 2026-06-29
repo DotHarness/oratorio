@@ -1,12 +1,18 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcRendererEvent } from 'electron'
-import type { OratorioServerStatus } from '../main/OratorioServerManager'
+import type { OratorioServerConnectionPreferences, OratorioServerStatus } from '../main/OratorioServerManager'
 import type { OratorioWindowState } from '../main/windowChrome'
 
 export interface OratorioDesktopStatus {
   appVersion: string
   platform: NodeJS.Platform
   server: OratorioServerStatus | null
+  serverConnection: OratorioServerConnectionPreferences
+}
+
+export interface OratorioDesktopServerConnectionUpdateResult {
+  preferences: OratorioServerConnectionPreferences
+  status: OratorioServerStatus
 }
 
 export type OratorioDesktopUnsubscribe = () => void
@@ -31,6 +37,12 @@ const api = {
   },
   restartServer(): Promise<OratorioServerStatus> {
     return ipcRenderer.invoke('desktop:restart-server')
+  },
+  getServerConnectionPreferences(): Promise<OratorioServerConnectionPreferences> {
+    return ipcRenderer.invoke('desktop:get-server-connection-preferences')
+  },
+  setServerConnectionPreferences(preferences: OratorioServerConnectionPreferences): Promise<OratorioDesktopServerConnectionUpdateResult> {
+    return ipcRenderer.invoke('desktop:set-server-connection-preferences', preferences)
   },
   openExternal(url: string): Promise<void> {
     return ipcRenderer.invoke('desktop:open-external', url)

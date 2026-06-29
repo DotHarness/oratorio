@@ -32,6 +32,33 @@
     "title": "桌面",
     "description": "本设备的窗口与托盘偏好。"
   },
+  "desktopConnection": {
+    "title": "后端连接",
+    "description": "仅存储在本机 Desktop。远端模式会连接一个私有 Oratorio 后端 URL。",
+    "remoteReadOnlyReason": "远端服务器配置由服务器侧管理。",
+    "mode": {
+      "label": "模式",
+      "description": "本地模式会启动或复用内置后端；远端模式只连接已配置后端。",
+      "local": "本地",
+      "remote": "远端"
+    },
+    "remoteUrl": {
+      "label": "远端 URL",
+      "description": "仅支持 HTTP 或 HTTPS origin，例如 SSH tunnel 或 VPN 地址。"
+    },
+    "statusLabel": "后端状态",
+    "noServerUrl": "当前没有可用后端 URL。",
+    "reconnect": "重新连接",
+    "apply": "应用",
+    "applying": "应用中",
+    "status": {
+      "stopped": "已停止",
+      "starting": "启动中",
+      "running": "运行中",
+      "error": "错误",
+      "unknown": "未知"
+    }
+  },
   "common": {
     "on": "开",
     "off": "关",
@@ -156,6 +183,7 @@
     "gitlabPlaceholder": "group/project 或 group/subgroup/project",
     "githubPlaceholder": "owner/name",
     "workspacePlaceholder": "DotCraft 工作区路径",
+    "workspaceServerPlaceholder": "服务器/容器内 DotCraft 工作区路径",
     "add": "添加",
     "card": {
       "newProject": "新建 {{provider}} 项目",
@@ -170,6 +198,7 @@
       "githubRepository": "GitHub 仓库",
       "dotcraftWorkspace": "DotCraft 工作区",
       "workspaceAbsolute": "工作区绝对路径",
+      "workspaceServerAbsolute": "服务器/容器内绝对路径",
       "gitlabProfile": "{{name}} 的 GitLab 配置",
       "tokenKind": "令牌类型",
       "tokenKindPlaceholder": "accessToken",
@@ -201,7 +230,8 @@
     "workspacePicker": {
       "choose": "选择工作区文件夹",
       "available": "选择工作区文件夹",
-      "unavailable": "文件夹选择器在桌面应用中可用"
+      "unavailable": "文件夹选择器在桌面应用中可用",
+      "remoteUnavailable": "请输入服务器/容器内路径；远端模式禁用本地文件夹选择器"
     }
   },
   "credentials": {
