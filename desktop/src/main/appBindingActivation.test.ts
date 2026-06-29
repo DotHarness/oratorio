@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   appBindingOperation,
+  canDeliverAppBindingHandoff,
   canDeliverAppBindingHandoffs,
   extractAppBindingUrls,
   shouldActivateWindowForAppBindingUrls
@@ -45,7 +46,7 @@ describe('App Binding activation policy', () => {
     expect(shouldActivateWindowForAppBindingUrls(['not-a-url'])).toBe(true)
   })
 
-  it('delivers handoff URLs only after the desktop server URL is ready', () => {
+  it('delivers non-open handoff URLs only after a desktop server URL is ready', () => {
     expect(canDeliverAppBindingHandoffs({
       state: 'running',
       serverUrl: 'http://127.0.0.1:5087'
@@ -66,6 +67,21 @@ describe('App Binding activation policy', () => {
       state: 'running',
       serverUrl: null
     })).toBe(false)
+    expect(canDeliverAppBindingHandoffs({
+      state: 'running',
+      serverUrl: 'http://127.0.0.1:5087',
+      backendKind: 'remote'
+    })).toBe(true)
     expect(canDeliverAppBindingHandoffs(null)).toBe(false)
+  })
+
+  it('delivers open links without waiting for the backend', () => {
+    expect(canDeliverAppBindingHandoff('oratorio://open/task/ORA-1', null)).toBe(true)
+    expect(canDeliverAppBindingHandoff('oratorio://dotcraft/connect?request=req_1&token=token_1', null)).toBe(false)
+    expect(canDeliverAppBindingHandoff('oratorio://dotcraft/connect?request=req_1&token=token_1', {
+      state: 'running',
+      serverUrl: 'http://127.0.0.1:5087',
+      backendKind: 'remote'
+    })).toBe(true)
   })
 })

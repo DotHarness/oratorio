@@ -19,6 +19,16 @@
       "starting": "正在启动 Oratorio……",
       "preparing": "正在准备 Oratorio 看板……"
     },
+    "connection": {
+      "remoteWaiting": "正在等待远端 Oratorio 后端……",
+      "remoteError": "远端 Oratorio 后端不可用：{{message}}",
+      "remoteUnavailable": "远端 Oratorio 后端不可用。",
+      "remoteUrl": "远端后端 URL",
+      "switchToLocal": "切回本地",
+      "reconnect": "重新连接",
+      "connecting": "连接中",
+      "changeAddress": "更改地址"
+    },
     "restartBanner": {
       "ariaLabel": "需要重启",
       "title": "需要重启",
@@ -68,6 +78,7 @@
       "dotCraftConnected": "DotCraft 已连接到 Oratorio。",
       "dotCraftThreadBindingActive": "DotCraft 线程绑定已生效。",
       "dotCraftApprovalFailed": "DotCraft 批准失败：{{message}}",
+      "remoteAppBindingUnsupported": "Oratorio Desktop 连接远端后端时暂不支持 DotCraft App Binding。",
       "githubSyncFinishedWithFailures": "GitHub 同步完成但存在失败：{{names}}。",
       "sourceSyncFinishedWithFailures": "{{provider}} 同步完成但存在失败：{{names}}。",
       "taskCreated": "已创建新任务“{{title}}”。点击查看详情。",
@@ -135,10 +146,17 @@
       "running": "运行中",
       "error": "错误"
     },
-    "serverTitle": "服务器{{label}}",
+    "backendKind": {
+      "managedLocal": "本地后端",
+      "reusedLocal": "本地后端",
+      "remote": "远端后端"
+    },
+    "serverTitle": "{{label}}{{state}}",
     "serverErrorTitle": "{{label}}：{{message}}",
     "localServer": "本地服务器",
     "restartServer": "重启服务器",
+    "reconnectServer": "重新连接",
+    "connectionSettings": "连接设置",
     "back": "后退",
     "forward": "前进",
     "desktopActions": "桌面操作",

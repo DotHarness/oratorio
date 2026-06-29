@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Search,
   RotateCcw,
+  Server,
   Settings,
   ShieldCheck,
   SunMoon,
@@ -50,6 +51,25 @@ import type {
 
 type ThemeMode = 'dark' | 'light'
 type WindowCloseBehavior = 'minimizeToTray' | 'quitApp'
+type OratorioServerMode = 'local' | 'remote'
+type OratorioBackendKind = 'managedLocal' | 'reusedLocal' | 'remote'
+type OratorioServerConnectionPreferences = {
+  serverMode: OratorioServerMode
+  remoteServerUrl: string | null
+}
+type OratorioServerStatus = {
+  state: 'stopped' | 'starting' | 'running' | 'error'
+  serverUrl: string | null
+  reusedExistingServer: boolean
+  backendKind: OratorioBackendKind
+  serverMode: OratorioServerMode
+  pid: number | null
+  errorMessage: string | null
+}
+type OratorioDesktopServerConnectionUpdateResult = {
+  preferences: OratorioServerConnectionPreferences
+  status: OratorioServerStatus
+}
 type DotCraftHealth = 'connected' | 'configured' | 'unavailable'
 type DeliveryPolicy = 'manualDelivery' | 'autoPr'
 type SecretMode = 'unchanged' | 'replace' | 'clear'
@@ -399,6 +419,12 @@ type SettingsViewProps = {
   serverRestartPending: boolean
   onServerRestartRequired: (restart: { signature: string; fields: string[] }) => void
   onReplayOnboarding?: () => void
+  serverConnectionPreferences?: OratorioServerConnectionPreferences
+  serverConnectionStatus?: OratorioServerStatus | null
+  serverConnectionSaving?: boolean
+  serverConnectionError?: string | null
+  onApplyServerConnectionPreferences?: (preferences: OratorioServerConnectionPreferences) => Promise<OratorioDesktopServerConnectionUpdateResult | null>
+  onReconnectServer?: () => Promise<void>
 }
 
 export function SettingsView({
@@ -422,6 +448,12 @@ export function SettingsView({
   serverRestartPending,
   onServerRestartRequired,
   onReplayOnboarding,
+  serverConnectionPreferences,
+  serverConnectionStatus = null,
+  serverConnectionSaving = false,
+  serverConnectionError = null,
+  onApplyServerConnectionPreferences,
+  onReconnectServer,
 }: SettingsViewProps) {
   const { section } = useParams()
   const { t, i18n: i18nInstance } = useTranslation('settings')
@@ -441,6 +473,8 @@ export function SettingsView({
   const [newWorkspacePath, setNewWorkspacePath] = useState('')
   const [repositoryAllowlistModal, setRepositoryAllowlistModal] = useState<RepositoryAllowlistKind | null>(null)
   const [windowCloseBehavior, setWindowCloseBehaviorState] = useState<WindowCloseBehavior>('minimizeToTray')
+  const [serverModeDraft, setServerModeDraft] = useState<OratorioServerMode>(serverConnectionPreferences?.serverMode ?? 'local')
+  const [remoteServerUrlDraft, setRemoteServerUrlDraft] = useState(serverConnectionPreferences?.remoteServerUrl ?? '')
   const settingsPageRef = useRef<HTMLElement | null>(null)
   const serverConfigRef = useRef<ServerConfigurationResponse | null>(null)
   const configDraftRef = useRef<ServerConfiguration | null>(null)
@@ -449,6 +483,18 @@ export function SettingsView({
   const saveInFlightRef = useRef(false)
   const queuedSaveRef = useRef(false)
   const canConfigureWindowBehavior = Boolean(window.oratorioDesktop?.getWindowCloseBehavior && window.oratorioDesktop?.setWindowCloseBehavior)
+  const isRemoteDesktopMode = serverConnectionPreferences?.serverMode === 'remote'
+  const canConfigureServerConnection = Boolean(serverConnectionPreferences && onApplyServerConnectionPreferences)
+  const canBrowseWorkspace = Boolean(window.oratorioDesktop?.selectDirectory) && !isRemoteDesktopMode
+  const configWritable = Boolean(serverConfig?.writable && !isRemoteDesktopMode)
+  const serverConfigReadOnlyReason = isRemoteDesktopMode
+    ? t('desktopConnection.remoteReadOnlyReason')
+    : serverConfig?.disabledReason ?? t('common.readOnly')
+
+  useEffect(() => {
+    setServerModeDraft(serverConnectionPreferences?.serverMode ?? 'local')
+    setRemoteServerUrlDraft(serverConnectionPreferences?.remoteServerUrl ?? '')
+  }, [serverConnectionPreferences?.remoteServerUrl, serverConnectionPreferences?.serverMode])
 
   const loadDiagnostics = useCallback(async () => {
     try {
@@ -569,7 +615,7 @@ export function SettingsView({
 
     const currentServerConfig = serverConfigRef.current
     const configuration = configDraftRef.current
-    if (!currentServerConfig || !configuration || !currentServerConfig.writable) {
+    if (!currentServerConfig || !configuration || isRemoteDesktopMode || !currentServerConfig.writable) {
       return
     }
 
@@ -629,7 +675,7 @@ export function SettingsView({
   }
 
   function queueServerConfigurationAutosave(mode: ConfigSaveMode = 'debounced') {
-    if (!serverConfigRef.current?.writable || !configDraftRef.current) {
+    if (isRemoteDesktopMode || !serverConfigRef.current?.writable || !configDraftRef.current) {
       return
     }
 
@@ -659,7 +705,7 @@ export function SettingsView({
   async function detectGitHubInstallationsNow() {
     const currentServerConfig = serverConfigRef.current
     const configuration = configDraftRef.current
-    if (!currentServerConfig || !configuration || !currentServerConfig.writable || saveInFlightRef.current) {
+    if (!currentServerConfig || !configuration || isRemoteDesktopMode || !currentServerConfig.writable || saveInFlightRef.current) {
       return
     }
 
@@ -698,7 +744,7 @@ export function SettingsView({
 
   async function selectWorkspaceDirectory(currentPath: string, onSelect: (path: string) => void) {
     const selectDirectory = window.oratorioDesktop?.selectDirectory
-    if (!selectDirectory) {
+    if (!selectDirectory || isRemoteDesktopMode) {
       return
     }
 
@@ -722,6 +768,25 @@ export function SettingsView({
     void window.oratorioDesktop?.setWindowCloseBehavior?.(value).catch(() => {
       setWindowCloseBehaviorState(previous)
     })
+  }
+
+  function applyServerConnectionDraft() {
+    if (!onApplyServerConnectionPreferences) {
+      return
+    }
+
+    void onApplyServerConnectionPreferences({
+      serverMode: serverModeDraft,
+      remoteServerUrl: remoteServerUrlDraft.trim() || serverConnectionPreferences?.remoteServerUrl || null,
+    }).catch(() => {})
+  }
+
+  function reconnectConfiguredServer() {
+    if (!onReconnectServer) {
+      return
+    }
+
+    void onReconnectServer().catch(() => {})
   }
 
   const diagnosticsGitHub = diagnostics?.gitHub ?? diagnostics?.github
@@ -792,7 +857,7 @@ export function SettingsView({
       setScheduleSavingProvider(null)
     }
   }
-  const addProjectDisabled = !serverConfig?.writable || !newProjectPath.trim()
+  const addProjectDisabled = !configWritable || !newProjectPath.trim()
   const implementationAutoDispatchDescription = hasGitLabProject
     ? t('worktree.automation.autoDispatchWithGitlab')
     : t('worktree.automation.autoDispatchDefault')
@@ -806,11 +871,35 @@ export function SettingsView({
     ? t('review.autoReviewWithGitlab')
     : t('review.autoReviewDefault')
   const allowlistEmptyLabel = hasGitLabProject ? t('review.emptyWithGitlab') : t('review.emptyDefault')
-  const allowlistManageDisabled = !serverConfig?.writable || configuredProjects.length === 0
+  const allowlistManageDisabled = !configWritable || configuredProjects.length === 0
   const reviewTargetTerm = hasGitLabProject ? t('review.term.prmr') : t('review.term.pr')
   const publishRouteTerm = hasGitLabProject ? t('review.term.providerRoutes') : t('review.term.githubComment')
   const reviewSourceSupports = hasGitLabProject ? t('review.reviewSupportsWithGitlab') : t('review.reviewSupportsDefault')
   const diagnosticsGitLabWriteLabel = (diagnosticsGitLab?.writeConfigured ?? gitLabTokenConfiguredCount > 0) ? gitLabTokenConfiguredCount && gitLabTokenConfiguredCount < gitLabConfig.projects.length ? t('credentials.gitlabWriteLabel.partial') : t('credentials.gitlabWriteLabel.configured') : t('credentials.gitlabWriteLabel.missingToken')
+  const persistedRemoteServerUrl = serverConnectionPreferences?.remoteServerUrl ?? ''
+  const trimmedRemoteServerUrlDraft = remoteServerUrlDraft.trim()
+  const serverConnectionChanged = Boolean(
+    serverConnectionPreferences &&
+    (serverModeDraft !== serverConnectionPreferences.serverMode || trimmedRemoteServerUrlDraft !== persistedRemoteServerUrl),
+  )
+  const remoteServerUrlRequired = serverModeDraft === 'remote' && !trimmedRemoteServerUrlDraft
+  const serverConnectionStatusLabel = serverConnectionStatus
+    ? t(`desktopConnection.status.${serverConnectionStatus.state}`)
+    : t('desktopConnection.status.unknown')
+  const serverConnectionStatusTone = serverConnectionStatus?.state === 'running'
+    ? 'ok'
+    : serverConnectionStatus?.state === 'error'
+      ? 'warn'
+      : 'muted'
+  const workspacePathPlaceholder = isRemoteDesktopMode
+    ? t('projects.workspaceServerPlaceholder')
+    : t('projects.workspacePlaceholder')
+  const workspaceCardPathPlaceholder = isRemoteDesktopMode
+    ? t('projects.card.workspaceServerAbsolute')
+    : t('projects.card.workspaceAbsolute')
+  const workspaceBrowseUnavailableLabel = isRemoteDesktopMode
+    ? t('projects.workspacePicker.remoteUnavailable')
+    : t('projects.workspacePicker.unavailable')
 
   const shouldShowStartServer = !dotcraftStatus.connected || Boolean(workspaceInventory?.workspaces?.some((workspace) => !workspace.connected))
   const bridgeActions = shouldShowStartServer ? (
@@ -966,29 +1055,29 @@ export function SettingsView({
         <SettingsGroup title={t('sources.connectionTitle')} description={providerId === 'gitlab' ? t('credentials.gitlab.description') : t('credentials.github.description')}>
           {providerId === 'github' ? (
             <>
-              <SettingsRow icon={Code2} label={t('credentials.github.endpoint')} description={t('credentials.github.endpointDescription')} control={<TextControl value={configDraft?.gitHub.endpoint ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateGitHubConfig({ endpoint: value }, 'immediate')} />} />
-              <SettingsRow icon={KeyRound} label={t('credentials.github.appId')} description={t('credentials.github.appIdDescription')} control={<TextControl value={configDraft?.gitHub.appId ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateGitHubConfig({ appId: emptyToNull(value) }, 'immediate')} />} />
+              <SettingsRow icon={Code2} label={t('credentials.github.endpoint')} description={t('credentials.github.endpointDescription')} control={<TextControl value={configDraft?.gitHub.endpoint ?? ''} disabled={!configWritable} onChange={(value) => updateGitHubConfig({ endpoint: value }, 'immediate')} />} />
+              <SettingsRow icon={KeyRound} label={t('credentials.github.appId')} description={t('credentials.github.appIdDescription')} control={<TextControl value={configDraft?.gitHub.appId ?? ''} disabled={!configWritable} onChange={(value) => updateGitHubConfig({ appId: emptyToNull(value) }, 'immediate')} />} />
               <SettingsRow icon={ShieldCheck} label={t('credentials.github.authentication')} description={t('credentials.github.authenticationDescription')} control={<ValuePill>{githubAuthenticationLabel}</ValuePill>} />
-              <SettingsRow icon={CheckCircle2} label={t('credentials.github.writes')} description={t('credentials.github.writesDescription')} control={<button className="toggle-button" aria-pressed={configDraft?.gitHub.writesEnabled ?? false} disabled={!serverConfig?.writable} onClick={() => updateGitHubConfig({ writesEnabled: !(configDraft?.gitHub.writesEnabled ?? false) })}>{configDraft?.gitHub.writesEnabled ? t('common.on') : t('common.off')}</button>} />
-              <SecretSettingsRow icon={KeyRound} label={t('credentials.github.token')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).token} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('token', next)} />
-              <SecretSettingsRow icon={KeyRound} label={t('credentials.github.privateKey')} multiline field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKey} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('privateKey', next)} />
-              <SecretSettingsRow icon={KeyRound} label={t('credentials.github.privateKeyPath')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKeyPath} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('privateKeyPath', next)} />
-              <SecretSettingsRow icon={KeyRound} label={t('credentials.github.webhookSecret')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).webhookSecret} disabled={!serverConfig?.writable} onChange={(next) => updateGitHubSecret('webhookSecret', next)} />
+              <SettingsRow icon={CheckCircle2} label={t('credentials.github.writes')} description={t('credentials.github.writesDescription')} control={<button className="toggle-button" aria-pressed={configDraft?.gitHub.writesEnabled ?? false} disabled={!configWritable} onClick={() => updateGitHubConfig({ writesEnabled: !(configDraft?.gitHub.writesEnabled ?? false) })}>{configDraft?.gitHub.writesEnabled ? t('common.on') : t('common.off')}</button>} />
+              <SecretSettingsRow icon={KeyRound} label={t('credentials.github.token')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).token} disabled={!configWritable} onChange={(next) => updateGitHubSecret('token', next)} />
+              <SecretSettingsRow icon={KeyRound} label={t('credentials.github.privateKey')} multiline field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKey} disabled={!configWritable} onChange={(next) => updateGitHubSecret('privateKey', next)} />
+              <SecretSettingsRow icon={KeyRound} label={t('credentials.github.privateKeyPath')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKeyPath} disabled={!configWritable} onChange={(next) => updateGitHubSecret('privateKeyPath', next)} />
+              <SecretSettingsRow icon={KeyRound} label={t('credentials.github.webhookSecret')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).webhookSecret} disabled={!configWritable} onChange={(next) => updateGitHubSecret('webhookSecret', next)} />
             </>
           ) : (
             <>
-              <SettingsRow icon={CheckCircle2} label={t('credentials.gitlab.readSync')} description={t('credentials.gitlab.readSyncDescription')} control={<button className="toggle-button" aria-pressed={gitLabConfig.enabled} disabled={!serverConfig?.writable} onClick={() => updateGitLabConfig({ enabled: !gitLabConfig.enabled })}>{gitLabConfig.enabled ? t('common.on') : t('common.off')}</button>} />
-              <SettingsRow icon={GitPullRequest} label={t('credentials.gitlab.writes')} description={t('credentials.gitlab.writesDescription')} control={<button className="toggle-button" aria-pressed={gitLabConfig.writesEnabled} disabled={!serverConfig?.writable} onClick={() => updateGitLabConfig({ writesEnabled: !gitLabConfig.writesEnabled })}>{gitLabConfig.writesEnabled ? t('common.on') : t('common.off')}</button>} />
-              <SettingsRow icon={Code2} label={t('credentials.gitlab.endpoint')} description={gitLabEndpointDescription} control={<TextControl value={gitLabConfig.endpoint} disabled={!serverConfig?.writable} onChange={(value) => updateGitLabConfig({ endpoint: value }, 'immediate')} />} />
+              <SettingsRow icon={CheckCircle2} label={t('credentials.gitlab.readSync')} description={t('credentials.gitlab.readSyncDescription')} control={<button className="toggle-button" aria-pressed={gitLabConfig.enabled} disabled={!configWritable} onClick={() => updateGitLabConfig({ enabled: !gitLabConfig.enabled })}>{gitLabConfig.enabled ? t('common.on') : t('common.off')}</button>} />
+              <SettingsRow icon={GitPullRequest} label={t('credentials.gitlab.writes')} description={t('credentials.gitlab.writesDescription')} control={<button className="toggle-button" aria-pressed={gitLabConfig.writesEnabled} disabled={!configWritable} onClick={() => updateGitLabConfig({ writesEnabled: !gitLabConfig.writesEnabled })}>{gitLabConfig.writesEnabled ? t('common.on') : t('common.off')}</button>} />
+              <SettingsRow icon={Code2} label={t('credentials.gitlab.endpoint')} description={gitLabEndpointDescription} control={<TextControl value={gitLabConfig.endpoint} disabled={!configWritable} onChange={(value) => updateGitLabConfig({ endpoint: value }, 'immediate')} />} />
               <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.authentication')} description={t('credentials.gitlab.authenticationDescription')} control={<ValuePill>{gitLabAuthenticationLabel}</ValuePill>} />
               <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.writeCredentials')} description={t('credentials.gitlab.writeCredentialsDescription')} control={<ValuePill>{diagnosticsGitLabWriteLabel}</ValuePill>} />
               <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.webhookVerification')} description={t('credentials.gitlab.webhookVerificationDescription')} control={<ValuePill>{gitLabWebhookLabel}</ValuePill>} />
-              <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.localBypass')} description={t('credentials.gitlab.localBypassDescription')} control={<button className="toggle-button" aria-pressed={gitLabConfig.allowLocalDevelopmentUnsafeWebhooks} disabled={!serverConfig?.writable} onClick={() => updateGitLabConfig({ allowLocalDevelopmentUnsafeWebhooks: !gitLabConfig.allowLocalDevelopmentUnsafeWebhooks })}>{gitLabConfig.allowLocalDevelopmentUnsafeWebhooks ? t('common.on') : t('common.off')}</button>} />
+              <SettingsRow icon={ShieldCheck} label={t('credentials.gitlab.localBypass')} description={t('credentials.gitlab.localBypassDescription')} control={<button className="toggle-button" aria-pressed={gitLabConfig.allowLocalDevelopmentUnsafeWebhooks} disabled={!configWritable} onClick={() => updateGitLabConfig({ allowLocalDevelopmentUnsafeWebhooks: !gitLabConfig.allowLocalDevelopmentUnsafeWebhooks })}>{gitLabConfig.allowLocalDevelopmentUnsafeWebhooks ? t('common.on') : t('common.off')}</button>} />
             </>
           )}
         </SettingsGroup>
 
-        <SettingsGroup title={t('projects.groupTitle')} description={serverConfig?.writable ? t('common.overlay', { path: serverConfig.overlayPath }) : serverConfig?.disabledReason ?? t('common.readOnly')}>
+        <SettingsGroup title={t('projects.groupTitle')} description={configWritable ? t('common.overlay', { path: serverConfig?.overlayPath }) : serverConfigReadOnlyReason}>
             <div className="repository-card-list">
               {projectCards.some((card) => card.provider === providerId) ? (
                 projectCards.map((card, index) => (card.provider !== providerId ? null : (
@@ -997,13 +1086,15 @@ export function SettingsView({
                     card={card}
                     gitLabProfile={card.provider === 'gitlab' ? gitLabProfileForCard(gitLabConfig, card) : null}
                     sourceProject={card.provider === 'gitlab' ? sourceProjectByKey.get(card.canonicalKey.toLowerCase()) ?? null : null}
-                    disabled={!serverConfig?.writable}
+                    disabled={!configWritable}
                     onProviderChange={(value) => updateProjectCard(index, { provider: value as SourceProviderId })}
                     onProjectPathChange={(projectPath) => updateProjectCard(index, { projectPath }, 'immediate')}
                     onWorkspacePathChange={(workspacePath) => updateProjectCard(index, { workspacePath }, 'immediate')}
                     onGitLabProfileTokenKindChange={(tokenKind) => updateGitLabProjectProfileTokenKind(card, tokenKind)}
                     onGitLabProfileSecretChange={(key, next) => updateGitLabProjectProfileSecret(card, key, next)}
-                    canBrowseWorkspace={Boolean(window.oratorioDesktop?.selectDirectory)}
+                    canBrowseWorkspace={canBrowseWorkspace}
+                    workspacePlaceholder={workspaceCardPathPlaceholder}
+                    workspaceBrowseUnavailableLabel={workspaceBrowseUnavailableLabel}
                     onBrowseWorkspace={() => void selectWorkspaceDirectory(card.workspacePath, (workspacePath) => updateProjectCard(index, { workspacePath }))}
                     onRemove={() => removeProjectCard(index)}
                   />
@@ -1018,18 +1109,19 @@ export function SettingsView({
             {providerId === 'github' && gitHubInstallationRows.length ? (
               <GitHubInstallationProfileList
                 rows={gitHubInstallationRows}
-                disabled={!serverConfig?.writable}
+                disabled={!configWritable}
                 onChange={updateGitHubInstallationProfile}
                 onDetect={() => void detectGitHubInstallationsNow()}
               />
             ) : null}
             <div className="repository-add-row provider-add-row">
-              <TextControl placeholder={providerId === 'gitlab' ? t('projects.gitlabPlaceholder') : t('projects.githubPlaceholder')} value={newProjectPath} disabled={!serverConfig?.writable} onChange={setNewProjectPath} commitOnBlur={false} />
+              <TextControl placeholder={providerId === 'gitlab' ? t('projects.gitlabPlaceholder') : t('projects.githubPlaceholder')} value={newProjectPath} disabled={!configWritable} onChange={setNewProjectPath} commitOnBlur={false} />
               <WorkspacePathControl
                 value={newWorkspacePath}
-                placeholder={t('projects.workspacePlaceholder')}
-                disabled={!serverConfig?.writable}
-                canBrowse={Boolean(window.oratorioDesktop?.selectDirectory)}
+                placeholder={workspacePathPlaceholder}
+                disabled={!configWritable}
+                canBrowse={canBrowseWorkspace}
+                browseUnavailableLabel={workspaceBrowseUnavailableLabel}
                 onChange={setNewWorkspacePath}
                 onBrowse={() => void selectWorkspaceDirectory(newWorkspacePath, setNewWorkspacePath)}
                 commitOnBlur={false}
@@ -1112,6 +1204,69 @@ export function SettingsView({
                   }
                 />
               </SettingsGroup>
+              {canConfigureServerConnection ? (
+                <SettingsGroup title={t('desktopConnection.title')} description={t('desktopConnection.description')}>
+                  <SettingsRow
+                    icon={Server}
+                    label={t('desktopConnection.mode.label')}
+                    description={t('desktopConnection.mode.description')}
+                    control={
+                      <SegmentedControl
+                        value={serverModeDraft}
+                        disabled={serverConnectionSaving}
+                        options={[
+                          { value: 'local', label: t('desktopConnection.mode.local') },
+                          { value: 'remote', label: t('desktopConnection.mode.remote') },
+                        ]}
+                        onChange={(value) => setServerModeDraft(value as OratorioServerMode)}
+                      />
+                    }
+                  />
+                  <SettingsRow
+                    icon={Code2}
+                    label={t('desktopConnection.remoteUrl.label')}
+                    description={t('desktopConnection.remoteUrl.description')}
+                    control={
+                      <TextControl
+                        value={remoteServerUrlDraft}
+                        placeholder="http://127.0.0.1:5087"
+                        disabled={serverConnectionSaving}
+                        onChange={setRemoteServerUrlDraft}
+                        commitOnBlur={false}
+                      />
+                    }
+                  />
+                  <SettingsRow
+                    icon={Activity}
+                    label={t('desktopConnection.statusLabel')}
+                    description={serverConnectionStatus?.serverUrl ?? serverConnectionPreferences?.remoteServerUrl ?? t('desktopConnection.noServerUrl')}
+                    control={
+                      <span className="settings-inline-controls">
+                        <StatusPill tone={serverConnectionStatusTone} label={serverConnectionStatusLabel} />
+                        <button
+                          type="button"
+                          className="secondary-button inline compact-row-action settings-action-button"
+                          disabled={serverConnectionSaving || !onReconnectServer}
+                          onClick={reconnectConfiguredServer}
+                        >
+                          <RefreshCw size={14} className={serverConnectionSaving ? 'spin-icon' : undefined} />
+                          {t('desktopConnection.reconnect')}
+                        </button>
+                        <button
+                          type="button"
+                          className="primary-button inline compact-row-action settings-action-button"
+                          disabled={serverConnectionSaving || !serverConnectionChanged || remoteServerUrlRequired}
+                          onClick={applyServerConnectionDraft}
+                        >
+                          <Check size={14} />
+                          {serverConnectionSaving ? t('desktopConnection.applying') : t('desktopConnection.apply')}
+                        </button>
+                      </span>
+                    }
+                  />
+                  {serverConnectionError ? <SettingsNotice tone="error">{serverConnectionError}</SettingsNotice> : null}
+                </SettingsGroup>
+              ) : null}
               {canConfigureWindowBehavior ? (
                 <SettingsGroup title={t('desktop.title')} description={t('desktop.description')}>
                   <SettingsRow
@@ -1152,12 +1307,12 @@ export function SettingsView({
 
           {activeSection === 'agents' ? (
             <div className="settings-stack">
-              <SettingsGroup title={t('agents.connection.title')} description={serverConfig?.writable ? t('agents.connection.restartDescription') : serverConfig?.disabledReason ?? t('common.readOnly')} headerAction={bridgeActions}>
-                <SettingsRow icon={Code2} label={t('agents.connection.appServerUrl')} description={t('agents.connection.appServerUrlDescription')} control={<TextControl value={configDraft?.dotCraft.appServerUrl ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateDotCraftConfig({ appServerUrl: value }, 'immediate')} />} />
-                <SettingsRow icon={GitPullRequest} label={t('agents.connection.hubDiscovery')} description={t('agents.connection.hubDiscoveryDescription')} control={<button className="toggle-button" aria-pressed={configDraft?.dotCraft.hubDiscoveryEnabled ?? false} disabled={!serverConfig?.writable} onClick={() => updateDotCraftConfig({ hubDiscoveryEnabled: !(configDraft?.dotCraft.hubDiscoveryEnabled ?? false) })}>{configDraft?.dotCraft.hubDiscoveryEnabled ? t('common.on') : t('common.off')}</button>} />
-                <SettingsRow icon={Code2} label={t('agents.connection.hubLockPath')} description={t('agents.connection.hubLockPathDescription')} control={<TextControl value={configDraft?.dotCraft.hubLockPath ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateDotCraftConfig({ hubLockPath: value }, 'immediate')} />} />
-                <SettingsRow icon={ShieldCheck} label={t('agents.connection.approvalPolicy')} description={t('agents.connection.approvalPolicyDescription')} control={<SelectControl label={t('agents.connection.approvalPolicy')} value={configDraft?.dotCraft.approvalPolicy ?? 'interrupt'} disabled={!serverConfig?.writable} options={approvalPolicyOptions()} onChange={(value) => updateDotCraftConfig({ approvalPolicy: value })} />} />
-                <SettingsRow icon={Activity} label={t('agents.connection.runTimeout')} description={t('agents.connection.runTimeoutDescription')} control={<DurationControl label={t('worktree.stepperLabels.runTimeout')} value={configDraft?.dotCraft.runTimeoutSeconds ?? DEFAULT_RUN_TIMEOUT_SECONDS} disabled={!serverConfig?.writable} min={30} max={7200} units={secondsDurationUnits()} onChange={(value) => updateDotCraftConfig({ runTimeoutSeconds: value })} />} />
+              <SettingsGroup title={t('agents.connection.title')} description={configWritable ? t('agents.connection.restartDescription') : serverConfigReadOnlyReason} headerAction={bridgeActions}>
+                <SettingsRow icon={Code2} label={t('agents.connection.appServerUrl')} description={t('agents.connection.appServerUrlDescription')} control={<TextControl value={configDraft?.dotCraft.appServerUrl ?? ''} disabled={!configWritable} onChange={(value) => updateDotCraftConfig({ appServerUrl: value }, 'immediate')} />} />
+                <SettingsRow icon={GitPullRequest} label={t('agents.connection.hubDiscovery')} description={t('agents.connection.hubDiscoveryDescription')} control={<button className="toggle-button" aria-pressed={configDraft?.dotCraft.hubDiscoveryEnabled ?? false} disabled={!configWritable} onClick={() => updateDotCraftConfig({ hubDiscoveryEnabled: !(configDraft?.dotCraft.hubDiscoveryEnabled ?? false) })}>{configDraft?.dotCraft.hubDiscoveryEnabled ? t('common.on') : t('common.off')}</button>} />
+                <SettingsRow icon={Code2} label={t('agents.connection.hubLockPath')} description={t('agents.connection.hubLockPathDescription')} control={<TextControl value={configDraft?.dotCraft.hubLockPath ?? ''} disabled={!configWritable} onChange={(value) => updateDotCraftConfig({ hubLockPath: value }, 'immediate')} />} />
+                <SettingsRow icon={ShieldCheck} label={t('agents.connection.approvalPolicy')} description={t('agents.connection.approvalPolicyDescription')} control={<SelectControl label={t('agents.connection.approvalPolicy')} value={configDraft?.dotCraft.approvalPolicy ?? 'interrupt'} disabled={!configWritable} options={approvalPolicyOptions()} onChange={(value) => updateDotCraftConfig({ approvalPolicy: value })} />} />
+                <SettingsRow icon={Activity} label={t('agents.connection.runTimeout')} description={t('agents.connection.runTimeoutDescription')} control={<DurationControl label={t('worktree.stepperLabels.runTimeout')} value={configDraft?.dotCraft.runTimeoutSeconds ?? DEFAULT_RUN_TIMEOUT_SECONDS} disabled={!configWritable} min={30} max={7200} units={secondsDurationUnits()} onChange={(value) => updateDotCraftConfig({ runTimeoutSeconds: value })} />} />
                 <SettingsRow
                   icon={Code2}
                   label={t('agents.bridge.health')}
@@ -1170,22 +1325,22 @@ export function SettingsView({
 
           {activeSection === 'worktree' ? (
             <div className="settings-stack">
-              <SettingsGroup title={t('worktree.group.title')} description={serverConfig?.writable ? t('worktree.group.restartDescription') : serverConfig?.disabledReason ?? t('common.readOnly')}>
-                <SettingsRow icon={ShieldCheck} label={t('worktree.managedWorktrees')} description={t('worktree.managedWorktreesDescription')} control={<button className="toggle-button" aria-pressed={configDraft?.runtime.managedWorktreesEnabled ?? false} disabled={!serverConfig?.writable} onClick={() => updateRuntimeConfig({ managedWorktreesEnabled: !(configDraft?.runtime.managedWorktreesEnabled ?? false) })}>{configDraft?.runtime.managedWorktreesEnabled ? t('common.on') : t('common.off')}</button>} />
-                <SettingsRow icon={Code2} label={t('worktree.worktreeRoot')} description={t('worktree.worktreeRootDescription')} control={<TextControl value={configDraft?.runtime.worktreeRoot ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateRuntimeConfig({ worktreeRoot: value }, 'immediate')} />} />
-                <SettingsRow icon={GitPullRequest} label={t('worktree.branchPrefix')} description={t('worktree.branchPrefixDescription')} control={<TextControl value={configDraft?.runtime.worktreeBranchPrefix ?? ''} disabled={!serverConfig?.writable} onChange={(value) => updateRuntimeConfig({ worktreeBranchPrefix: value }, 'immediate')} />} />
-                <SettingsRow icon={Activity} label={t('worktree.concurrency')} description={t('worktree.concurrencyDescription')} control={<NumberTripleControl values={[configDraft?.runtime.globalMaxActiveRuns ?? 1, configDraft?.runtime.maxActiveRunsPerRepository ?? 1, configDraft?.runtime.maxActiveRunsPerSource ?? 1]} disabled={!serverConfig?.writable} onChange={([globalMaxActiveRuns, maxActiveRunsPerRepository, maxActiveRunsPerSource]) => updateRuntimeConfig({ globalMaxActiveRuns, maxActiveRunsPerRepository, maxActiveRunsPerSource })} />} />
-                <SettingsRow icon={RefreshCw} label={t('worktree.retries')} description={t('worktree.retriesDescription')} control={<RetryPolicyControl attempts={configDraft?.runtime.maxRunAttempts ?? 1} initialBackoffSeconds={configDraft?.runtime.retryBackoffSeconds ?? 1} maxBackoffSeconds={configDraft?.runtime.maxRetryBackoffSeconds ?? 1} disabled={!serverConfig?.writable} onChange={(maxRunAttempts, retryBackoffSeconds, maxRetryBackoffSeconds) => updateRuntimeConfig({ maxRunAttempts, retryBackoffSeconds, maxRetryBackoffSeconds })} />} />
-                <SettingsRow icon={Activity} label={t('worktree.stallTimeout')} description={t('worktree.stallTimeoutDescription')} control={<DurationControl label={t('worktree.stepperLabels.stallTimeout')} value={configDraft?.runtime.stallTimeoutSeconds ?? 300} disabled={!serverConfig?.writable} min={5} max={7200} units={secondsDurationUnits()} onChange={(value) => updateRuntimeConfig({ stallTimeoutSeconds: value })} />} />
-                <SettingsRow icon={RotateCcw} label={t('worktree.retention')} description={t('worktree.retentionDescription')} control={<RetentionControl succeededHours={configDraft?.runtime.succeededWorktreeRetentionHours ?? 24} failedHours={configDraft?.runtime.failedWorktreeRetentionHours ?? 168} disabled={!serverConfig?.writable} onChange={(succeededWorktreeRetentionHours, failedWorktreeRetentionHours) => updateRuntimeConfig({ succeededWorktreeRetentionHours, failedWorktreeRetentionHours })} />} />
-                <SettingsRow icon={RotateCcw} label={t('worktree.cleanupWorker')} description={t('worktree.cleanupWorkerDescription')} control={<CleanupControl enabled={configDraft?.runtime.worktreeCleanupEnabled ?? false} interval={configDraft?.runtime.worktreeCleanupIntervalSeconds ?? 60} disabled={!serverConfig?.writable} onChange={(worktreeCleanupEnabled, worktreeCleanupIntervalSeconds) => updateRuntimeConfig({ worktreeCleanupEnabled, worktreeCleanupIntervalSeconds })} />} />
+              <SettingsGroup title={t('worktree.group.title')} description={configWritable ? t('worktree.group.restartDescription') : serverConfigReadOnlyReason}>
+                <SettingsRow icon={ShieldCheck} label={t('worktree.managedWorktrees')} description={t('worktree.managedWorktreesDescription')} control={<button className="toggle-button" aria-pressed={configDraft?.runtime.managedWorktreesEnabled ?? false} disabled={!configWritable} onClick={() => updateRuntimeConfig({ managedWorktreesEnabled: !(configDraft?.runtime.managedWorktreesEnabled ?? false) })}>{configDraft?.runtime.managedWorktreesEnabled ? t('common.on') : t('common.off')}</button>} />
+                <SettingsRow icon={Code2} label={t('worktree.worktreeRoot')} description={t('worktree.worktreeRootDescription')} control={<TextControl value={configDraft?.runtime.worktreeRoot ?? ''} disabled={!configWritable} onChange={(value) => updateRuntimeConfig({ worktreeRoot: value }, 'immediate')} />} />
+                <SettingsRow icon={GitPullRequest} label={t('worktree.branchPrefix')} description={t('worktree.branchPrefixDescription')} control={<TextControl value={configDraft?.runtime.worktreeBranchPrefix ?? ''} disabled={!configWritable} onChange={(value) => updateRuntimeConfig({ worktreeBranchPrefix: value }, 'immediate')} />} />
+                <SettingsRow icon={Activity} label={t('worktree.concurrency')} description={t('worktree.concurrencyDescription')} control={<NumberTripleControl values={[configDraft?.runtime.globalMaxActiveRuns ?? 1, configDraft?.runtime.maxActiveRunsPerRepository ?? 1, configDraft?.runtime.maxActiveRunsPerSource ?? 1]} disabled={!configWritable} onChange={([globalMaxActiveRuns, maxActiveRunsPerRepository, maxActiveRunsPerSource]) => updateRuntimeConfig({ globalMaxActiveRuns, maxActiveRunsPerRepository, maxActiveRunsPerSource })} />} />
+                <SettingsRow icon={RefreshCw} label={t('worktree.retries')} description={t('worktree.retriesDescription')} control={<RetryPolicyControl attempts={configDraft?.runtime.maxRunAttempts ?? 1} initialBackoffSeconds={configDraft?.runtime.retryBackoffSeconds ?? 1} maxBackoffSeconds={configDraft?.runtime.maxRetryBackoffSeconds ?? 1} disabled={!configWritable} onChange={(maxRunAttempts, retryBackoffSeconds, maxRetryBackoffSeconds) => updateRuntimeConfig({ maxRunAttempts, retryBackoffSeconds, maxRetryBackoffSeconds })} />} />
+                <SettingsRow icon={Activity} label={t('worktree.stallTimeout')} description={t('worktree.stallTimeoutDescription')} control={<DurationControl label={t('worktree.stepperLabels.stallTimeout')} value={configDraft?.runtime.stallTimeoutSeconds ?? 300} disabled={!configWritable} min={5} max={7200} units={secondsDurationUnits()} onChange={(value) => updateRuntimeConfig({ stallTimeoutSeconds: value })} />} />
+                <SettingsRow icon={RotateCcw} label={t('worktree.retention')} description={t('worktree.retentionDescription')} control={<RetentionControl succeededHours={configDraft?.runtime.succeededWorktreeRetentionHours ?? 24} failedHours={configDraft?.runtime.failedWorktreeRetentionHours ?? 168} disabled={!configWritable} onChange={(succeededWorktreeRetentionHours, failedWorktreeRetentionHours) => updateRuntimeConfig({ succeededWorktreeRetentionHours, failedWorktreeRetentionHours })} />} />
+                <SettingsRow icon={RotateCcw} label={t('worktree.cleanupWorker')} description={t('worktree.cleanupWorkerDescription')} control={<CleanupControl enabled={configDraft?.runtime.worktreeCleanupEnabled ?? false} interval={configDraft?.runtime.worktreeCleanupIntervalSeconds ?? 60} disabled={!configWritable} onChange={(worktreeCleanupEnabled, worktreeCleanupIntervalSeconds) => updateRuntimeConfig({ worktreeCleanupEnabled, worktreeCleanupIntervalSeconds })} />} />
               </SettingsGroup>
               <SettingsGroup title={t('worktree.automation.title')} description={t('worktree.automation.description')}>
-                <SettingsRow icon={Activity} label={t('worktree.automation.autoDispatch')} description={implementationAutoDispatchDescription} control={<button className="toggle-button" aria-pressed={configDraft?.automation.autoDispatchEnabled ?? false} disabled={!serverConfig?.writable} onClick={() => updateAutomationConfig({ autoDispatchEnabled: !(configDraft?.automation.autoDispatchEnabled ?? false) })}>{configDraft?.automation.autoDispatchEnabled ? t('common.on') : t('common.off')}</button>} />
-                <SettingsRow icon={GitPullRequest} label={t('worktree.automation.allowLabels')} description={t('worktree.automation.allowLabelsDescription')} control={<LabelListControl labels={configDraft?.automation.autoDispatchAllowLabels ?? []} disabled={!serverConfig?.writable} placeholder={t('worktree.automation.addAllowLabel')} emptyLabel={t('worktree.automation.allUnblockedItems')} ariaLabel={t('worktree.automation.allowLabels')} onChange={(labels) => updateAutomationConfig({ autoDispatchAllowLabels: labels })} />} />
-                <SettingsRow icon={ShieldCheck} label={t('worktree.automation.blockLabels')} description={t('worktree.automation.blockLabelsDescription')} control={<LabelListControl labels={configDraft?.automation.autoDispatchBlockLabels ?? []} disabled={!serverConfig?.writable} placeholder={t('worktree.automation.addBlockLabel')} emptyLabel={t('worktree.automation.noBlockLabels')} ariaLabel={t('worktree.automation.blockLabels')} onChange={(labels) => updateAutomationConfig({ autoDispatchBlockLabels: labels })} />} />
-                <SettingsRow icon={Activity} label={t('worktree.automation.implementationTurns')} description={t('worktree.automation.implementationTurnsDescription')} control={<NumberControl label={t('worktree.automation.implementationTurns')} value={configDraft?.automation.maxImplementationTurns ?? 3} disabled={!serverConfig?.writable} min={1} max={10} onChange={(value) => updateAutomationConfig({ maxImplementationTurns: value })} />} />
-                <SettingsRow icon={ShieldCheck} label={t('worktree.automation.delivery')} description={deliveryDescription} control={<SelectControl label={t('worktree.automation.delivery')} value={configDraft?.automation.deliveryPolicy ?? 'manualDelivery'} disabled={!serverConfig?.writable} options={deliveryPolicyOptions().map((option) => option.value === 'autoPr' ? { ...option, label: deliveryLabel } : option)} onChange={(value) => updateAutomationConfig({ deliveryPolicy: value as DeliveryPolicy })} />} />
+                <SettingsRow icon={Activity} label={t('worktree.automation.autoDispatch')} description={implementationAutoDispatchDescription} control={<button className="toggle-button" aria-pressed={configDraft?.automation.autoDispatchEnabled ?? false} disabled={!configWritable} onClick={() => updateAutomationConfig({ autoDispatchEnabled: !(configDraft?.automation.autoDispatchEnabled ?? false) })}>{configDraft?.automation.autoDispatchEnabled ? t('common.on') : t('common.off')}</button>} />
+                <SettingsRow icon={GitPullRequest} label={t('worktree.automation.allowLabels')} description={t('worktree.automation.allowLabelsDescription')} control={<LabelListControl labels={configDraft?.automation.autoDispatchAllowLabels ?? []} disabled={!configWritable} placeholder={t('worktree.automation.addAllowLabel')} emptyLabel={t('worktree.automation.allUnblockedItems')} ariaLabel={t('worktree.automation.allowLabels')} onChange={(labels) => updateAutomationConfig({ autoDispatchAllowLabels: labels })} />} />
+                <SettingsRow icon={ShieldCheck} label={t('worktree.automation.blockLabels')} description={t('worktree.automation.blockLabelsDescription')} control={<LabelListControl labels={configDraft?.automation.autoDispatchBlockLabels ?? []} disabled={!configWritable} placeholder={t('worktree.automation.addBlockLabel')} emptyLabel={t('worktree.automation.noBlockLabels')} ariaLabel={t('worktree.automation.blockLabels')} onChange={(labels) => updateAutomationConfig({ autoDispatchBlockLabels: labels })} />} />
+                <SettingsRow icon={Activity} label={t('worktree.automation.implementationTurns')} description={t('worktree.automation.implementationTurnsDescription')} control={<NumberControl label={t('worktree.automation.implementationTurns')} value={configDraft?.automation.maxImplementationTurns ?? 3} disabled={!configWritable} min={1} max={10} onChange={(value) => updateAutomationConfig({ maxImplementationTurns: value })} />} />
+                <SettingsRow icon={ShieldCheck} label={t('worktree.automation.delivery')} description={deliveryDescription} control={<SelectControl label={t('worktree.automation.delivery')} value={configDraft?.automation.deliveryPolicy ?? 'manualDelivery'} disabled={!configWritable} options={deliveryPolicyOptions().map((option) => option.value === 'autoPr' ? { ...option, label: deliveryLabel } : option)} onChange={(value) => updateAutomationConfig({ deliveryPolicy: value as DeliveryPolicy })} />} />
               </SettingsGroup>
             </div>
           ) : null}
@@ -1197,7 +1352,7 @@ export function SettingsView({
                   title={hasGitLabProject ? t('review.projectAllowlist') : t('review.repositoryAllowlist')}
                   description={`${autoReviewAllowlistDescription} ${reviewSourceSupports}`}
                   repositories={configDraft?.automation.autoReviewRepositories ?? []}
-                  disabled={!serverConfig?.writable}
+                  disabled={!configWritable}
                   manageDisabled={allowlistManageDisabled}
                   emptyLabel={allowlistEmptyLabel}
                   onManage={() => setRepositoryAllowlistModal('autoReview')}
@@ -1207,7 +1362,7 @@ export function SettingsView({
                   title={t('review.publishAllowlist')}
                   description={publishAllowlistDescription}
                   repositories={effectiveAutoReviewPublishRepositories(configDraft?.automation)}
-                  disabled={!serverConfig?.writable}
+                  disabled={!configWritable}
                   manageDisabled={allowlistManageDisabled}
                   emptyLabel={allowlistEmptyLabel}
                   onManage={() => setRepositoryAllowlistModal('publish')}
@@ -1217,13 +1372,13 @@ export function SettingsView({
                   title={t('review.followUpAllowlist')}
                   description={t('review.followUpAllowlistDescription')}
                   repositories={effectiveAutoFollowUpRepositories(configDraft?.automation)}
-                  disabled={!serverConfig?.writable}
+                  disabled={!configWritable}
                   manageDisabled={allowlistManageDisabled}
                   emptyLabel={allowlistEmptyLabel}
                   onManage={() => setRepositoryAllowlistModal('followUp')}
                   onRemove={(repository) => updateAutoFollowUpRepositories(removeRepository(effectiveAutoFollowUpRepositories(configDraft?.automation), repository))}
                 />
-                <SettingsRow icon={RotateCcw} label={t('review.followUpRounds')} description={t('review.followUpRoundsDescription')} control={<NumberControl label={t('review.followUpRounds')} value={configDraft?.automation.maxFollowUpRounds ?? 5} disabled={!serverConfig?.writable} min={1} max={20} onChange={(value) => updateAutomationConfig({ maxFollowUpRounds: value })} />} />
+                <SettingsRow icon={RotateCcw} label={t('review.followUpRounds')} description={t('review.followUpRoundsDescription')} control={<NumberControl label={t('review.followUpRounds')} value={configDraft?.automation.maxFollowUpRounds ?? 5} disabled={!configWritable} min={1} max={20} onChange={(value) => updateAutomationConfig({ maxFollowUpRounds: value })} />} />
               </SettingsGroup>
             </div>
           ) : null}
@@ -1576,6 +1731,8 @@ function ProjectRouteCard({
   sourceProject,
   disabled,
   canBrowseWorkspace,
+  workspacePlaceholder,
+  workspaceBrowseUnavailableLabel,
   onProviderChange,
   onProjectPathChange,
   onWorkspacePathChange,
@@ -1589,6 +1746,8 @@ function ProjectRouteCard({
   sourceProject: SourceProviderStatus['projects'][number] | null
   disabled: boolean
   canBrowseWorkspace: boolean
+  workspacePlaceholder: string
+  workspaceBrowseUnavailableLabel: string
   onProviderChange: (provider: SourceProviderId) => void
   onProjectPathChange: (projectPath: string) => void
   onWorkspacePathChange: (workspacePath: string) => void
@@ -1634,7 +1793,7 @@ function ProjectRouteCard({
         </label>
         <label>
           <span>{t('projects.card.dotcraftWorkspace')}</span>
-          <WorkspacePathControl value={card.workspacePath} placeholder={t('projects.card.workspaceAbsolute')} disabled={disabled} canBrowse={canBrowseWorkspace} onChange={onWorkspacePathChange} onBrowse={onBrowseWorkspace} />
+          <WorkspacePathControl value={card.workspacePath} placeholder={workspacePlaceholder} disabled={disabled} canBrowse={canBrowseWorkspace} browseUnavailableLabel={workspaceBrowseUnavailableLabel} onChange={onWorkspacePathChange} onBrowse={onBrowseWorkspace} />
         </label>
       </div>
       {card.provider === 'gitlab' && gitLabProfile ? (
@@ -1783,6 +1942,7 @@ function WorkspacePathControl({
   placeholder,
   disabled,
   canBrowse,
+  browseUnavailableLabel,
   commitOnBlur = true,
   onChange,
   onBrowse,
@@ -1791,6 +1951,7 @@ function WorkspacePathControl({
   placeholder: string
   disabled: boolean
   canBrowse: boolean
+  browseUnavailableLabel?: string
   commitOnBlur?: boolean
   onChange: (value: string) => void
   onBrowse: () => void
@@ -1800,7 +1961,7 @@ function WorkspacePathControl({
   return (
     <span className="workspace-path-control">
       <TextControl value={value} placeholder={placeholder} disabled={disabled} onChange={onChange} commitOnBlur={commitOnBlur} />
-      <Tooltip content={canBrowse ? t('projects.workspacePicker.available') : t('projects.workspacePicker.unavailable')}>
+      <Tooltip content={canBrowse ? t('projects.workspacePicker.available') : browseUnavailableLabel ?? t('projects.workspacePicker.unavailable')}>
         <button
           className="icon-button workspace-browse-button"
           type="button"

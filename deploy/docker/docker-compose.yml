@@ -48,6 +48,7 @@ services:
     environment:
       ASPNETCORE_URLS: http://0.0.0.0:5087
       ORATORIO_STATE_ROOT: /data/oratorio
+      Oratorio__Settings__Writable: "false"
 
       # --- DotCraft AppServer connection -------------------------------------
       Oratorio__DotCraft__AppServerUrl: ws://dotcraft:${APPSERVER_PORT:-9100}/ws

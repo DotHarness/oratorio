@@ -40,6 +40,13 @@ jobs:
         run: dotnet test Oratorio.sln --configuration Release --no-restore
         working-directory: oratorio
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run CLI tests
+        run: cargo test --manifest-path cli/Cargo.toml --locked
+        working-directory: oratorio
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -123,6 +130,32 @@ jobs:
         with:
           name: ${{ matrix.server_output_name }}
           path: oratorio/${{ matrix.server_archive }}
+          if-no-files-found: error
+
+      - name: Setup Rust
+        if: runner.os == 'Linux'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build CLI
+        if: runner.os == 'Linux'
+        run: cargo build --manifest-path cli/Cargo.toml --release --locked
+        working-directory: oratorio
+
+      - name: Create CLI archive
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p cli-release
+          cp cli/target/release/oratorio cli-release/oratorio
+          cp LICENSE README.md README_ZH.md cli-release/
+          tar -czf oratorio-cli-linux-x64.tar.gz -C cli-release oratorio LICENSE README.md README_ZH.md
+        working-directory: oratorio
+
+      - name: Upload CLI artifact
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v6
+        with:
+          name: oratorio-cli-linux-x64
+          path: oratorio/oratorio-cli-linux-x64.tar.gz
           if-no-files-found: error
 
       - name: Setup Node.js
@@ -250,12 +283,21 @@ jobs:
             echo "Renamed: $(basename "$file") -> $new_name"
           done
 
+          for file in artifacts/oratorio-cli-linux-x64/oratorio-cli-linux-x64.tar.gz; do
+            [ -f "$file" ] || continue
+            new_name="oratorio-cli-${VERSION}-linux-x64.tar.gz"
+            cp "$file" "release/$new_name"
+            echo "Renamed: $(basename "$file") -> $new_name"
+          done
+
+          (cd release && sha256sum * > checksums.txt)
+
           echo "Final release files:"
           ls -lh release/
 
           actual_count=$(find release -maxdepth 1 -type f | wc -l | tr -d ' ')
-          if [ "$actual_count" != "5" ]; then
-            echo "Expected 5 release files, found $actual_count."
+          if [ "$actual_count" != "7" ]; then
+            echo "Expected 7 release files, found $actual_count."
             exit 1
           fi
 

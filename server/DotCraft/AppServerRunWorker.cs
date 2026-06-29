@@ -27,6 +27,7 @@ public sealed class AppServerRunWorker(
     ILogger<AppServerRunWorker> logger) : BackgroundService
 {
     private static readonly RunStatus[] ActiveWorkerStatuses = [RunStatus.Dispatching, RunStatus.Running];
+    private static readonly TimeSpan TimeoutInterruptWait = TimeSpan.FromSeconds(30);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) }
@@ -35,6 +36,17 @@ public sealed class AppServerRunWorker(
     private readonly Dictionary<string, Task> _activeTasks = [];
     private readonly object _activeTasksGate = new();
     private readonly string _leaseOwner = $"{Environment.MachineName}:{Guid.NewGuid():n}";
+
+    private enum TimeoutTerminalResult
+    {
+        Cancelled,
+        Failed,
+        Completed,
+        Disconnected,
+        WaitTimedOut,
+        InterruptFailed,
+        MissingTurn
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -240,6 +252,9 @@ public sealed class AppServerRunWorker(
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(value.RunTimeout);
         var registered = false;
+        IDotCraftAppServerClient? client = null;
+        string? threadId = null;
+        string? turnId = null;
 
         try
         {
@@ -248,7 +263,7 @@ public sealed class AppServerRunWorker(
             var endpoint = await processManager.EnsureAvailableAsync(baseWorkspacePath, timeout.Token);
             await MarkDispatchingAsync(runId, endpoint.Url, timeout.Token);
 
-            await using var client = await clientFactory.ConnectAsync(endpoint.Url, timeout.Token, endpoint.Token);
+            client = await clientFactory.ConnectAsync(endpoint.Url, timeout.Token, endpoint.Token);
             await client.InitializeAsync(timeout.Token);
             if (!client.SupportsRuntimeAdditionalContext)
             {
@@ -275,7 +290,6 @@ public sealed class AppServerRunWorker(
 
             string? boundThreadId = null;
             client.SetDynamicToolHandler(async (call, handlerCt) => await HandleDynamicToolCallAsync(runId, boundThreadId, call, handlerCt));
-            string threadId;
             if (reusableThread is null)
             {
                 threadId = await client.StartThreadAsync(new AppServerThreadStartRequest(
@@ -301,7 +315,7 @@ public sealed class AppServerRunWorker(
             await client.SubscribeThreadAsync(threadId, timeout.Token);
             runCoordinator.RegisterRun(runId, client, threadId, null);
             registered = true;
-            var turnId = await client.StartTurnAsync(threadId, prompt.Prompt, timeout.Token);
+            turnId = await client.StartTurnAsync(threadId, prompt.Prompt, timeout.Token);
             runCoordinator.UpdateRunStatus(runId, turnId, "running");
             await MarkRunningAsync(runId, threadId, turnId, timeout.Token);
 
@@ -309,7 +323,7 @@ public sealed class AppServerRunWorker(
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            await FailRunAsync(runId, RunStatus.TimedOut, "appServerTimedOut", "DotCraft AppServer run timed out.", allowRetry: true, CancellationToken.None);
+            await HandleAppServerTimeoutAsync(runId, client, threadId, turnId, ct);
         }
         catch (WorktreeException ex)
         {
@@ -330,9 +344,147 @@ public sealed class AppServerRunWorker(
                 runCoordinator.UnregisterRun(runId);
             }
 
+            if (client is not null)
+            {
+                await client.DisposeAsync();
+            }
+
             drawerState.ScheduleEviction(runId, TimeSpan.FromMinutes(5));
         }
     }
+
+    private async Task HandleAppServerTimeoutAsync(
+        string runId,
+        IDotCraftAppServerClient? client,
+        string? threadId,
+        string? turnId,
+        CancellationToken ct)
+    {
+        if (client is null || string.IsNullOrWhiteSpace(threadId) || string.IsNullOrWhiteSpace(turnId))
+        {
+            await FailRunAsync(
+                runId,
+                RunStatus.TimedOut,
+                "appServerTimedOut",
+                BuildTimeoutMessage(TimeoutTerminalResult.MissingTurn),
+                allowRetry: true,
+                CancellationToken.None);
+            return;
+        }
+
+        const string timeoutMessage = "DotCraft AppServer run timed out.";
+        runCoordinator.UpdateRunStatus(runId, turnId, "timedOut");
+        PublishRunStatus(runId, "timedOut", turnId, "appServerTimedOut", timeoutMessage, 95, "DotCraft AppServer run timed out; interrupting DotCraft turn.");
+        await UpdateRunHeartbeatAsync(runId, 95, "DotCraft AppServer run timed out; interrupting DotCraft turn.", turnId, CancellationToken.None);
+
+        var terminalResult = TimeoutTerminalResult.WaitTimedOut;
+        Exception? interruptError = null;
+        try
+        {
+            using var interruptTimeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            interruptTimeout.CancelAfter(TimeoutInterruptWait);
+            await client.InterruptTurnAsync(threadId, turnId, interruptTimeout.Token);
+            terminalResult = await WaitForTimeoutTerminalAsync(runId, client, interruptTimeout.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            terminalResult = TimeoutTerminalResult.WaitTimedOut;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Timed-out AppServer run {RunId} could not interrupt DotCraft turn {TurnId}.", runId, turnId);
+            interruptError = ex;
+            terminalResult = TimeoutTerminalResult.InterruptFailed;
+        }
+
+        await FailRunAsync(
+            runId,
+            RunStatus.TimedOut,
+            "appServerTimedOut",
+            BuildTimeoutMessage(terminalResult, interruptError),
+            allowRetry: true,
+            CancellationToken.None);
+    }
+
+    private async Task<TimeoutTerminalResult> WaitForTimeoutTerminalAsync(
+        string runId,
+        IDotCraftAppServerClient client,
+        CancellationToken ct)
+    {
+        await foreach (var notification in client.ReadNotificationsAsync(ct))
+        {
+            if (notification.Method == "turn/completed")
+            {
+                runCoordinator.UpdateRunStatus(runId, null, "timedOut");
+                PublishRunStatus(runId, "timedOut", null, "appServerTimedOut", "DotCraft turn completed after Oratorio timeout.", 100, "DotCraft turn completed after Oratorio timeout.");
+                await UpdateRunHeartbeatAsync(runId, 98, "DotCraft turn completed after Oratorio timeout.", null, CancellationToken.None);
+                return TimeoutTerminalResult.Completed;
+            }
+
+            if (notification.Method == "turn/failed")
+            {
+                runCoordinator.UpdateRunStatus(runId, null, "timedOut");
+                PublishRunStatus(runId, "timedOut", null, "appServerTimedOut", ExtractText(notification.Params), 100, "DotCraft turn failed after Oratorio timeout.");
+                await UpdateRunHeartbeatAsync(runId, 98, "DotCraft turn failed after Oratorio timeout.", null, CancellationToken.None);
+                return TimeoutTerminalResult.Failed;
+            }
+
+            if (notification.Method == "turn/cancelled")
+            {
+                runCoordinator.UpdateRunStatus(runId, null, "timedOut");
+                PublishRunStatus(runId, "timedOut", null, "appServerTimedOut", "DotCraft turn was cancelled after Oratorio timeout.", 100, "DotCraft turn acknowledged timeout interrupt.");
+                await UpdateRunHeartbeatAsync(runId, 98, "DotCraft turn acknowledged timeout interrupt.", null, CancellationToken.None);
+                return TimeoutTerminalResult.Cancelled;
+            }
+
+            if (notification.Method == "item/started")
+            {
+                PublishItemSnapshot(runId, DrawerEvent.ItemStartedType, notification.Params, streaming: true);
+                await UpdateRunHeartbeatAsync(runId, 95, "DotCraft item started after Oratorio timeout.", null, CancellationToken.None);
+                continue;
+            }
+
+            if (notification.Method.EndsWith("/delta", StringComparison.OrdinalIgnoreCase) ||
+                notification.Method.EndsWith("Delta", StringComparison.OrdinalIgnoreCase))
+            {
+                var delta = ExtractDelta(notification.Params);
+                if (!string.IsNullOrEmpty(delta))
+                {
+                    PublishItemDelta(runId, notification.Method, notification.Params, delta);
+                }
+
+                await UpdateRunHeartbeatAsync(runId, 95, "DotCraft agent produced output after Oratorio timeout.", null, CancellationToken.None);
+                continue;
+            }
+
+            if (notification.Method == "item/completed")
+            {
+                PublishItemSnapshot(runId, DrawerEvent.ItemCompletedType, notification.Params, streaming: false);
+                await UpdateRunHeartbeatAsync(runId, 96, "DotCraft item completed after Oratorio timeout.", null, CancellationToken.None);
+                continue;
+            }
+
+            if (notification.Method == "plan/updated")
+            {
+                PublishPlan(runId, notification.Params);
+            }
+        }
+
+        return TimeoutTerminalResult.Disconnected;
+    }
+
+    private static string BuildTimeoutMessage(TimeoutTerminalResult result, Exception? interruptError = null) =>
+        result switch
+        {
+            TimeoutTerminalResult.Cancelled => "DotCraft AppServer run timed out. DotCraft turn was interrupted and cancelled.",
+            TimeoutTerminalResult.Failed => "DotCraft AppServer run timed out. DotCraft turn failed after the timeout interrupt.",
+            TimeoutTerminalResult.Completed => "DotCraft AppServer run timed out. DotCraft turn completed after the timeout and the late result was discarded.",
+            TimeoutTerminalResult.Disconnected => "DotCraft AppServer run timed out. DotCraft turn interrupt was requested, but the AppServer disconnected before a terminal notification.",
+            TimeoutTerminalResult.WaitTimedOut => "DotCraft AppServer run timed out. DotCraft turn interrupt was requested, but no terminal notification arrived within 30 seconds.",
+            TimeoutTerminalResult.InterruptFailed => $"DotCraft AppServer run timed out. DotCraft turn interrupt failed: {interruptError?.Message ?? "unknown error"}.",
+            TimeoutTerminalResult.MissingTurn => "DotCraft AppServer run timed out before a DotCraft turn could be interrupted.",
+            _ => "DotCraft AppServer run timed out."
+        };
 
     private async Task<string> PrepareExecutionWorkspaceAsync(string runId, string baseWorkspacePath, CancellationToken ct)
     {

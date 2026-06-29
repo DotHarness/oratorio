@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, PointerEvent as ReactPointerEvent, SetStateAction } from 'react'
+import type { CSSProperties, FormEvent, PointerEvent as ReactPointerEvent, SetStateAction } from 'react'
 import { HashRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowLeft,
   ChevronRight,
   Info,
+  RotateCw,
+  Server,
+  Settings,
   TriangleAlert,
 } from 'lucide-react'
 import '../App.css'
@@ -151,12 +154,24 @@ const DEFAULT_APP_BINDING_STATUS: DotCraftAppBindingStatusResponse = {
 type ThemeMode = 'dark' | 'light'
 type InitialLaunchPhase = 'loading' | 'revealing' | 'ready'
 type OratorioServerState = 'stopped' | 'starting' | 'running' | 'error'
+type OratorioServerMode = 'local' | 'remote'
+type OratorioBackendKind = 'managedLocal' | 'reusedLocal' | 'remote'
+type OratorioServerConnectionPreferences = {
+  serverMode: OratorioServerMode
+  remoteServerUrl: string | null
+}
 type OratorioServerStatus = {
   state: OratorioServerState
   serverUrl: string | null
   reusedExistingServer: boolean
+  backendKind: OratorioBackendKind
+  serverMode: OratorioServerMode
   pid: number | null
   errorMessage: string | null
+}
+type OratorioDesktopServerConnectionUpdateResult = {
+  preferences: OratorioServerConnectionPreferences
+  status: OratorioServerStatus
 }
 type ServerRestartState = 'idle' | 'restarting' | 'failed'
 type PendingServerRestart = {
@@ -285,6 +300,14 @@ function OratorioApp() {
   const [theme, setThemeState] = useState<ThemeMode>(storedTheme)
   const isDesktopShell = typeof window !== 'undefined' && Boolean(window.oratorioDesktop)
   const [serverBaseUrl, setServerBaseUrlState] = useState(() => getServerBaseUrl())
+  const [desktopServerStatus, setDesktopServerStatus] = useState<OratorioServerStatus | null>(null)
+  const backendServerUrlRef = useRef<string | null>(serverBaseUrl || null)
+  const [serverConnectionPreferences, setServerConnectionPreferences] = useState<OratorioServerConnectionPreferences>({
+    serverMode: 'local',
+    remoteServerUrl: null,
+  })
+  const [serverConnectionSaving, setServerConnectionSaving] = useState(false)
+  const [serverConnectionError, setServerConnectionError] = useState<string | null>(null)
   const latestThemeRef = useRef<ThemeMode>(theme)
   const desktopThemeHydratedRef = useRef(!(typeof window !== 'undefined' && window.oratorioDesktop))
   const desktopThemeUserChangedRef = useRef(false)
@@ -537,7 +560,9 @@ function OratorioApp() {
   const selectedHasSourceMetadata = Boolean(
     selectedDetailItem?.sourceUpdated || selectedDetailItem?.lastSourceSync || selectedDetailItem?.sourceSnapshot || selectedDetailItem?.headSha,
   )
+  const isRemoteDesktopMode = serverConnectionPreferences.serverMode === 'remote'
   const canUseBackend = !isDesktopShell || Boolean(serverBaseUrl)
+  const canRestartServerFromDesktop = Boolean(window.oratorioDesktop?.restartServer) && !isRemoteDesktopMode
   const selectedBrief = useMemo(() => parseBrief(selectedDetailItem?.description ?? ''), [selectedDetailItem?.description])
   const selectedRoundHistory = useMemo(() => (selectedDetailItem ? buildRoundHistory(selectedDetailItem) : []), [selectedDetailItem])
   const selectedSourceActivity = useMemo(() => selectedDetailItem?.timeline.filter((event) => !event.roundId) ?? [], [selectedDetailItem])
@@ -800,15 +825,70 @@ function OratorioApp() {
     }
   }, [refreshDotCraftStatus, refreshGitHubStatus, refreshGitHubSyncJob, refreshItems, refreshSourceProviders, refreshSourceSyncJobs, refreshSourceSyncSchedules])
 
+  const resetBackendScopedState = useCallback(() => {
+    detailRequestIdRef.current += 1
+    closedRequestIdRef.current += 1
+    selectedIdRef.current = null
+    selectedDetailRef.current = null
+    focusedRunIdRef.current = null
+    sourceProvidersRef.current = []
+    sourceDetailsAttemptedRef.current = new Set()
+    setItems([])
+    setClosedItems([])
+    setClosedNextCursor(null)
+    setClosedError(null)
+    setClosedLoading(false)
+    setSelectedId(null)
+    setSelectedDetail(null)
+    setDetailError(false)
+    setLiveActivity(null)
+    setGithubSyncJob(null)
+    setSourceProviders([])
+    setSourceSyncJobs({})
+    setSourceSyncSchedules({})
+    setSourceDetailsSyncingItemId(null)
+    setShowTechnicalEventsByRound({})
+    setReviewStageByItem({})
+    setActionMenuItemId(null)
+    setError(null)
+  }, [])
+
   const applyDesktopServerStatus = useCallback((status: OratorioServerStatus | null) => {
     if (!status) {
       return
     }
 
+    setDesktopServerStatus(status)
+    if (status.serverMode === 'remote') {
+      setServerConnectionPreferences((current) => ({
+        serverMode: 'remote',
+        remoteServerUrl: status.serverUrl ?? current.remoteServerUrl,
+      }))
+    } else {
+      setServerConnectionPreferences((current) => ({
+        serverMode: 'local',
+        remoteServerUrl: current.remoteServerUrl,
+      }))
+    }
+
     if (status.state === 'running' && status.serverUrl) {
+      const previousServerUrl = backendServerUrlRef.current
+      const serverUrlChanged = Boolean(previousServerUrl && previousServerUrl !== status.serverUrl)
+      backendServerUrlRef.current = status.serverUrl
       setApiServerBaseUrl(status.serverUrl)
       setServerBaseUrlState(getServerBaseUrl())
+      setServerConnectionError(null)
+      if (serverUrlChanged) {
+        resetBackendScopedState()
+        void refreshAll({ background: true })
+      }
       return
+    }
+
+    if (status.serverMode === 'remote' || status.backendKind === 'remote') {
+      setApiServerBaseUrl(null)
+      backendServerUrlRef.current = null
+      setServerBaseUrlState(getServerBaseUrl())
     }
 
     if (status.state === 'error' && initialLaunchPhase !== 'ready') {
@@ -823,7 +903,7 @@ function OratorioApp() {
     if (!initialRefreshStartedRef.current && initialLaunchPhase !== 'ready') {
       setInitialLaunchMessage(initialLaunchStartingMessage())
     }
-  }, [initialLaunchPhase])
+  }, [initialLaunchPhase, refreshAll, resetBackendScopedState, t])
 
   const applyStreamEvent = useCallback((event: BoardStreamEvent) => {
     if (event.type.startsWith('drawer/')) {
@@ -926,6 +1006,9 @@ function OratorioApp() {
     void desktop.getStatus()
       .then((status) => {
         if (!cancelled) {
+          if (status.serverConnection) {
+            setServerConnectionPreferences(status.serverConnection)
+          }
           applyDesktopServerStatus(status.server)
         }
       })
@@ -940,6 +1023,56 @@ function OratorioApp() {
       unsubscribe()
     }
   }, [applyDesktopServerStatus, isDesktopShell])
+
+  const applyServerConnectionPreferences = useCallback(async (preferences: OratorioServerConnectionPreferences): Promise<OratorioDesktopServerConnectionUpdateResult | null> => {
+    const desktop = window.oratorioDesktop
+    if (!desktop?.setServerConnectionPreferences) {
+      return null
+    }
+
+    setServerConnectionSaving(true)
+    setServerConnectionError(null)
+    try {
+      const result = await desktop.setServerConnectionPreferences(preferences)
+      setServerConnectionPreferences(result.preferences)
+      applyDesktopServerStatus(result.status)
+      if (result.status.state === 'error') {
+        setServerConnectionError(result.status.errorMessage ?? t('common:shell.connection.remoteUnavailable'))
+      }
+      return result
+    } catch (reason) {
+      const message = errorMessage(reason)
+      setServerConnectionError(message)
+      throw reason
+    } finally {
+      setServerConnectionSaving(false)
+    }
+  }, [applyDesktopServerStatus, t])
+
+  const reconnectDesktopServer = useCallback(async () => {
+    const desktop = window.oratorioDesktop
+    if (!desktop?.restartServer) {
+      return
+    }
+
+    setServerConnectionSaving(true)
+    setServerConnectionError(null)
+    try {
+      const status = await desktop.restartServer()
+      applyDesktopServerStatus(status)
+      if (status.state === 'error') {
+        setServerConnectionError(status.errorMessage ?? t('common:shell.connection.remoteUnavailable'))
+      }
+    } catch (reason) {
+      const latest = await desktop.getStatus?.().catch(() => null)
+      if (latest?.server) {
+        applyDesktopServerStatus(latest.server)
+      }
+      setServerConnectionError(errorMessage(reason))
+    } finally {
+      setServerConnectionSaving(false)
+    }
+  }, [applyDesktopServerStatus, t])
 
   useEffect(() => {
     if (!canUseBackend || initialRefreshStartedRef.current) {
@@ -1162,6 +1295,11 @@ function OratorioApp() {
     }
 
     const bindingHandoff = isDotCraftBindingHandoff(url)
+    if (isRemoteDesktopMode && bindingHandoff) {
+      setAppBindingDialog(null)
+      showNotice(t('common:shell.notices.remoteAppBindingUnsupported'), 'info')
+      return
+    }
     if (!bindingHandoff) {
       setAppBindingDialog({ status: 'loading', url })
     }
@@ -1188,17 +1326,34 @@ function OratorioApp() {
       }
       showNotice(t('common:shell.notices.dotCraftRequestFailed', { message: errorMessage(error) }), 'error')
     }
-  }, [markDotCraftAppBindingConnected, navigate, refreshAppBindingStatus, showNotice, t])
+  }, [isRemoteDesktopMode, markDotCraftAppBindingConnected, navigate, refreshAppBindingStatus, showNotice, t])
+
+  const canProcessAppBindingHandoff = useCallback((url: string) => {
+    if (routeFromOratorioOpenDeepLink(url)) {
+      return true
+    }
+
+    if (isRemoteDesktopMode && isDotCraftBindingHandoff(url)) {
+      return true
+    }
+
+    return canUseBackend
+  }, [canUseBackend, isRemoteDesktopMode])
 
   const drainPendingAppBindingHandoffs = useCallback(async () => {
-    if (!canUseBackend || drainingAppBindingHandoffsRef.current) {
+    if (drainingAppBindingHandoffsRef.current) {
       return
     }
 
     drainingAppBindingHandoffsRef.current = true
     try {
       while (pendingAppBindingHandoffUrlsRef.current.length > 0) {
-        const nextUrl = pendingAppBindingHandoffUrlsRef.current.shift()
+        const nextUrl = pendingAppBindingHandoffUrlsRef.current[0]
+        if (!nextUrl || !canProcessAppBindingHandoff(nextUrl)) {
+          break
+        }
+
+        pendingAppBindingHandoffUrlsRef.current.shift()
         if (nextUrl) {
           await inspectAppBindingHandoff(nextUrl)
         }
@@ -1206,7 +1361,7 @@ function OratorioApp() {
     } finally {
       drainingAppBindingHandoffsRef.current = false
     }
-  }, [canUseBackend, inspectAppBindingHandoff])
+  }, [canProcessAppBindingHandoff, inspectAppBindingHandoff])
 
   const handleAppBindingHandoff = useCallback((url: string) => {
     pendingAppBindingHandoffUrlsRef.current.push(url)
@@ -2305,6 +2460,14 @@ function OratorioApp() {
 
   const showPendingServerRestart = isSettingsRoute && pendingServerRestart !== null
 
+  const showDesktopConnectionRecovery = isDesktopShell && isRemoteDesktopMode && !serverBaseUrl
+  const launchOverlayPhase = initialLaunchPhase !== 'ready' ? initialLaunchPhase : 'loading'
+  const launchOverlayMessage = showDesktopConnectionRecovery
+    ? desktopServerStatus?.errorMessage
+      ? t('common:shell.connection.remoteError', { message: desktopServerStatus.errorMessage })
+      : t('common:shell.connection.remoteWaiting')
+    : initialLaunchMessage
+
   const shell = (
     <main
       className={`app-shell ${
@@ -2370,7 +2533,7 @@ function OratorioApp() {
           {pendingServerRestart ? (
             <PendingServerRestartBanner
               restart={pendingServerRestart}
-              canRestart={Boolean(window.oratorioDesktop?.restartServer)}
+              canRestart={canRestartServerFromDesktop}
               restartState={serverRestartState}
               onRestart={() => void restartPendingServer()}
               onDismiss={dismissPendingServerRestart}
@@ -2402,6 +2565,12 @@ function OratorioApp() {
                   serverRestartPending={Boolean(pendingServerRestart)}
                   onServerRestartRequired={handleServerRestartRequired}
                   onReplayOnboarding={replayOnboarding}
+                  serverConnectionPreferences={serverConnectionPreferences}
+                  serverConnectionStatus={desktopServerStatus}
+                  serverConnectionSaving={serverConnectionSaving}
+                  serverConnectionError={serverConnectionError}
+                  onApplyServerConnectionPreferences={applyServerConnectionPreferences}
+                  onReconnectServer={reconnectDesktopServer}
                 />
               }
             />
@@ -2495,8 +2664,28 @@ function OratorioApp() {
         </>
       )}
 
-      {initialLaunchPhase !== 'ready' ? (
-        <InitialLaunchOverlay phase={initialLaunchPhase} appIconSrc={appIconSrc} message={initialLaunchMessage} />
+      {initialLaunchPhase !== 'ready' || showDesktopConnectionRecovery ? (
+        <InitialLaunchOverlay
+          phase={launchOverlayPhase}
+          appIconSrc={appIconSrc}
+          message={launchOverlayMessage}
+          remoteConnection={showDesktopConnectionRecovery ? {
+            preferences: serverConnectionPreferences,
+            status: desktopServerStatus,
+            busy: serverConnectionSaving,
+            error: serverConnectionError,
+            onApply: async (preferences) => {
+              await applyServerConnectionPreferences(preferences)
+            },
+            onReconnect: reconnectDesktopServer,
+            onSwitchToLocal: async () => {
+              await applyServerConnectionPreferences({
+                serverMode: 'local',
+                remoteServerUrl: serverConnectionPreferences.remoteServerUrl,
+              })
+            },
+          } : undefined}
+        />
       ) : null}
 
       {appBindingDialog ? (
@@ -2576,12 +2765,40 @@ function InitialLaunchOverlay({
   phase,
   appIconSrc,
   message,
+  remoteConnection,
 }: {
   phase: InitialLaunchPhase
   appIconSrc: string
   message: string
+  remoteConnection?: {
+    preferences: OratorioServerConnectionPreferences
+    status: OratorioServerStatus | null
+    busy: boolean
+    error: string | null
+    onApply: (preferences: OratorioServerConnectionPreferences) => Promise<void>
+    onReconnect: () => Promise<void>
+    onSwitchToLocal: () => Promise<void>
+  }
 }) {
   const { t } = useTranslation()
+  const [remoteUrlDraft, setRemoteUrlDraft] = useState(remoteConnection?.preferences.remoteServerUrl ?? '')
+
+  useEffect(() => {
+    setRemoteUrlDraft(remoteConnection?.preferences.remoteServerUrl ?? '')
+  }, [remoteConnection?.preferences.remoteServerUrl])
+
+  const submitRemoteUrl = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!remoteConnection || remoteConnection.busy) {
+      return
+    }
+
+    void remoteConnection.onApply({
+      serverMode: 'remote',
+      remoteServerUrl: remoteUrlDraft,
+    }).catch(() => {})
+  }
+
   return (
     <div
       className={`initial-launch-overlay initial-launch-overlay--${phase}`}
@@ -2593,6 +2810,34 @@ function InitialLaunchOverlay({
         <img className="initial-launch-logo" src={appIconSrc} alt="" draggable={false} />
         <h1 className="initial-launch-heading">{t('board:appName')}</h1>
         <p className="initial-launch-status tool-running-gradient-text">{message}</p>
+        {remoteConnection ? (
+          <form className="initial-launch-remote-form" onSubmit={submitRemoteUrl}>
+            <label>
+              <span>{t('common:shell.connection.remoteUrl')}</span>
+              <input
+                value={remoteUrlDraft}
+                placeholder="http://127.0.0.1:5087"
+                disabled={remoteConnection.busy}
+                onChange={(event) => setRemoteUrlDraft(event.target.value)}
+              />
+            </label>
+            {remoteConnection.error ? <p className="initial-launch-remote-error" role="alert">{remoteConnection.error}</p> : null}
+            <span className="initial-launch-remote-actions">
+              <button className="secondary-button inline compact-row-action settings-action-button" type="button" disabled={remoteConnection.busy} onClick={() => void remoteConnection.onSwitchToLocal().catch(() => {})}>
+                <Server size={14} />
+                {t('common:shell.connection.switchToLocal')}
+              </button>
+              <button className="secondary-button inline compact-row-action settings-action-button" type="button" disabled={remoteConnection.busy} onClick={() => void remoteConnection.onReconnect().catch(() => {})}>
+                <RotateCw size={14} className={remoteConnection.busy ? 'spin-icon' : undefined} />
+                {t('common:shell.connection.reconnect')}
+              </button>
+              <button className="primary-button inline compact-row-action settings-action-button" type="submit" disabled={remoteConnection.busy || !remoteUrlDraft.trim()}>
+                <Settings size={14} />
+                {remoteConnection.busy ? t('common:shell.connection.connecting') : t('common:shell.connection.changeAddress')}
+              </button>
+            </span>
+          </form>
+        ) : null}
       </section>
     </div>
   )
@@ -2775,9 +3020,11 @@ function formatAppBindingDate(value: string | null | undefined): string {
 function isDotCraftBindingHandoff(url: string): boolean {
   try {
     const parsed = new URL(url)
-    return parsed.protocol === 'oratorio:' && parsed.hostname === 'dotcraft' && parsed.pathname.replace(/^\/+/, '') === 'bind'
+    return parsed.protocol === 'oratorio:' &&
+      parsed.hostname === 'dotcraft' &&
+      ['bind', 'connect'].includes(parsed.pathname.replace(/^\/+/, ''))
   } catch {
-    return url.includes('oratorio://dotcraft/bind')
+    return url.includes('oratorio://dotcraft/bind') || url.includes('oratorio://dotcraft/connect')
   }
 }
 

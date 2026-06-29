@@ -32,6 +32,33 @@
     "title": "Desktop",
     "description": "Window and tray preferences for this device."
   },
+  "desktopConnection": {
+    "title": "Backend connection",
+    "description": "Stored on this desktop only. Remote mode connects to one private Oratorio backend URL.",
+    "remoteReadOnlyReason": "Remote server configuration is managed on the server.",
+    "mode": {
+      "label": "Mode",
+      "description": "Local starts or reuses the bundled backend. Remote only connects to the configured backend.",
+      "local": "Local",
+      "remote": "Remote"
+    },
+    "remoteUrl": {
+      "label": "Remote URL",
+      "description": "HTTP or HTTPS origin only, for example a SSH tunnel or VPN address."
+    },
+    "statusLabel": "Backend status",
+    "noServerUrl": "No backend URL is available.",
+    "reconnect": "Reconnect",
+    "apply": "Apply",
+    "applying": "Applying",
+    "status": {
+      "stopped": "Stopped",
+      "starting": "Starting",
+      "running": "Running",
+      "error": "Error",
+      "unknown": "Unknown"
+    }
+  },
   "common": {
     "on": "On",
     "off": "Off",
@@ -156,6 +183,7 @@
     "gitlabPlaceholder": "group/project or group/subgroup/project",
     "githubPlaceholder": "owner/name",
     "workspacePlaceholder": "DotCraft workspace path",
+    "workspaceServerPlaceholder": "Server/container DotCraft workspace path",
     "add": "Add",
     "card": {
       "newProject": "New {{provider}} project",
@@ -170,6 +198,7 @@
       "githubRepository": "GitHub repository",
       "dotcraftWorkspace": "DotCraft workspace",
       "workspaceAbsolute": "Absolute workspace path",
+      "workspaceServerAbsolute": "Server/container absolute path",
       "gitlabProfile": "GitLab profile for {{name}}",
       "tokenKind": "Token kind",
       "tokenKindPlaceholder": "accessToken",
@@ -201,7 +230,8 @@
     "workspacePicker": {
       "choose": "Choose workspace folder",
       "available": "Choose workspace folder",
-      "unavailable": "Folder picker is available in the desktop app"
+      "unavailable": "Folder picker is available in the desktop app",
+      "remoteUnavailable": "Enter a server/container path; the local folder picker is disabled in remote mode"
     }
   },
   "credentials": {

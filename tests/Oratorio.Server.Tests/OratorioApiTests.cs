@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -525,6 +526,35 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
+    public async Task ServerConfiguration_ExplicitRunTimeoutOverlay_IsPreserved()
+    {
+        var root = Directory.CreateTempSubdirectory("oratorio-config-timeout-");
+        var overlayPath = Path.Combine(root.FullName, "config.json");
+        await File.WriteAllTextAsync(overlayPath, JsonSerializer.Serialize(new
+        {
+            Oratorio = new
+            {
+                DotCraft = new
+                {
+                    RunTimeoutSeconds = 600
+                }
+            }
+        }, JsonOptions));
+        await using var app = new TestOratorioApp(settings: new Dictionary<string, string?>
+        {
+            ["Oratorio:Settings:ConfigPath"] = overlayPath
+        });
+        var client = app.CreateClient();
+
+        var configuration = await client.GetFromJsonAsync<ServerConfigurationResponse>(
+            "/api/v1/settings/server-configuration",
+            JsonOptions);
+
+        Assert.NotNull(configuration);
+        Assert.Equal(600, configuration!.Configuration.DotCraft.RunTimeoutSeconds);
+    }
+
+    [Fact]
     public async Task ServerConfigurationWrite_AllowedByDefaultForLocalBackend()
     {
         var root = Directory.CreateTempSubdirectory("oratorio-default-write-");
@@ -548,6 +578,34 @@ public sealed class OratorioApiTests
 
         Assert.True(response.Configuration.Writable);
         Assert.True(File.Exists(overlayPath));
+    }
+
+    [Fact]
+    public async Task ServerConfigurationWrite_CanBeDisabledForServerDeployments()
+    {
+        var root = Directory.CreateTempSubdirectory("oratorio-disabled-write-");
+        var overlayPath = Path.Combine(root.FullName, "config.json");
+        await using var app = new TestOratorioApp(settings: new Dictionary<string, string?>
+        {
+            ["Oratorio:Settings:ConfigPath"] = overlayPath,
+            ["Oratorio:Settings:Writable"] = "false"
+        });
+        var client = app.CreateClient();
+
+        var configuration = await client.GetFromJsonAsync<ServerConfigurationResponse>(
+            "/api/v1/settings/server-configuration",
+            JsonOptions);
+        Assert.NotNull(configuration);
+        Assert.False(configuration!.Writable);
+        Assert.Equal("Server configuration writes are disabled for this deployment.", configuration.DisabledReason);
+
+        var response = await client.PutAsJsonAsync(
+            "/api/v1/settings/server-configuration",
+            new ServerConfigurationUpdateRequest(configuration.Revision, true, configuration.Configuration),
+            JsonOptions);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.False(File.Exists(overlayPath));
     }
 
     [Fact]
@@ -2130,6 +2188,71 @@ public sealed class OratorioApiTests
         Assert.Equal(ItemState.Discovered, afterCancelledNotification!.Item.State);
         Assert.Contains(afterCancelledNotification.Runs, x => x.RunId == runId && x.Status == RunStatus.Cancelled);
         Assert.DoesNotContain(afterCancelledNotification.Runs, x => x.RunId == runId && x.Status == RunStatus.Failed);
+    }
+
+    [Fact]
+    public async Task AppServerDispatch_RunTimeoutInterruptsTurn_AndKeepsRunTimedOut()
+    {
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.TimeoutAfterTurnStarted);
+        await using var app = new TestOratorioApp(
+            services =>
+            {
+                services.RemoveAll<IDotCraftAppServerProcessManager>();
+                services.RemoveAll<IDotCraftAppServerClientFactory>();
+                services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+                services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+            },
+            new Dictionary<string, string?>
+            {
+                ["Oratorio:DotCraft:MaxRunAttempts"] = "1"
+            });
+        var client = app.CreateClient();
+
+        await CreateItemAsync(client, "task:test-appserver-timeout-interrupt");
+        await PostAsync<ItemDetailResponse>(
+            client,
+            "/api/v1/items/local/task:test-appserver-timeout-interrupt/dispatch",
+            new DispatchRequest("appServer", "Timeout and interrupt this DotCraft run.", null, null));
+
+        var timedOut = await WaitForItemAsync(client, "task:test-appserver-timeout-interrupt", x => x.Item.State == ItemState.Failed);
+        var run = Assert.Single(timedOut.Runs, x => x.RunnerKind == "appServer");
+        Assert.Equal(RunStatus.TimedOut, run.Status);
+        Assert.Equal("appServerTimedOut", run.ErrorCode);
+        Assert.Contains("interrupted and cancelled", run.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(fakeAppServer.InterruptedTurns, x => x.ThreadId == "thread-test-1" && x.TurnId == "turn-test-1");
+        Assert.DoesNotContain(timedOut.Runs, x => x.ErrorCode == "appServerTurnCancelled");
+    }
+
+    [Fact]
+    public async Task AppServerDispatch_RunTimeoutCompletesWhenInterruptHasNoTerminalNotification()
+    {
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.TimeoutAfterTurnStartedWithoutTerminal);
+        await using var app = new TestOratorioApp(
+            services =>
+            {
+                services.RemoveAll<IDotCraftAppServerProcessManager>();
+                services.RemoveAll<IDotCraftAppServerClientFactory>();
+                services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+                services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+            },
+            new Dictionary<string, string?>
+            {
+                ["Oratorio:DotCraft:MaxRunAttempts"] = "1"
+            });
+        var client = app.CreateClient();
+
+        await CreateItemAsync(client, "task:test-appserver-timeout-no-terminal");
+        await PostAsync<ItemDetailResponse>(
+            client,
+            "/api/v1/items/local/task:test-appserver-timeout-no-terminal/dispatch",
+            new DispatchRequest("appServer", "Timeout and simulate missing terminal notification.", null, null));
+
+        var timedOut = await WaitForItemAsync(client, "task:test-appserver-timeout-no-terminal", x => x.Item.State == ItemState.Failed);
+        var run = Assert.Single(timedOut.Runs, x => x.RunnerKind == "appServer");
+        Assert.Equal(RunStatus.TimedOut, run.Status);
+        Assert.Equal("appServerTimedOut", run.ErrorCode);
+        Assert.Contains("no terminal notification", run.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(fakeAppServer.InterruptedTurns, x => x.ThreadId == "thread-test-1" && x.TurnId == "turn-test-1");
     }
 
     [Fact]
@@ -5533,6 +5656,8 @@ internal enum FakeAppServerOutcome
     DrawerItemPublishFailure,
     Fail,
     Hold,
+    TimeoutAfterTurnStarted,
+    TimeoutAfterTurnStartedWithoutTerminal,
     SubmitReviewDraft,
     SubmitDef208BadAnchorReviewDraft,
     SubmitRetryAnchorReviewDraft,
@@ -6233,7 +6358,11 @@ internal sealed class FakeAppServerClient(
     public Task InterruptTurnAsync(string threadId, string turnId, CancellationToken ct)
     {
         interruptTurn(threadId, turnId);
-        _notifications.Writer.TryWrite(Notification("turn/cancelled", new { threadId, turnId }));
+        if (outcome != FakeAppServerOutcome.TimeoutAfterTurnStartedWithoutTerminal)
+        {
+            _notifications.Writer.TryWrite(Notification("turn/cancelled", new { threadId, turnId }));
+        }
+
         return Task.CompletedTask;
     }
 
@@ -6334,7 +6463,9 @@ internal sealed class FakeAppServerClient(
     }
 
     public IAsyncEnumerable<AppServerNotification> ReadNotificationsAsync(CancellationToken ct) =>
-        _notifications.Reader.ReadAllAsync(ct);
+        outcome is FakeAppServerOutcome.TimeoutAfterTurnStarted or FakeAppServerOutcome.TimeoutAfterTurnStartedWithoutTerminal
+            ? ReadNotificationsThenCancelAsync(ct)
+            : _notifications.Reader.ReadAllAsync(ct);
 
     public ValueTask DisposeAsync()
     {
@@ -6348,6 +6479,22 @@ internal sealed class FakeAppServerClient(
 
     private static AppServerNotification Notification(string method, object parameters) =>
         new(method, JsonSerializer.SerializeToElement(parameters, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+    private async IAsyncEnumerable<AppServerNotification> ReadNotificationsThenCancelAsync([EnumeratorCancellation] CancellationToken ct)
+    {
+        while (_notifications.Reader.TryRead(out var notification))
+        {
+            yield return notification;
+
+            if (notification.Method is "turn/completed" or "turn/failed" or "turn/cancelled")
+            {
+                yield break;
+            }
+        }
+
+        await Task.Yield();
+        throw new OperationCanceledException(ct);
+    }
 
     private static string ExtractDiscussionTurnId(
         string prompt,

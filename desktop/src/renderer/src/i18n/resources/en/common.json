@@ -19,6 +19,16 @@
       "starting": "Starting Oratorio...",
       "preparing": "Preparing Oratorio board..."
     },
+    "connection": {
+      "remoteWaiting": "Waiting for the remote Oratorio backend...",
+      "remoteError": "Remote Oratorio backend is unavailable: {{message}}",
+      "remoteUnavailable": "Remote Oratorio backend is unavailable.",
+      "remoteUrl": "Remote backend URL",
+      "switchToLocal": "Switch to local",
+      "reconnect": "Reconnect",
+      "connecting": "Connecting",
+      "changeAddress": "Change address"
+    },
     "restartBanner": {
       "ariaLabel": "Restart required",
       "title": "Restart required",
@@ -68,6 +78,7 @@
       "dotCraftConnected": "DotCraft connected to Oratorio.",
       "dotCraftThreadBindingActive": "DotCraft thread binding is active.",
       "dotCraftApprovalFailed": "DotCraft approval failed: {{message}}",
+      "remoteAppBindingUnsupported": "DotCraft App Binding is not available while Oratorio Desktop is connected to a remote backend.",
       "githubSyncFinishedWithFailures": "GitHub sync finished with failures: {{names}}.",
       "sourceSyncFinishedWithFailures": "{{provider}} sync finished with failures: {{names}}.",
       "taskCreated": "New task \"{{title}}\" created. Click to view details.",
@@ -135,10 +146,17 @@
       "running": "Running",
       "error": "Error"
     },
-    "serverTitle": "Server {{label}}",
+    "backendKind": {
+      "managedLocal": "Local backend",
+      "reusedLocal": "Local backend",
+      "remote": "Remote backend"
+    },
+    "serverTitle": "{{label}} {{state}}",
     "serverErrorTitle": "{{label}}: {{message}}",
     "localServer": "Local server",
     "restartServer": "Restart server",
+    "reconnectServer": "Reconnect",
+    "connectionSettings": "Connection settings",
     "back": "Back",
     "forward": "Forward",
     "desktopActions": "Desktop actions",

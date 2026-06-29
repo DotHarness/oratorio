@@ -3,7 +3,7 @@ import { mkdtempSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { describe, expect, it } from 'vitest'
-import { readPersistedPort, resolveServerExecutablePath, writePersistedPort } from './OratorioServerManager'
+import { normalizeRemoteServerUrl, readPersistedPort, resolveServerExecutablePath, writePersistedPort } from './OratorioServerManager'
 
 const exeName = process.platform === 'win32' ? 'oratorio-server.exe' : 'oratorio-server'
 
@@ -67,5 +67,19 @@ describe('resolveServerExecutablePath', () => {
       path: null,
       source: 'missing'
     })
+  })
+})
+
+describe('normalizeRemoteServerUrl', () => {
+  it('accepts http and https origins and trims trailing slashes', () => {
+    expect(normalizeRemoteServerUrl(' http://127.0.0.1:5087/// ')).toBe('http://127.0.0.1:5087')
+    expect(normalizeRemoteServerUrl('https://oratorio.internal')).toBe('https://oratorio.internal')
+  })
+
+  it('rejects unsupported protocols, credentials, and path prefixes', () => {
+    expect(() => normalizeRemoteServerUrl('')).toThrow(/not configured/)
+    expect(() => normalizeRemoteServerUrl('ws://127.0.0.1:5087')).toThrow(/http or https/)
+    expect(() => normalizeRemoteServerUrl('http://user:pass@127.0.0.1:5087')).toThrow(/credentials/)
+    expect(() => normalizeRemoteServerUrl('http://127.0.0.1:5087/oratorio')).toThrow(/path/)
   })
 })

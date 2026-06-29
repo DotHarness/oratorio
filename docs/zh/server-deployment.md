@@ -1,54 +1,125 @@
 # 服务器部署
 
-服务器部署指在一台 Linux 主机上持续运行 **Oratorio 后端**及其依赖的 **DotCraft AppServer**,实现无人值守的来源同步、任务派发与草稿产出。推荐使用 `oratorio/deploy/docker/` 提供的 Docker Compose 栈。
-
-## 核心约束:共享文件系统
-
-Oratorio 会创建 git worktree,并将其**绝对路径**交由 DotCraft 执行。因此,二者在网络层面可以分离,但**必须共享同一文件系统,并挂载到相同路径**(此处为 `/workspace`)。
-
-落实到部署上,只需让两个容器挂载同一个 `/workspace` 卷即可;本仓库提供的 Compose 已完成该配置。
-
-## 快速开始
-
-无需检出 Oratorio 源码,获取 Compose 与 `.env` 模板两个文件即可;容器镜像(Oratorio 与 DotCraft)会自动从 GHCR 拉取。
+服务器部署指在一台 Linux 主机上持续运行一套专用的 **Oratorio 后端**和
+**DotCraft AppServer**，用于无人值守的 source sync、PR review dispatch
+和 draft generation。推荐入口是 Oratorio CLI。
 
 ```bash
-mkdir oratorio && cd oratorio
-curl -O https://raw.githubusercontent.com/DotHarness/oratorio/master/deploy/docker/docker-compose.yml
-curl -O https://raw.githubusercontent.com/DotHarness/oratorio/master/deploy/docker/.env.example
-
-cp .env.example .env          # 填写下方三项必填配置
-mkdir -p workspace
-git clone https://github.com/owner/myrepo workspace/myrepo   # 将待派发的仓库放入共享卷
-
-docker compose up -d
+curl -fsSL https://dotharness.github.io/oratorio/install.sh | bash
+oratorio server init
 ```
 
-启动后,后端监听 `http://127.0.0.1:5087`(提供 `GET /health` 健康检查),默认仅绑定回环地址。
+安装脚本会从 GitHub Releases 下载 Linux x64 的 `oratorio` CLI，并校验
+release checksum。之后由 CLI 创建和管理 Docker Compose review stack。
 
-## 必填配置(`.env`)
+## CLI 会创建什么
 
-| 配置项 | 说明 |
-| --- | --- |
-| `APPSERVER_TOKEN` | AppServer 的 Bearer Token,两端共用;可通过 `openssl rand -base64 32` 生成 |
-| `DOTCRAFT_API_KEY`(及 provider / model) | 供 DotCraft 运行 Agent 调用模型使用 |
-| `ORATORIO_REPO0_PROJECT` / `ORATORIO_REPO0_WORKSPACE` | 仓库到共享卷路径的映射(如 `github:owner/myrepo` → `/workspace/myrepo`),每个待派发的仓库各配置一条 |
+`oratorio server init` 会创建一套独立 review stack：
 
-## 远程访问
+```text
+oratorio-review/
+  docker-compose.yml
+  .env
+  oratorio.config.json
+  workspace/
+  secrets/
+```
 
-所有端口默认仅绑定 `127.0.0.1`,请勿直接暴露至公网。建议通过 SSH 隧道访问:
+这套 stack 包含：
+
+- 一个 Oratorio backend container；
+- 一个专门用于 review 工作的 DotCraft AppServer container；
+- 一个被两个 container 共同挂载的 `/workspace`；
+- 一个由 CLI 管理的 server-side `oratorio.config.json`。
+
+这套 review stack 默认和你已有的 QQ 机器人、聊天机器人或其他业务
+DotCraft container 隔离。
+
+## 核心约束：共享文件系统
+
+Oratorio 会创建 Git worktree，并把 worktree 的绝对路径交给 DotCraft。
+因此 Oratorio 和 DotCraft 必须在同一个绝对路径下看到同一份 workspace。
+CLI 生成的 stack 会把宿主机 `workspace/` 同时挂到两个 container 的
+`/workspace`。
+
+多个仓库不需要多个 container。一套 stack 可以通过多条 workspace route
+review 多个仓库：
+
+```bash
+oratorio server add-repo github:owner/repo-a
+oratorio server add-repo github:owner/repo-b
+```
+
+每个仓库会 clone 到 `workspace/<owner>__<repo>`，并在
+`oratorio.config.json` 中映射到 `/workspace/<owner>__<repo>`。
+
+## 首次运行
+
+`oratorio server init` 会依次询问：
+
+- DotCraft provider、model 和 API key；
+- GitHub read token；
+- 一个或多个 GitHub repository；
+- 是否开启 Auto Review；
+- 可选的 GitHub App 配置，用于 review write-back。
+
+CLI 会使用服务器上已有的 Git 凭据执行 `git clone`；它不会把 GitHub API
+token 写进 Git remote。
+
+Stack 启动后，CLI 会输出 SSH tunnel 命令：
 
 ```bash
 ssh -N -L 5087:127.0.0.1:5087 user@your-server
 ```
 
-随后将 Oratorio Desktop 的后端地址配置为 `http://127.0.0.1:5087`。
+然后在 Oratorio Desktop 中把 backend URL 设置为：
 
-> [!NOTE]
-> 服务器部署下,请通过 `.env` 或环境变量管理配置:配置写入接口仅接受回环请求,经隧道转发的远程请求将被拒绝。
+```text
+http://127.0.0.1:5087
+```
+
+## 日常运维
+
+常用命令：
+
+```bash
+oratorio server doctor
+oratorio server status
+oratorio server logs --follow
+oratorio server restart
+oratorio server upgrade
+```
+
+`doctor` 会检查 Docker、Docker Compose、Git、必要 secret、仓库 checkout、
+workspace route 和 Oratorio health。
+
+## 配置归属
+
+服务器部署下，配置由服务器侧 CLI 和文件管理：
+
+- `.env` 存放模型 key、AppServer token、GitHub token 等 secret；
+- `oratorio.config.json` 存放 source list、workspace route 和 automation policy；
+- Oratorio Desktop remote mode 只读展示 server-admin 配置。
+
+CLI 生成的 Docker stack 会设置 `Oratorio:Settings:Writable=false`，所以即使
+SSH tunnel 让请求看起来来自 loopback，Desktop 也不能误写 server-admin 配置。
+
+## 手动 Compose 配置
+
+高级用户仍可手动使用 Compose 模板：
+
+```bash
+mkdir oratorio && cd oratorio
+curl -O https://raw.githubusercontent.com/DotHarness/oratorio/master/deploy/docker/docker-compose.yml
+curl -O https://raw.githubusercontent.com/DotHarness/oratorio/master/deploy/docker/.env.example
+cp .env.example .env
+```
+
+如果要配置多个仓库，优先使用 `oratorio.config.json`，不要手写很长的
+environment variable 数组。
 
 ## 延伸阅读
 
 - [Oratorio 如何接入 DotCraft](/zh/dotcraft-workspaces)
 - [配置参考](/zh/configuration)
-- [DotCraft 服务器部署 ↗](https://www.dotcraft.net/zh/features/self-hosted/server-deployment)
+- [GitHub 集成](/zh/github)

@@ -7,6 +7,8 @@ obj/
 server/bin/
 server/obj/
 
+cli/target/
+
 desktop/node_modules/
 desktop/out/
 desktop/dist/
