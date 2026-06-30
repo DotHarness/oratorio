@@ -561,7 +561,6 @@ public sealed record SourceSnapshotDto(
 public sealed record GitHubSourceStatusResponse(
     bool Enabled,
     bool AppAuthenticationConfigured,
-    bool StaticTokenConfigured,
     bool WritesEnabled,
     bool WriteConfigured,
     bool WebhookSecretConfigured,
@@ -797,7 +796,6 @@ public sealed record GitHubInstallationProfileDetectionWarningDto(
     string Message);
 
 public sealed record GitHubSecretConfigurationDto(
-    SecretConfigurationFieldDto Token,
     SecretConfigurationFieldDto PrivateKey,
     SecretConfigurationFieldDto PrivateKeyPath,
     SecretConfigurationFieldDto WebhookSecret);

@@ -141,12 +141,34 @@ public sealed class SourceProviderFoundationTests
         Assert.NotNull(sources);
         var gitHub = Assert.Single(sources!.Providers, x => x.Provider == "github");
         Assert.Equal("GitHub", gitHub.DisplayName);
-        Assert.Equal("githubApp+staticToken", gitHub.AuthenticationState);
+        Assert.Equal("githubApp", gitHub.AuthenticationState);
         Assert.True(gitHub.ReadCapability.Available);
         Assert.True(gitHub.WriteCapability.Available);
         Assert.Equal(1, gitHub.ConfiguredProjectCount);
         var project = Assert.Single(gitHub.Projects);
         Assert.Equal("github:github.com/example-owner/oratorio", project.Key);
+    }
+
+    [Fact]
+    public async Task SourcesEndpoint_IgnoresLegacyGitHubTokenWithoutAppCredentials()
+    {
+        await using var app = new TestOratorioApp(settings: new Dictionary<string, string?>
+        {
+            ["Oratorio:GitHub:AppId"] = "",
+            ["Oratorio:GitHub:PrivateKey"] = "",
+            ["Oratorio:GitHub:PrivateKeyPath"] = "",
+            ["Oratorio:GitHub:Token"] = "legacy-token",
+            ["Oratorio:GitHub:WritesEnabled"] = "true"
+        });
+        var client = app.CreateClient();
+
+        var sources = await client.GetFromJsonAsync<SourcesResponse>("/api/v1/sources", JsonOptions);
+
+        Assert.NotNull(sources);
+        var gitHub = Assert.Single(sources!.Providers, x => x.Provider == "github");
+        Assert.Equal("none", gitHub.AuthenticationState);
+        Assert.False(gitHub.ReadCapability.Available);
+        Assert.False(gitHub.WriteCapability.Available);
     }
 
     [Fact]

@@ -296,7 +296,6 @@ type SecretConfigurationField = {
 }
 
 type GitHubSecretConfiguration = {
-  token: SecretConfigurationField
   privateKey: SecretConfigurationField
   privateKeyPath: SecretConfigurationField
   webhookSecret: SecretConfigurationField
@@ -1059,7 +1058,6 @@ export function SettingsView({
               <SettingsRow icon={KeyRound} label={t('credentials.github.appId')} description={t('credentials.github.appIdDescription')} control={<TextControl value={configDraft?.gitHub.appId ?? ''} disabled={!configWritable} onChange={(value) => updateGitHubConfig({ appId: emptyToNull(value) }, 'immediate')} />} />
               <SettingsRow icon={ShieldCheck} label={t('credentials.github.authentication')} description={t('credentials.github.authenticationDescription')} control={<ValuePill>{githubAuthenticationLabel}</ValuePill>} />
               <SettingsRow icon={CheckCircle2} label={t('credentials.github.writes')} description={t('credentials.github.writesDescription')} control={<button className="toggle-button" aria-pressed={configDraft?.gitHub.writesEnabled ?? false} disabled={!configWritable} onClick={() => updateGitHubConfig({ writesEnabled: !(configDraft?.gitHub.writesEnabled ?? false) })}>{configDraft?.gitHub.writesEnabled ? t('common.on') : t('common.off')}</button>} />
-              <SecretSettingsRow icon={KeyRound} label={t('credentials.github.token')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).token} disabled={!configWritable} onChange={(next) => updateGitHubSecret('token', next)} />
               <SecretSettingsRow icon={KeyRound} label={t('credentials.github.privateKey')} multiline field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKey} disabled={!configWritable} onChange={(next) => updateGitHubSecret('privateKey', next)} />
               <SecretSettingsRow icon={KeyRound} label={t('credentials.github.privateKeyPath')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKeyPath} disabled={!configWritable} onChange={(next) => updateGitHubSecret('privateKeyPath', next)} />
               <SecretSettingsRow icon={KeyRound} label={t('credentials.github.webhookSecret')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).webhookSecret} disabled={!configWritable} onChange={(next) => updateGitHubSecret('webhookSecret', next)} />
@@ -2799,9 +2797,7 @@ function activeSectionCopy(section: SettingsSection) {
 }
 
 function authLabel(value?: string) {
-  if (value === 'githubApp+staticToken') return i18n.t('settings:credentials.authLabel.githubAppToken')
   if (value === 'githubApp') return i18n.t('settings:credentials.authLabel.githubApp')
-  if (value === 'staticToken') return i18n.t('settings:credentials.authLabel.staticToken')
   if (value === 'projectProfiles') return i18n.t('settings:credentials.authLabel.projectProfiles')
   if (value === 'accessToken' || value === 'token') return i18n.t('settings:credentials.authLabel.token')
   if (value === 'partial') return i18n.t('settings:credentials.authLabel.partial')
@@ -3049,7 +3045,6 @@ function migrateGitLabAutomationKeys(
 
 function normalizeGitHubSecrets(secrets?: GitHubSecretConfiguration | null): GitHubSecretConfiguration {
   return {
-    token: normalizeSecretField(secrets?.token),
     privateKey: normalizeSecretField(secrets?.privateKey),
     privateKeyPath: normalizeSecretField(secrets?.privateKeyPath),
     webhookSecret: normalizeSecretField(secrets?.webhookSecret),

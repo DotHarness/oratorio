@@ -246,7 +246,6 @@
       "authenticationDescription": "已解析的凭据形态；值已脱敏。",
       "writes": "GitHub 写入",
       "writesDescription": "Issue 评论、PR 评审、检查运行及 Auto PR 投递。",
-      "token": "令牌",
       "privateKey": "私钥",
       "privateKeyPath": "私钥路径",
       "webhookSecret": "Webhook 密钥"
@@ -279,9 +278,7 @@
       "emptyPlaceholder": "空"
     },
     "authLabel": {
-      "githubAppToken": "GitHub App + 令牌",
       "githubApp": "GitHub App",
-      "staticToken": "静态令牌",
       "projectProfiles": "项目配置",
       "token": "令牌",
       "partial": "部分",

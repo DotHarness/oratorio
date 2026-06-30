@@ -18,7 +18,9 @@ If Oratorio is only running on your laptop and GitHub cannot reach it, that is f
 
 ## Create Or Reuse A GitHub App
 
-Use a GitHub App when you want the full integration. A token can be enough for read-only importing, but Oratorio needs a GitHub App for comments, pull request reviews, review checks, and delivered pull requests.
+Use a GitHub App for the GitHub integration. Oratorio uses the App for read
+sync, comments, pull request reviews, review checks, and delivered pull
+requests.
 
 Create the app under the user or organization that owns the repositories. Install it only on the repositories you want Oratorio to access.
 
@@ -95,6 +97,6 @@ When an implementation draft is ready, Oratorio can also push a branch and open 
 
 **Webhook updates do not arrive.** Confirm the webhook URL is reachable from GitHub, the webhook secret matches, and the app is subscribed to issue and pull request events.
 
-**Writes fail.** Confirm GitHub writes are on, Oratorio is using GitHub App credentials rather than only a token, and the app has write access for the action.
+**Writes fail.** Confirm GitHub writes are on and the app has write access for the action.
 
 **Delivery cannot create a pull request.** Confirm the app can write repository contents, the local workspace is a clone of the same GitHub repository, and the target branch accepts new pull requests.

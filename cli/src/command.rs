@@ -5,8 +5,8 @@ use clap::Args;
 
 use crate::{
     config::{
-        DeploymentPaths, GithubProject, add_github_repo, build_deployment, read_config,
-        write_config, write_generated,
+        DeploymentPaths, GitHubInstallationArg, GithubProject, add_github_repo, build_deployment,
+        read_config, write_config, write_generated,
     },
     docker,
     doctor::{print_results, run_checks, wait_for_oratorio_health},
@@ -30,9 +30,24 @@ pub struct InitArgs {
     /// DotCraft API key. Omit for an interactive secret prompt.
     #[arg(long)]
     pub dotcraft_api_key: Option<String>,
-    /// GitHub read token. Omit for an interactive secret prompt.
+    /// GitHub App ID for GitHub read sync and write-back.
     #[arg(long)]
-    pub github_token: Option<String>,
+    pub github_app_id: Option<String>,
+    /// Container path to the GitHub App private key.
+    #[arg(long)]
+    pub github_app_private_key_path: Option<String>,
+    /// Local private key file to copy to secrets/github-app.pem.
+    #[arg(long)]
+    pub github_app_private_key_file: Option<PathBuf>,
+    /// GitHub App installation mapping, such as owner=123456.
+    #[arg(long = "github-installation")]
+    pub github_installations: Vec<GitHubInstallationArg>,
+    /// GitHub App installation ID for a single repository owner.
+    #[arg(long)]
+    pub github_installation_id: Option<String>,
+    /// Disable GitHub write-back while keeping App-based read sync.
+    #[arg(long = "no-github-writes")]
+    pub no_github_writes: bool,
     /// Use defaults for omitted options and skip prompts.
     #[arg(long)]
     pub yes: bool,
@@ -96,16 +111,17 @@ pub fn init(args: InitArgs) -> Result<()> {
         args.provider,
         args.model,
         args.dotcraft_api_key,
-        args.github_token,
+        args.github_app_id,
+        args.github_app_private_key_path,
+        args.github_app_private_key_file,
+        args.github_installations,
+        args.github_installation_id,
+        !args.no_github_writes,
     )?;
     let paths = DeploymentPaths::new(&dir);
 
-    if !args.dry_run
-        && (options.dotcraft_api_key.trim().is_empty() || options.github_token.trim().is_empty())
-    {
-        bail!(
-            "DotCraft API key and GitHub token are required. Run interactively or pass --dotcraft-api-key and --github-token."
-        );
+    if !args.dry_run && options.dotcraft_api_key.trim().is_empty() {
+        bail!("DotCraft API key is required. Run interactively or pass --dotcraft-api-key.");
     }
 
     let generated = build_deployment(&options)?;

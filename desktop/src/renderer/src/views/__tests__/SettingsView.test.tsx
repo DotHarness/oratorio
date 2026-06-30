@@ -558,25 +558,26 @@ describe('SettingsView', () => {
     expect(lastUpdateRequest.configuration.automation.autoReviewPublishRepositories).toEqual(['gitlab:gitlab.internal.test/team/subsystem/example-project'])
   })
 
-  it('saves secret replacements without echoing plaintext after the response', async () => {
+  it('saves GitHub private key replacements without echoing plaintext after the response', async () => {
     renderSettings('/settings/credentials')
 
-    const tokenRow = (await screen.findByText('Token')).closest('.settings-row') as HTMLElement
-    expect(within(tokenRow).queryByRole('button', { name: 'Replace' })).not.toBeInTheDocument()
-    expect(within(tokenRow).queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
+    const privateKeyRow = (await screen.findByText('Private key')).closest('.settings-row') as HTMLElement
+    expect(within(privateKeyRow).queryByRole('button', { name: 'Replace' })).not.toBeInTheDocument()
+    expect(within(privateKeyRow).queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
 
-    const tokenInput = within(tokenRow).getByLabelText('Token value') as HTMLInputElement
-    expect(tokenInput.type).toBe('password')
-    fireEvent.click(within(tokenRow).getByRole('button', { name: 'Show Token' }))
-    expect(tokenInput.type).toBe('text')
-    fireEvent.change(tokenInput, { target: { value: 'super-secret-token' } })
+    const privateKeyInput = within(privateKeyRow).getByLabelText('Private key value') as HTMLTextAreaElement
+    expect(privateKeyInput).toHaveClass('masked')
+    fireEvent.click(within(privateKeyRow).getByRole('button', { name: 'Show Private key' }))
+    expect(privateKeyInput).not.toHaveClass('masked')
+    fireEvent.change(privateKeyInput, { target: { value: 'super-secret-private-key' } })
     expect(lastUpdateRequest).toBeNull()
-    fireEvent.blur(tokenInput)
+    fireEvent.blur(privateKeyInput)
 
-    await waitFor(() => expect(lastUpdateRequest?.configuration.gitHub.secrets.token.value).toBe('super-secret-token'))
+    await waitFor(() => expect(lastUpdateRequest?.configuration.gitHub.secrets.privateKey.value).toBe('super-secret-private-key'))
+    expect(lastUpdateRequest?.configuration.gitHub.secrets.token).toBeUndefined()
     expect(window.confirm).not.toHaveBeenCalled()
-    await waitFor(() => expect(screen.queryByDisplayValue('super-secret-token')).not.toBeInTheDocument())
-    expect(within(tokenRow).getByText('Configured. Enter a new value to replace it.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByDisplayValue('super-secret-private-key')).not.toBeInTheDocument())
+    expect(within(privateKeyRow).getByText('Configured. Enter a new value to replace it.')).toBeInTheDocument()
   })
 
   it('saves GitLab token replacements without echoing plaintext after the response', async () => {
@@ -1046,7 +1047,6 @@ function redactSavedConfiguration(configuration: any) {
     gitHub: {
       ...configuration.gitHub,
       secrets: {
-        token: savedSecret(secrets.token),
         privateKey: savedSecret(secrets.privateKey),
         privateKeyPath: savedSecret(secrets.privateKeyPath),
         webhookSecret: savedSecret(secrets.webhookSecret),

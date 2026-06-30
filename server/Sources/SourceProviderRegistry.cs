@@ -65,12 +65,11 @@ public sealed class GitHubSourceProvider(
             .Where(x => x.Source == "github" && x.LastSourceSyncAt != null)
             .MaxAsync(x => x.LastSourceSyncAt, ct);
 
-        var hasReadAuth = credentialStatus.HasAppAuthentication || credentialStatus.HasStaticToken;
         var read = projects.Length == 0
             ? new SourceProviderCapabilityDto(false, "unconfigured", "No GitHub repositories are configured.")
-            : hasReadAuth
+            : credentialStatus.HasAppAuthentication
                 ? new SourceProviderCapabilityDto(true, "available", null)
-                : new SourceProviderCapabilityDto(false, "credentialsMissing", "GitHub read sync requires GitHub App or token authentication.");
+                : new SourceProviderCapabilityDto(false, "credentialsMissing", "GitHub read sync requires GitHub App authentication.");
         var write = current.WritesEnabled
             ? credentialStatus.CanWrite
                 ? new SourceProviderCapabilityDto(true, "available", null)
@@ -108,19 +107,9 @@ public sealed class GitHubSourceProvider(
 
     private static string AuthenticationShape(GitHubCredentialStatus status)
     {
-        if (status.HasAppAuthentication && status.HasStaticToken)
-        {
-            return "githubApp+staticToken";
-        }
-
         if (status.HasAppAuthentication)
         {
             return "githubApp";
-        }
-
-        if (status.HasStaticToken)
-        {
-            return "staticToken";
         }
 
         return "none";

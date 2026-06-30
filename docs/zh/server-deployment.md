@@ -58,13 +58,16 @@ oratorio server add-repo github:owner/repo-b
 `oratorio server init` 会依次询问：
 
 - DotCraft provider、model 和 API key；
-- GitHub read token；
 - 一个或多个 GitHub repository；
+- GitHub App ID 和 private key path 或 file；
+- 可选的 repository owner 对应 GitHub App installation ID；
 - 是否开启 Auto Review；
-- 可选的 GitHub App 配置，用于 review write-back。
+- 是否开启 GitHub write-back。
 
 CLI 会使用服务器上已有的 Git 凭据执行 `git clone`；它不会把 GitHub API
-token 写进 Git remote。
+App installation token 写进 Git remote。GitHub App 是 GitHub API
+authentication 的唯一支持方式，覆盖 read sync、PR review、checks、comments
+和 delivery。若希望 App 只读，可使用 `--no-github-writes`。
 
 Stack 启动后，CLI 会输出 SSH tunnel 命令：
 
@@ -97,8 +100,10 @@ workspace route 和 Oratorio health。
 
 服务器部署下，配置由服务器侧 CLI 和文件管理：
 
-- `.env` 存放模型 key、AppServer token、GitHub token 等 secret；
+- `.env` 存放模型 key、AppServer token 等 secret；
+- `secrets/` 存放 GitHub App private key 等挂载文件；
 - `oratorio.config.json` 存放 source list、workspace route 和 automation policy；
+  也包含 GitHub App ID、private key path、writes 设置和可选 installation profile；
 - Oratorio Desktop remote mode 只读展示 server-admin 配置。
 
 CLI 生成的 Docker stack 会设置 `Oratorio:Settings:Writable=false`，所以即使

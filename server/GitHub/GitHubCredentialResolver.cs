@@ -4,7 +4,6 @@ namespace Oratorio.Server.GitHub;
 
 public sealed record GitHubCredentialStatus(
     bool HasAppAuthentication,
-    bool HasStaticToken,
     bool CanWrite,
     bool HasWebhookSecret);
 
@@ -23,10 +22,8 @@ public sealed class GitHubCredentialResolver(IConfigurationSecretProtector secre
             !string.IsNullOrWhiteSpace(ResolveValue(options.AppId)) &&
             (!string.IsNullOrWhiteSpace(ResolveSecret(options.PrivateKey)) ||
              !string.IsNullOrWhiteSpace(ResolveSecret(options.PrivateKeyPath)));
-        var hasStaticToken = !string.IsNullOrWhiteSpace(ResolveSecret(options.Token));
         return new GitHubCredentialStatus(
             hasAppAuthentication,
-            hasStaticToken,
             options.WritesEnabled && hasAppAuthentication,
             !string.IsNullOrWhiteSpace(ResolveSecret(options.WebhookSecret)));
     }

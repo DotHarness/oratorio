@@ -68,12 +68,14 @@ services:
       Oratorio__DotCraft__RepositoryWorkspaceRoutes__0__Project: ${ORATORIO_REPO0_PROJECT:?set ORATORIO_REPO0_PROJECT in .env}
       Oratorio__DotCraft__RepositoryWorkspaceRoutes__0__WorkspacePath: ${ORATORIO_REPO0_WORKSPACE:?set ORATORIO_REPO0_WORKSPACE in .env}
 
-      # --- GitHub source sync (optional) -------------------------------------
+      # --- GitHub source sync (GitHub App) -----------------------------------
       Oratorio__GitHub__Repositories__0: ${ORATORIO_GITHUB_REPO0:-}
-      Oratorio__GitHub__Token: ${GITHUB_TOKEN:-}
-      Oratorio__GitHub__WritesEnabled: ${ORATORIO_GITHUB_WRITES:-false}
+      Oratorio__GitHub__AppId: ${ORATORIO_GITHUB_APP_ID:-}
+      Oratorio__GitHub__PrivateKeyPath: ${ORATORIO_GITHUB_PRIVATE_KEY_PATH:-/secrets/github-app.pem}
+      Oratorio__GitHub__WritesEnabled: ${ORATORIO_GITHUB_WRITES:-true}
     volumes:
       - ${ORATORIO_WORKSPACE_DIR:-./workspace}:/workspace   # SAME path as dotcraft
+      - ./secrets:/secrets:ro
       - oratorio-state:/data/oratorio
     ports:
       - "${ORATORIO_PUBLISH_HOST:-127.0.0.1}:${ORATORIO_PORT:-5087}:5087"

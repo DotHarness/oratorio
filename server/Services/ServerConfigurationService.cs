@@ -66,7 +66,6 @@ public sealed class ServerConfigurationService(
 
     private static readonly HashSet<string> GitHubSecretProperties = new(StringComparer.Ordinal)
     {
-        "token",
         "privateKey",
         "privateKeyPath",
         "webhookSecret"
@@ -163,7 +162,6 @@ public sealed class ServerConfigurationService(
     {
         "github.writesEnabled",
         "github.installationProfiles",
-        "github.secrets.token",
         "github.secrets.privateKey",
         "github.secrets.privateKeyPath",
         "github.secrets.webhookSecret",
@@ -320,7 +318,6 @@ public sealed class ServerConfigurationService(
                 gitHub.Repositories,
                 gitHub.WritesEnabled,
                 new GitHubSecretConfigurationDto(
-                    SecretStatus(gitHub.Token),
                     SecretStatus(gitHub.PrivateKey),
                     SecretStatus(gitHub.PrivateKeyPath),
                     SecretStatus(gitHub.WebhookSecret))),
@@ -473,7 +470,6 @@ public sealed class ServerConfigurationService(
                 .ToArray(),
             PrivateKey = EffectiveSecret(gitHub.Secrets?.PrivateKey, current.PrivateKey),
             PrivateKeyPath = EffectiveSecret(gitHub.Secrets?.PrivateKeyPath, current.PrivateKeyPath),
-            Token = EffectiveSecret(gitHub.Secrets?.Token, current.Token),
             WebhookSecret = EffectiveSecret(gitHub.Secrets?.WebhookSecret, current.WebhookSecret),
             Repositories = gitHub.Repositories.ToArray(),
             WritesEnabled = gitHub.WritesEnabled
@@ -725,7 +721,7 @@ public sealed class ServerConfigurationService(
 
     private async Task PersistOverlayAsync(ServerConfigurationDto next, string overlayPath, CancellationToken ct)
     {
-        var existingGitHubSecrets = ReadExistingSecretNodes(overlayPath, "GitHub", ["Token", "PrivateKey", "PrivateKeyPath", "WebhookSecret"]);
+        var existingGitHubSecrets = ReadExistingSecretNodes(overlayPath, "GitHub", ["PrivateKey", "PrivateKeyPath", "WebhookSecret"]);
         var existingGitLabProfileSecrets = ReadExistingGitLabProfileSecretNodes(overlayPath);
         var existingDotCraftSecrets = ReadExistingSecretNodes(overlayPath, "DotCraft", ["AppServerToken"]);
         var repositoryWorkspaceOverlay = BuildRepositoryWorkspaceOverlay(next.DotCraft.RepositoryWorkspaces);
@@ -737,7 +733,6 @@ public sealed class ServerConfigurationService(
             Repositories = next.GitHub.Repositories,
             next.GitHub.WritesEnabled
         }, JsonOptions)!.AsObject();
-        ApplySecret(gitHubNode, "Token", next.GitHub.Secrets?.Token, existingGitHubSecrets);
         ApplySecret(gitHubNode, "PrivateKey", next.GitHub.Secrets?.PrivateKey, existingGitHubSecrets);
         ApplySecret(gitHubNode, "PrivateKeyPath", next.GitHub.Secrets?.PrivateKeyPath, existingGitHubSecrets);
         ApplySecret(gitHubNode, "WebhookSecret", next.GitHub.Secrets?.WebhookSecret, existingGitHubSecrets);
@@ -1304,7 +1299,6 @@ public sealed class ServerConfigurationService(
         ValidateRepositories(configuration.Automation.AutoReviewPublishRepositories, "automation.autoReviewPublishRepositories", errors);
         ValidateRepositories(configuration.Automation.AutoFollowUpRepositories, "automation.autoFollowUpRepositories", errors);
         ValidateRange(configuration.Automation.MaxFollowUpRounds, 1, 20, "automation.maxFollowUpRounds", errors);
-        ValidateSecretUpdate(configuration.GitHub.Secrets?.Token, "github.secrets.token", errors);
         ValidateSecretUpdate(configuration.GitHub.Secrets?.PrivateKey, "github.secrets.privateKey", errors);
         ValidateSecretUpdate(configuration.GitHub.Secrets?.PrivateKeyPath, "github.secrets.privateKeyPath", errors);
         ValidateSecretUpdate(configuration.GitHub.Secrets?.WebhookSecret, "github.secrets.webhookSecret", errors);
@@ -1439,7 +1433,6 @@ public sealed class ServerConfigurationService(
             .Where(key => !string.Equals(beforeMap.GetValueOrDefault(key), afterMap.GetValueOrDefault(key), StringComparison.Ordinal))
             .ToList();
 
-        AddSecretChange(changed, "github.secrets.token", after.GitHub.Secrets?.Token);
         AddSecretChange(changed, "github.secrets.privateKey", after.GitHub.Secrets?.PrivateKey);
         AddSecretChange(changed, "github.secrets.privateKeyPath", after.GitHub.Secrets?.PrivateKeyPath);
         AddSecretChange(changed, "github.secrets.webhookSecret", after.GitHub.Secrets?.WebhookSecret);
@@ -1529,7 +1522,7 @@ public sealed class ServerConfigurationService(
             {
                 "github.writesEnabled" => "GitHub write enablement changes affect future source-write attempts.",
                 "github.installationProfiles" => "GitHub installation profile changes affect future GitHub source sync, source writes, branch pushes, and PR delivery.",
-                "github.secrets.token" or "github.secrets.privateKey" or "github.secrets.privateKeyPath" or "github.secrets.webhookSecret" => "Credential changes affect future GitHub source sync, webhooks, and source-write attempts.",
+                "github.secrets.privateKey" or "github.secrets.privateKeyPath" or "github.secrets.webhookSecret" => "Credential changes affect future GitHub source sync, webhooks, and source-write attempts.",
                 "gitlab.enabled" or "gitlab.writesEnabled" or "gitlab.endpoint" or "gitlab.apiBaseUrl" or "gitlab.projects" or "gitlab.projectProfiles" => "GitLab configuration changes affect future GitLab source sync, webhooks, and source-write attempts.",
                 var dynamicField when dynamicField.StartsWith("gitlab.projectProfiles.", StringComparison.Ordinal) => "GitLab project profile changes affect future GitLab source sync, webhooks, and source-write attempts.",
                 "dotCraft.repositoryWorkspaces" => "Workspace routing changes affect new AppServer dispatches.",
@@ -1555,7 +1548,6 @@ public sealed class ServerConfigurationService(
             GitHub = request.GitHub with
             {
                 Secrets = new GitHubSecretConfigurationDto(
-                    SavedSecret(request.GitHub.Secrets?.Token, previousGitHubSecrets?.Token),
                     SavedSecret(request.GitHub.Secrets?.PrivateKey, previousGitHubSecrets?.PrivateKey),
                     SavedSecret(request.GitHub.Secrets?.PrivateKeyPath, previousGitHubSecrets?.PrivateKeyPath),
                     SavedSecret(request.GitHub.Secrets?.WebhookSecret, previousGitHubSecrets?.WebhookSecret))

@@ -246,7 +246,6 @@
       "authenticationDescription": "Resolved credential shape; values are redacted.",
       "writes": "GitHub writes",
       "writesDescription": "Issue comments, PR reviews, check runs, and Auto PR delivery.",
-      "token": "Token",
       "privateKey": "Private key",
       "privateKeyPath": "Private key path",
       "webhookSecret": "Webhook secret"
@@ -279,9 +278,7 @@
       "emptyPlaceholder": "Empty"
     },
     "authLabel": {
-      "githubAppToken": "GitHub App + token",
       "githubApp": "GitHub App",
-      "staticToken": "Static token",
       "projectProfiles": "Project profiles",
       "token": "Token",
       "partial": "Partial",
