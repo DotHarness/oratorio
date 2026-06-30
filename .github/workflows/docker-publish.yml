@@ -15,18 +15,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # The server project references the DotCraft SDK by relative path, so the
-      # build context needs both repos checked out side by side.
+      # The Dockerfile expects the Oratorio repository root as its build context.
       - name: Checkout Oratorio
         uses: actions/checkout@v6
         with:
           path: oratorio
-
-      - name: Checkout DotCraft
-        uses: actions/checkout@v6
-        with:
-          repository: DotHarness/dotcraft
-          path: dotcraft
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -50,9 +43,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          # Context is the workspace root holding both oratorio/ and dotcraft/.
-          context: .
-          file: oratorio/deploy/docker/Dockerfile
+          context: ./oratorio
+          file: ./oratorio/deploy/docker/Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
