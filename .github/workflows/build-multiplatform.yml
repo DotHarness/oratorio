@@ -113,17 +113,51 @@ jobs:
       - name: Setup Rust
         if: runner.os == 'Linux'
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Install musl build tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Test CLI
+        if: runner.os == 'Linux'
+        run: cargo test --manifest-path cli/Cargo.toml --locked
+        working-directory: oratorio
 
       - name: Build CLI
         if: runner.os == 'Linux'
-        run: cargo build --manifest-path cli/Cargo.toml --release --locked
+        run: cargo build --manifest-path cli/Cargo.toml --release --locked --target x86_64-unknown-linux-musl
+        working-directory: oratorio
+
+      - name: Smoke test CLI artifact
+        if: runner.os == 'Linux'
+        run: |
+          CLI_BINARY=cli/target/x86_64-unknown-linux-musl/release/oratorio
+          "$CLI_BINARY" --version
+          file "$CLI_BINARY"
+
+          if file "$CLI_BINARY" | grep -qi 'dynamically linked'; then
+            echo "CLI artifact must not be dynamically linked."
+            exit 1
+          fi
+
+          if ldd "$CLI_BINARY" 2>&1 | tee /tmp/oratorio-cli-ldd.txt | grep -E 'libc\.so|ld-linux'; then
+            echo "CLI artifact must not depend on glibc runtime libraries."
+            exit 1
+          fi
+
+          if strings "$CLI_BINARY" | grep -q 'GLIBC_'; then
+            echo "CLI artifact contains GLIBC version references."
+            exit 1
+          fi
         working-directory: oratorio
 
       - name: Create CLI archive
         if: runner.os == 'Linux'
         run: |
           mkdir -p cli-release
-          cp cli/target/release/oratorio cli-release/oratorio
+          cp cli/target/x86_64-unknown-linux-musl/release/oratorio cli-release/oratorio
           cp LICENSE README.md README_ZH.md cli-release/
           tar -czf oratorio-cli-linux-x64.tar.gz -C cli-release oratorio LICENSE README.md README_ZH.md
         working-directory: oratorio
