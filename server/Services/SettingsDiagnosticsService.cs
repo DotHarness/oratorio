@@ -23,7 +23,6 @@ public sealed class SettingsDiagnosticsService(
 {
     private static readonly string[] RedactedFields =
     [
-        "Oratorio:GitHub:Token",
         "Oratorio:GitHub:PrivateKey",
         "Oratorio:GitHub:PrivateKeyPath",
         "Oratorio:GitHub:WebhookSecret",
@@ -147,19 +146,9 @@ public sealed class SettingsDiagnosticsService(
 
     private static string AuthenticationShape(GitHubCredentialStatus status)
     {
-        if (status.HasAppAuthentication && status.HasStaticToken)
-        {
-            return "githubApp+staticToken";
-        }
-
         if (status.HasAppAuthentication)
         {
             return "githubApp";
-        }
-
-        if (status.HasStaticToken)
-        {
-            return "staticToken";
         }
 
         return "none";

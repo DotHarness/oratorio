@@ -149,7 +149,8 @@
     "backendKind": {
       "managedLocal": "Local backend",
       "reusedLocal": "Local backend",
-      "remote": "Remote backend"
+      "remote": "Remote backend",
+      "remoteTunnel": "Remote tunnel"
     },
     "serverTitle": "{{label}} {{state}}",
     "serverErrorTitle": "{{label}}: {{message}}",

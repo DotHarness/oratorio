@@ -10,6 +10,7 @@ import {
 import { setServerBaseUrl } from '../../api'
 import { settingsSections } from '../../settingsSections'
 import { SettingsView } from '../SettingsView'
+import { DEFAULT_CONNECTION_PREFERENCES } from '../../../../shared/desktopConnection'
 
 const githubStatus = {
   available: true,
@@ -143,6 +144,78 @@ describe('SettingsView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Quit app' }))
 
     await waitFor(() => expect(setWindowCloseBehavior).toHaveBeenCalledWith('quitApp'))
+  })
+
+  it('applies a remote SSH tunnel connection from a local SSH alias', async () => {
+    const getLocalSshConfig = vi.fn(async () => ({
+      sshDir: 'C:/Users/test/.ssh',
+      configPath: 'C:/Users/test/.ssh/config',
+      configExists: true,
+      agentAvailable: false,
+      aliases: [
+        {
+          alias: 'oratorio-remote',
+          hostName: 'oratorio.example.test',
+          user: 'root',
+          port: '22',
+          identityFiles: ['~/.ssh/id_ed25519'],
+        },
+      ],
+      identities: [
+        {
+          path: '~/.ssh/id_ed25519',
+          source: 'config' as const,
+          exists: true,
+          hostAliases: ['oratorio-remote'],
+        },
+      ],
+    }))
+    Object.defineProperty(window, 'oratorioDesktop', {
+      configurable: true,
+      value: { getLocalSshConfig },
+    })
+    const onApplyServerConnectionPreferences = vi.fn(async (preferences) => ({
+      preferences,
+      status: {
+        state: 'running' as const,
+        serverUrl: 'http://127.0.0.1:5087',
+        reusedExistingServer: true,
+        backendKind: 'remote' as const,
+        serverMode: 'remote' as const,
+        remoteTransport: preferences.remoteTransport,
+        tunnel: null,
+        pid: null,
+        errorMessage: null,
+      },
+    }))
+
+    renderSettings('/settings/general', {
+      serverConnectionPreferences: DEFAULT_CONNECTION_PREFERENCES,
+      onApplyServerConnectionPreferences,
+    })
+
+    const connectionGroup = (await screen.findByText('Backend connection')).closest('.settings-group') as HTMLElement
+    fireEvent.click(within(connectionGroup).getByRole('button', { name: 'Remote' }))
+    fireEvent.click(within(connectionGroup).getByRole('button', { name: 'SSH tunnel' }))
+
+    expect(await within(connectionGroup).findByText('oratorio-remote')).toBeInTheDocument()
+    const aliasesRow = within(connectionGroup).getByText('Saved SSH aliases').closest('.settings-row') as HTMLElement
+    fireEvent.click(within(aliasesRow).getByRole('button', { name: /oratorio-remote/i }))
+    fireEvent.click(within(connectionGroup).getByRole('button', { name: 'Apply' }))
+
+    await waitFor(() => expect(onApplyServerConnectionPreferences).toHaveBeenCalledOnce())
+    expect(onApplyServerConnectionPreferences.mock.calls[0][0]).toMatchObject({
+      serverMode: 'remote',
+      remoteTransport: 'sshTunnel',
+      sshTunnel: {
+        sshTarget: 'oratorio-remote',
+        identityFile: null,
+        remoteHost: '127.0.0.1',
+        remotePort: 5087,
+        preferredLocalPort: 5087,
+        autoStart: true,
+      },
+    })
   })
 
   it('edits source project cards into source configuration and workspace draft fields', async () => {
@@ -558,25 +631,26 @@ describe('SettingsView', () => {
     expect(lastUpdateRequest.configuration.automation.autoReviewPublishRepositories).toEqual(['gitlab:gitlab.internal.test/team/subsystem/example-project'])
   })
 
-  it('saves secret replacements without echoing plaintext after the response', async () => {
+  it('saves GitHub private key replacements without echoing plaintext after the response', async () => {
     renderSettings('/settings/credentials')
 
-    const tokenRow = (await screen.findByText('Token')).closest('.settings-row') as HTMLElement
-    expect(within(tokenRow).queryByRole('button', { name: 'Replace' })).not.toBeInTheDocument()
-    expect(within(tokenRow).queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
+    const privateKeyRow = (await screen.findByText('Private key')).closest('.settings-row') as HTMLElement
+    expect(within(privateKeyRow).queryByRole('button', { name: 'Replace' })).not.toBeInTheDocument()
+    expect(within(privateKeyRow).queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
 
-    const tokenInput = within(tokenRow).getByLabelText('Token value') as HTMLInputElement
-    expect(tokenInput.type).toBe('password')
-    fireEvent.click(within(tokenRow).getByRole('button', { name: 'Show Token' }))
-    expect(tokenInput.type).toBe('text')
-    fireEvent.change(tokenInput, { target: { value: 'super-secret-token' } })
+    const privateKeyInput = within(privateKeyRow).getByLabelText('Private key value') as HTMLTextAreaElement
+    expect(privateKeyInput).toHaveClass('masked')
+    fireEvent.click(within(privateKeyRow).getByRole('button', { name: 'Show Private key' }))
+    expect(privateKeyInput).not.toHaveClass('masked')
+    fireEvent.change(privateKeyInput, { target: { value: 'super-secret-private-key' } })
     expect(lastUpdateRequest).toBeNull()
-    fireEvent.blur(tokenInput)
+    fireEvent.blur(privateKeyInput)
 
-    await waitFor(() => expect(lastUpdateRequest?.configuration.gitHub.secrets.token.value).toBe('super-secret-token'))
+    await waitFor(() => expect(lastUpdateRequest?.configuration.gitHub.secrets.privateKey.value).toBe('super-secret-private-key'))
+    expect(lastUpdateRequest?.configuration.gitHub.secrets.token).toBeUndefined()
     expect(window.confirm).not.toHaveBeenCalled()
-    await waitFor(() => expect(screen.queryByDisplayValue('super-secret-token')).not.toBeInTheDocument())
-    expect(within(tokenRow).getByText('Configured. Enter a new value to replace it.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByDisplayValue('super-secret-private-key')).not.toBeInTheDocument())
+    expect(within(privateKeyRow).getByText('Configured. Enter a new value to replace it.')).toBeInTheDocument()
   })
 
   it('saves GitLab token replacements without echoing plaintext after the response', async () => {
@@ -1046,7 +1120,6 @@ function redactSavedConfiguration(configuration: any) {
     gitHub: {
       ...configuration.gitHub,
       secrets: {
-        token: savedSecret(secrets.token),
         privateKey: savedSecret(secrets.privateKey),
         privateKeyPath: savedSecret(secrets.privateKeyPath),
         webhookSecret: savedSecret(secrets.webhookSecret),

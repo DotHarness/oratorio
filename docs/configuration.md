@@ -10,8 +10,8 @@ Oratorio's day-to-day configuration entry point is Settings in the Desktop Rende
 Settings manages local admin configuration, including:
 
 - GitHub source/repository and GitLab source/project lists;
-- GitHub credential presence plus GitLab project profile credential presence
-  and write-only secret updates;
+- GitHub App credential presence plus GitLab project profile credential
+  presence and write-only secret updates;
 - DotCraft AppServer / Hub routing;
 - source-project-to-DotCraft-workspace mappings;
 - managed worktree, concurrency, retry, timeout, and cleanup policy;
@@ -51,7 +51,9 @@ secrets to the new host.
 
 ## Secret Handling
 
-GitHub tokens, webhook secrets, private keys, plus GitLab project profile tokens, webhook secrets, and webhook signing tokens use one-shot replace / clear semantics:
+GitHub App private keys, private key paths, webhook secrets, plus GitLab project
+profile tokens, webhook secrets, and webhook signing tokens use one-shot replace
+/ clear semantics:
 
 - an empty secret input keeps the existing value;
 - replace encrypts the value on the server before writing the Configuration Overlay;
@@ -59,6 +61,10 @@ GitHub tokens, webhook secrets, private keys, plus GitLab project profile tokens
 - plaintext secrets are never returned to the Desktop Renderer.
 
 Settings does not expose auto-start command or process argument inputs.
+
+Legacy `Oratorio:GitHub:Token` values are ignored by runtime, diagnostics, and
+Settings. They do not provide GitHub read sync or write-back and are dropped the
+next time Settings saves the overlay.
 
 Legacy `Oratorio:GitLab:Token`, `TokenKind`, `WebhookSecret`, and
 `WebhookSigningToken` values are still read by runtime, but only as a fallback

@@ -346,6 +346,7 @@ export type ItemDetailResponse = {
 export type GitHubSourceStatusResponse = {
   enabled?: boolean
   configured?: boolean
+  appAuthenticationConfigured?: boolean
   repositories?: string[]
   lastSyncAt?: string | null
   writesEnabled?: boolean

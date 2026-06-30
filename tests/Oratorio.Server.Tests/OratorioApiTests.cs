@@ -411,7 +411,6 @@ public sealed class OratorioApiTests
             services.AddSingleton<IOptionsMonitor<GitHubOptions>>(new StaticOptionsMonitor<GitHubOptions>(new GitHubOptions
             {
                 Endpoint = "https://user:secret@api.github.test/v3?token=hidden#fragment",
-                Token = "test-token",
                 AppId = "12345",
                 InstallationProfiles =
                 [
@@ -457,12 +456,11 @@ public sealed class OratorioApiTests
         Assert.NotNull(diagnostics);
         Assert.True(diagnostics!.Capabilities["settingsDiagnostics"]);
         Assert.True(diagnostics.Capabilities["serverConfigurationWrites"]);
-        Assert.Equal("githubApp+staticToken", diagnostics.GitHub.Authentication);
+        Assert.Equal("githubApp", diagnostics.GitHub.Authentication);
         Assert.Equal("https://api.github.test/v3", diagnostics.GitHub.Endpoint.TrimEnd('/'));
         Assert.Equal("ws://127.0.0.1:9100/ws", diagnostics.DotCraft.Endpoint.TrimEnd('/'));
         Assert.Equal(4, diagnostics.Runtime.GlobalMaxActiveRuns);
         Assert.True(diagnostics.Redaction.SecretsRedacted);
-        Assert.DoesNotContain("test-token", serialized);
         Assert.DoesNotContain("test-private-key", serialized);
         Assert.DoesNotContain("test-webhook-secret", serialized);
         Assert.DoesNotContain("hidden", serialized);
@@ -910,7 +908,6 @@ public sealed class OratorioApiTests
             "/api/v1/settings/server-configuration",
             JsonOptions);
         Assert.NotNull(current);
-        Assert.True(current!.Configuration.GitHub.Secrets?.Token.Configured);
 
         var next = current.Configuration with
         {
@@ -918,7 +915,6 @@ public sealed class OratorioApiTests
             {
                 Secrets = current.Configuration.GitHub.Secrets! with
                 {
-                    Token = new SecretConfigurationFieldDto(true, "replace", "new-token-value"),
                     PrivateKey = new SecretConfigurationFieldDto(true, "replace", "new-private-key"),
                     WebhookSecret = new SecretConfigurationFieldDto(true, "clear")
                 }
@@ -931,19 +927,14 @@ public sealed class OratorioApiTests
             new ServerConfigurationUpdateRequest(current.Revision, true, next));
 
         Assert.True(updated.RestartRequired);
-        Assert.Contains("github.secrets.token", updated.AppliedFields);
         Assert.Contains("github.secrets.privateKey", updated.AppliedFields);
         Assert.Contains("github.secrets.webhookSecret", updated.AppliedFields);
         var secrets = updated.Configuration.Configuration.GitHub.Secrets!;
-        Assert.True(secrets.Token.Configured);
         Assert.True(secrets.PrivateKey.Configured);
         Assert.False(secrets.WebhookSecret.Configured);
-        Assert.Null(secrets.Token.Value);
-        Assert.Equal("unchanged", secrets.Token.Mode);
 
         var raw = await File.ReadAllTextAsync(overlayPath);
         Assert.Contains("enc:v1:", raw);
-        Assert.DoesNotContain("new-token-value", raw);
         Assert.DoesNotContain("new-private-key", raw);
         Assert.DoesNotContain("test-token", raw);
         Assert.DoesNotContain("test-private-key", raw);
@@ -952,7 +943,6 @@ public sealed class OratorioApiTests
             "/api/v1/settings/server-configuration/changes",
             JsonOptions);
         var serializedAudit = JsonSerializer.Serialize(changes, JsonOptions);
-        Assert.DoesNotContain("new-token-value", serializedAudit);
         Assert.DoesNotContain("new-private-key", serializedAudit);
     }
 
@@ -1258,6 +1248,28 @@ public sealed class OratorioApiTests
         Assert.Equal(HttpStatusCode.BadRequest, unconfirmed.StatusCode);
         var impactError = await unconfirmed.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
         Assert.Equal("configurationConfirmationRequired", impactError?.Error.Code);
+    }
+
+    [Fact]
+    public async Task GitHubSync_RequiresAppAuthentication()
+    {
+        await using var app = new TestOratorioApp(settings: new Dictionary<string, string?>
+        {
+            ["Oratorio:GitHub:AppId"] = "",
+            ["Oratorio:GitHub:PrivateKey"] = "",
+            ["Oratorio:GitHub:PrivateKeyPath"] = ""
+        });
+        var client = app.CreateClient();
+
+        var sync = await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+
+        Assert.Equal(["example-owner/oratorio"], sync.RepositoriesScanned);
+        Assert.Equal(0, sync.IssuesImported);
+        Assert.Equal(0, sync.PullRequestsImported);
+        var error = Assert.Single(sync.Errors);
+        Assert.Equal("example-owner/oratorio", error.Repository);
+        Assert.Equal("githubAppAuthRequired", error.Code);
+        Assert.Contains("GitHub App ID and private key", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1982,7 +1994,8 @@ public sealed class OratorioApiTests
             services.AddSingleton<IOptionsMonitor<GitHubOptions>>(new StaticOptionsMonitor<GitHubOptions>(new GitHubOptions
             {
                 Endpoint = "https://api.github.test",
-                Token = "test-token",
+                AppId = "12345",
+                PrivateKey = "test-private-key",
                 Repositories = ["example-owner/oratorio"],
                 WritesEnabled = false
             }));
@@ -4586,6 +4599,31 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
+    public async Task GitHubTokenProvider_RequiresAppAuthentication()
+    {
+        var handler = new CountingHandler();
+        var provider = new GitHubTokenProvider(
+            new StaticHttpClientFactory(new HttpClient(handler) { BaseAddress = new Uri("https://api.github.test") }),
+            new StaticOptionsMonitor<GitHubOptions>(new GitHubOptions
+            {
+                Endpoint = "https://api.github.test"
+            }),
+            new FixedClock(DateTimeOffset.Parse("2026-05-04T00:00:00Z")),
+            new GitHubCredentialResolver(new PassthroughConfigurationSecretProtector()),
+            new GitHubInstallationResolver(
+                new StaticHttpClientFactory(new HttpClient(handler) { BaseAddress = new Uri("https://api.github.test") }),
+                new FixedClock(DateTimeOffset.Parse("2026-05-04T00:00:00Z")),
+                new GitHubCredentialResolver(new PassthroughConfigurationSecretProtector())));
+
+        var error = await Assert.ThrowsAsync<GitHubAppAuthenticationRequiredException>(
+            () => provider.GetBearerTokenAsync(new GitHubRepositoryRef("dotcraft", "oratorio"), CancellationToken.None));
+
+        Assert.Equal("githubAppAuthRequired", error.ErrorCode);
+        Assert.Contains("GitHub App ID and private key", error.Message, StringComparison.Ordinal);
+        Assert.Equal(0, handler.Count);
+    }
+
+    [Fact]
     public async Task GitHubTokenProvider_ExchangesJwt_AndCachesInstallationToken()
     {
         using var rsa = RSA.Create(2048);
@@ -6000,11 +6038,11 @@ internal sealed class FakeAppServerClient(
                     }
                     else
                     {
-                    object[] comments = outcome switch
-                    {
-                        FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft => [],
-                        FakeAppServerOutcome.SubmitInvalidReviewDraft => new object[]
+                        object[] comments = outcome switch
                         {
+                            FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft => [],
+                            FakeAppServerOutcome.SubmitInvalidReviewDraft => new object[]
+                            {
                             new
                             {
                                 severity = "YELLOW",
@@ -6012,9 +6050,9 @@ internal sealed class FakeAppServerClient(
                                 body = "This inline finding intentionally lacks both suggestion and commentOnly.",
                                 path = "src/Auth/JwtMiddleware.cs"
                             }
-                        },
-                        FakeAppServerOutcome.SubmitLegacyReviewDraft => new object[]
-                        {
+                            },
+                            FakeAppServerOutcome.SubmitLegacyReviewDraft => new object[]
+                            {
                             new
                             {
                                 severity = "RED",
@@ -6025,9 +6063,9 @@ internal sealed class FakeAppServerClient(
                                 side = "RIGHT",
                                 suggestionReplacement = "        return token;"
                             }
-                        },
-                        FakeAppServerOutcome.SubmitMissingSuggestionOldTextReviewDraft => new object[]
-                        {
+                            },
+                            FakeAppServerOutcome.SubmitMissingSuggestionOldTextReviewDraft => new object[]
+                            {
                             new
                             {
                                 severity = "RED",
@@ -6039,9 +6077,9 @@ internal sealed class FakeAppServerClient(
                                     newText = "        return token;"
                                 }
                             }
-                        },
-                        FakeAppServerOutcome.SubmitSuggestionTextNotFoundReviewDraft => new object[]
-                        {
+                            },
+                            FakeAppServerOutcome.SubmitSuggestionTextNotFoundReviewDraft => new object[]
+                            {
                             new
                             {
                                 severity = "RED",
@@ -6054,9 +6092,9 @@ internal sealed class FakeAppServerClient(
                                     newText = "        return token;"
                                 }
                             }
-                        },
-                        FakeAppServerOutcome.SubmitAmbiguousSuggestionTextReviewDraft => new object[]
-                        {
+                            },
+                            FakeAppServerOutcome.SubmitAmbiguousSuggestionTextReviewDraft => new object[]
+                            {
                             new
                             {
                                 severity = "RED",
@@ -6069,9 +6107,9 @@ internal sealed class FakeAppServerClient(
                                     newText = "        return token;"
                                 }
                             }
-                        },
-                        FakeAppServerOutcome.SubmitMultiLineReviewDraft => new object[]
-                        {
+                            },
+                            FakeAppServerOutcome.SubmitMultiLineReviewDraft => new object[]
+                            {
                             new
                             {
                                 severity = "RED",
@@ -6084,9 +6122,9 @@ internal sealed class FakeAppServerClient(
                                     newText = "        return refreshed;\n        return token;"
                                 }
                             }
-                        },
-                        FakeAppServerOutcome.SubmitContextLineReviewDraft => new object[]
-                        {
+                            },
+                            FakeAppServerOutcome.SubmitContextLineReviewDraft => new object[]
+                            {
                             new
                             {
                                 severity = "RED",
@@ -6099,9 +6137,9 @@ internal sealed class FakeAppServerClient(
                                     newText = "line89 fixed"
                                 }
                             }
-                        },
-                        FakeAppServerOutcome.SubmitNoOpReviewDraft => new object[]
-                        {
+                            },
+                            FakeAppServerOutcome.SubmitNoOpReviewDraft => new object[]
+                            {
                             new
                             {
                                 severity = "YELLOW",
@@ -6114,9 +6152,9 @@ internal sealed class FakeAppServerClient(
                                     newText = "        return refreshed;"
                                 }
                             }
-                        },
-                        FakeAppServerOutcome.SubmitDef208BadAnchorReviewDraft => new object[]
-                        {
+                            },
+                            FakeAppServerOutcome.SubmitDef208BadAnchorReviewDraft => new object[]
+                            {
                             new
                             {
                                 severity = "YELLOW",
@@ -6130,9 +6168,9 @@ internal sealed class FakeAppServerClient(
                                     reason = "requiresLargerChange"
                                 }
                             }
-                        },
-                        FakeAppServerOutcome.SubmitCleanReviewDraft or FakeAppServerOutcome.SubmitMismatchedSuggestionCountReviewDraft => new object[]
-                        {
+                            },
+                            FakeAppServerOutcome.SubmitCleanReviewDraft or FakeAppServerOutcome.SubmitMismatchedSuggestionCountReviewDraft => new object[]
+                            {
                             new
                             {
                                 severity = "RED",
@@ -6158,9 +6196,9 @@ internal sealed class FakeAppServerClient(
                                     reason = "needsHumanDecision"
                                 }
                             }
-                        },
-                        _ => new object[]
-                        {
+                            },
+                            _ => new object[]
+                            {
                             new
                             {
                                 severity = "RED",
@@ -6212,29 +6250,29 @@ internal sealed class FakeAppServerClient(
                                     reason = "cannotAnchorSafely"
                                 }
                             }
-                        }
-                    };
-                    var arguments = JsonSerializer.SerializeToElement(new
-                    {
-                        summary = new
+                            }
+                        };
+                        var arguments = JsonSerializer.SerializeToElement(new
                         {
-                            majorCount = outcome == FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft ? 0 : 1,
-                            minorCount = outcome == FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft ? 0 : 1,
-                            suggestionCount = outcome switch
+                            summary = new
                             {
-                                FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft => 0,
-                                FakeAppServerOutcome.SubmitMismatchedSuggestionCountReviewDraft => 4,
-                                _ => 1
+                                majorCount = outcome == FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft ? 0 : 1,
+                                minorCount = outcome == FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft ? 0 : 1,
+                                suggestionCount = outcome switch
+                                {
+                                    FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft => 0,
+                                    FakeAppServerOutcome.SubmitMismatchedSuggestionCountReviewDraft => 4,
+                                    _ => 1
+                                },
+                                body = outcome == FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft
+                                    ? "Verbose clean review summary from DotCraft."
+                                    : "Verbose review summary from DotCraft."
                             },
-                            body = outcome == FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft
-                                ? "Verbose clean review summary from DotCraft."
-                                : "Verbose review summary from DotCraft."
-                        },
-                        comments
-                    }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-                    var toolThreadId = useMismatchedToolThreadId() ? "thread-mismatch" : threadId;
-                    var result = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-review-1", "oratorio", "SubmitReviewDraft", arguments), CancellationToken.None);
-                    captureToolResult(result);
+                            comments
+                        }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                        var toolThreadId = useMismatchedToolThreadId() ? "thread-mismatch" : threadId;
+                        var result = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-review-1", "oratorio", "SubmitReviewDraft", arguments), CancellationToken.None);
+                        captureToolResult(result);
                     }
                 }
 

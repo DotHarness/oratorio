@@ -32,9 +32,8 @@ public sealed class GitHubSourceService(
             .Where(x => x.Source == "github" && x.LastSourceSyncAt != null)
             .MaxAsync(x => x.LastSourceSyncAt, ct);
         return new GitHubSourceStatusResponse(
-            current.Repositories.Length > 0 && (status.HasAppAuthentication || status.HasStaticToken),
+            current.Repositories.Length > 0 && status.HasAppAuthentication,
             status.HasAppAuthentication,
-            status.HasStaticToken,
             current.WritesEnabled,
             status.CanWrite,
             status.HasWebhookSecret,
@@ -67,6 +66,10 @@ public sealed class GitHubSourceService(
                 prs += result.PullRequests;
                 comments += result.Comments;
                 skipped += result.Skipped;
+            }
+            catch (GitHubAppAuthenticationRequiredException ex)
+            {
+                errors.Add(new GitHubSyncErrorDto(repository.FullName, ex.ErrorCode, ex.Message));
             }
             catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException)
             {

@@ -59,13 +59,17 @@ Each repository is cloned into `workspace/<owner>__<repo>` and mapped to
 During `oratorio server init`, the CLI asks for:
 
 - DotCraft provider, model, and API key;
-- GitHub read token;
 - one or more GitHub repositories;
+- GitHub App ID and private key path or file;
+- optional GitHub App installation ID for the repository owner;
 - whether to enable Auto Review;
-- optional GitHub App settings for review write-back.
+- whether to enable GitHub write-back.
 
 The CLI uses your server's existing Git credentials for `git clone`; it does not
-write the GitHub API token into Git remotes.
+write GitHub App installation tokens into Git remotes. GitHub App credentials
+are the only supported GitHub API authentication path for read sync, PR review,
+checks, comments, and delivery. Use `--no-github-writes` if the App should be
+read-only.
 
 After the stack starts, the CLI prints the SSH tunnel command:
 
@@ -73,11 +77,16 @@ After the stack starts, the CLI prints the SSH tunnel command:
 ssh -N -L 5087:127.0.0.1:5087 user@your-server
 ```
 
-Then set Oratorio Desktop's backend URL to:
+In Oratorio Desktop, use **Remote > SSH tunnel** and choose a local SSH config
+alias such as `your-server`, or use **Remote > URL** after opening the tunnel
+manually. The tunneled backend URL is:
 
 ```text
 http://127.0.0.1:5087
 ```
+
+Desktop tunnel mode uses the system `ssh` binary and your local SSH config,
+keys, or agent. It does not store SSH passwords or private key contents.
 
 ## Operations
 
@@ -98,9 +107,11 @@ checkouts, workspace routes, and Oratorio health.
 
 For server deployments, configuration is owned by the server-side CLI and files:
 
-- `.env` stores secrets such as model keys, AppServer token, and GitHub token;
+- `.env` stores secrets such as model keys and the AppServer token;
+- `secrets/` stores mounted files such as the GitHub App private key;
 - `oratorio.config.json` stores source lists, workspace routes, and automation
-  policy;
+  policy, including GitHub App ID, private key path, writes setting, and
+  optional installation profiles;
 - Oratorio Desktop remote mode treats server-admin configuration as read-only.
 
 The generated Docker stack sets `Oratorio:Settings:Writable=false`, so tunneled

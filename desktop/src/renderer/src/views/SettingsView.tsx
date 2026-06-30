@@ -48,24 +48,20 @@ import type {
   SourceSyncSchedule,
   SourceSyncScheduleUpdateRequest,
 } from '../lib/types'
+import {
+  DEFAULT_CONNECTION_PREFERENCES,
+  type LocalSshConfigInfo,
+  type LocalSshHostAlias,
+  type LocalSshIdentity,
+  type OratorioRemoteTransport,
+  type OratorioServerConnectionPreferences,
+  type OratorioServerStatus,
+  type OratorioSshTunnelPreferences,
+} from '../../../shared/desktopConnection'
 
 type ThemeMode = 'dark' | 'light'
 type WindowCloseBehavior = 'minimizeToTray' | 'quitApp'
 type OratorioServerMode = 'local' | 'remote'
-type OratorioBackendKind = 'managedLocal' | 'reusedLocal' | 'remote'
-type OratorioServerConnectionPreferences = {
-  serverMode: OratorioServerMode
-  remoteServerUrl: string | null
-}
-type OratorioServerStatus = {
-  state: 'stopped' | 'starting' | 'running' | 'error'
-  serverUrl: string | null
-  reusedExistingServer: boolean
-  backendKind: OratorioBackendKind
-  serverMode: OratorioServerMode
-  pid: number | null
-  errorMessage: string | null
-}
 type OratorioDesktopServerConnectionUpdateResult = {
   preferences: OratorioServerConnectionPreferences
   status: OratorioServerStatus
@@ -296,7 +292,6 @@ type SecretConfigurationField = {
 }
 
 type GitHubSecretConfiguration = {
-  token: SecretConfigurationField
   privateKey: SecretConfigurationField
   privateKeyPath: SecretConfigurationField
   webhookSecret: SecretConfigurationField
@@ -474,7 +469,11 @@ export function SettingsView({
   const [repositoryAllowlistModal, setRepositoryAllowlistModal] = useState<RepositoryAllowlistKind | null>(null)
   const [windowCloseBehavior, setWindowCloseBehaviorState] = useState<WindowCloseBehavior>('minimizeToTray')
   const [serverModeDraft, setServerModeDraft] = useState<OratorioServerMode>(serverConnectionPreferences?.serverMode ?? 'local')
+  const [remoteTransportDraft, setRemoteTransportDraft] = useState<OratorioRemoteTransport>(serverConnectionPreferences?.remoteTransport ?? 'url')
   const [remoteServerUrlDraft, setRemoteServerUrlDraft] = useState(serverConnectionPreferences?.remoteServerUrl ?? '')
+  const [sshTunnelDraft, setSshTunnelDraft] = useState<OratorioSshTunnelPreferences>(serverConnectionPreferences?.sshTunnel ?? DEFAULT_CONNECTION_PREFERENCES.sshTunnel)
+  const [localSshConfig, setLocalSshConfig] = useState<LocalSshConfigInfo | null>(null)
+  const [localSshConfigLoading, setLocalSshConfigLoading] = useState(false)
   const settingsPageRef = useRef<HTMLElement | null>(null)
   const serverConfigRef = useRef<ServerConfigurationResponse | null>(null)
   const configDraftRef = useRef<ServerConfiguration | null>(null)
@@ -493,8 +492,54 @@ export function SettingsView({
 
   useEffect(() => {
     setServerModeDraft(serverConnectionPreferences?.serverMode ?? 'local')
+    setRemoteTransportDraft(serverConnectionPreferences?.remoteTransport ?? 'url')
     setRemoteServerUrlDraft(serverConnectionPreferences?.remoteServerUrl ?? '')
-  }, [serverConnectionPreferences?.remoteServerUrl, serverConnectionPreferences?.serverMode])
+    setSshTunnelDraft(serverConnectionPreferences?.sshTunnel ?? DEFAULT_CONNECTION_PREFERENCES.sshTunnel)
+  }, [serverConnectionPreferences?.remoteServerUrl, serverConnectionPreferences?.remoteTransport, serverConnectionPreferences?.serverMode, serverConnectionPreferences?.sshTunnel])
+
+  useEffect(() => {
+    if (!canConfigureServerConnection || serverModeDraft !== 'remote' || remoteTransportDraft !== 'sshTunnel') {
+      return
+    }
+    if (localSshConfig || localSshConfigLoading) {
+      return
+    }
+    const desktop = window.oratorioDesktop
+    if (!desktop?.getLocalSshConfig) {
+      return
+    }
+
+    let cancelled = false
+    setLocalSshConfigLoading(true)
+    void desktop.getLocalSshConfig()
+      .then((config) => {
+        if (!cancelled) {
+          setLocalSshConfig(config)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setLocalSshConfig({
+            sshDir: '',
+            configPath: '',
+            configExists: false,
+            agentAvailable: false,
+            aliases: [],
+            identities: [],
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLocalSshConfigLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [canConfigureServerConnection, localSshConfig, remoteTransportDraft, serverModeDraft])
 
   const loadDiagnostics = useCallback(async () => {
     try {
@@ -777,8 +822,14 @@ export function SettingsView({
 
     void onApplyServerConnectionPreferences({
       serverMode: serverModeDraft,
+      remoteTransport: remoteTransportDraft,
       remoteServerUrl: remoteServerUrlDraft.trim() || serverConnectionPreferences?.remoteServerUrl || null,
+      sshTunnel: sshTunnelDraft,
     }).catch(() => {})
+  }
+
+  function updateSshTunnelDraft(patch: Partial<OratorioSshTunnelPreferences>) {
+    setSshTunnelDraft((current) => ({ ...current, ...patch }))
   }
 
   function reconnectConfiguredServer() {
@@ -877,20 +928,46 @@ export function SettingsView({
   const reviewSourceSupports = hasGitLabProject ? t('review.reviewSupportsWithGitlab') : t('review.reviewSupportsDefault')
   const diagnosticsGitLabWriteLabel = (diagnosticsGitLab?.writeConfigured ?? gitLabTokenConfiguredCount > 0) ? gitLabTokenConfiguredCount && gitLabTokenConfiguredCount < gitLabConfig.projects.length ? t('credentials.gitlabWriteLabel.partial') : t('credentials.gitlabWriteLabel.configured') : t('credentials.gitlabWriteLabel.missingToken')
   const persistedRemoteServerUrl = serverConnectionPreferences?.remoteServerUrl ?? ''
+  const persistedRemoteTransport = serverConnectionPreferences?.remoteTransport ?? 'url'
+  const persistedSshTunnel = serverConnectionPreferences?.sshTunnel ?? DEFAULT_CONNECTION_PREFERENCES.sshTunnel
   const trimmedRemoteServerUrlDraft = remoteServerUrlDraft.trim()
+  const sshTunnelChanged = Boolean(
+    sshTunnelDraft.sshTarget !== persistedSshTunnel.sshTarget ||
+    (sshTunnelDraft.identityFile ?? '') !== (persistedSshTunnel.identityFile ?? '') ||
+    sshTunnelDraft.remoteHost !== persistedSshTunnel.remoteHost ||
+    sshTunnelDraft.remotePort !== persistedSshTunnel.remotePort ||
+    sshTunnelDraft.preferredLocalPort !== persistedSshTunnel.preferredLocalPort ||
+    sshTunnelDraft.autoStart !== persistedSshTunnel.autoStart,
+  )
   const serverConnectionChanged = Boolean(
     serverConnectionPreferences &&
-    (serverModeDraft !== serverConnectionPreferences.serverMode || trimmedRemoteServerUrlDraft !== persistedRemoteServerUrl),
+    (
+      serverModeDraft !== serverConnectionPreferences.serverMode ||
+      remoteTransportDraft !== persistedRemoteTransport ||
+      trimmedRemoteServerUrlDraft !== persistedRemoteServerUrl ||
+      sshTunnelChanged
+    ),
   )
-  const remoteServerUrlRequired = serverModeDraft === 'remote' && !trimmedRemoteServerUrlDraft
+  const remoteServerUrlRequired = serverModeDraft === 'remote' && remoteTransportDraft === 'url' && !trimmedRemoteServerUrlDraft
+  const sshTunnelTargetRequired = serverModeDraft === 'remote' && remoteTransportDraft === 'sshTunnel' && !sshTunnelDraft.sshTarget.trim()
   const serverConnectionStatusLabel = serverConnectionStatus
-    ? t(`desktopConnection.status.${serverConnectionStatus.state}`)
+    ? serverConnectionStatus.remoteTransport === 'sshTunnel' && serverConnectionStatus.state === 'starting'
+      ? t('desktopConnection.status.tunnelStarting')
+      : serverConnectionStatus.remoteTransport === 'sshTunnel' && serverConnectionStatus.state === 'running'
+        ? t('desktopConnection.status.tunnelConnected')
+        : t(`desktopConnection.status.${serverConnectionStatus.state}`)
     : t('desktopConnection.status.unknown')
   const serverConnectionStatusTone = serverConnectionStatus?.state === 'running'
     ? 'ok'
     : serverConnectionStatus?.state === 'error'
       ? 'warn'
       : 'muted'
+  const serverConnectionDescription = serverConnectionStatus?.tunnel?.localUrl ??
+    serverConnectionStatus?.serverUrl ??
+    serverConnectionPreferences?.remoteServerUrl ??
+    t('desktopConnection.noServerUrl')
+  const localSshAliases = (localSshConfig?.aliases ?? []).slice(0, 8)
+  const localSshIdentities = (localSshConfig?.identities ?? []).filter((identity) => identity.exists).slice(0, 8)
   const workspacePathPlaceholder = isRemoteDesktopMode
     ? t('projects.workspaceServerPlaceholder')
     : t('projects.workspacePlaceholder')
@@ -1059,7 +1136,6 @@ export function SettingsView({
               <SettingsRow icon={KeyRound} label={t('credentials.github.appId')} description={t('credentials.github.appIdDescription')} control={<TextControl value={configDraft?.gitHub.appId ?? ''} disabled={!configWritable} onChange={(value) => updateGitHubConfig({ appId: emptyToNull(value) }, 'immediate')} />} />
               <SettingsRow icon={ShieldCheck} label={t('credentials.github.authentication')} description={t('credentials.github.authenticationDescription')} control={<ValuePill>{githubAuthenticationLabel}</ValuePill>} />
               <SettingsRow icon={CheckCircle2} label={t('credentials.github.writes')} description={t('credentials.github.writesDescription')} control={<button className="toggle-button" aria-pressed={configDraft?.gitHub.writesEnabled ?? false} disabled={!configWritable} onClick={() => updateGitHubConfig({ writesEnabled: !(configDraft?.gitHub.writesEnabled ?? false) })}>{configDraft?.gitHub.writesEnabled ? t('common.on') : t('common.off')}</button>} />
-              <SecretSettingsRow icon={KeyRound} label={t('credentials.github.token')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).token} disabled={!configWritable} onChange={(next) => updateGitHubSecret('token', next)} />
               <SecretSettingsRow icon={KeyRound} label={t('credentials.github.privateKey')} multiline field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKey} disabled={!configWritable} onChange={(next) => updateGitHubSecret('privateKey', next)} />
               <SecretSettingsRow icon={KeyRound} label={t('credentials.github.privateKeyPath')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).privateKeyPath} disabled={!configWritable} onChange={(next) => updateGitHubSecret('privateKeyPath', next)} />
               <SecretSettingsRow icon={KeyRound} label={t('credentials.github.webhookSecret')} field={normalizeGitHubSecrets(configDraft?.gitHub.secrets).webhookSecret} disabled={!configWritable} onChange={(next) => updateGitHubSecret('webhookSecret', next)} />
@@ -1222,24 +1298,153 @@ export function SettingsView({
                       />
                     }
                   />
-                  <SettingsRow
-                    icon={Code2}
-                    label={t('desktopConnection.remoteUrl.label')}
-                    description={t('desktopConnection.remoteUrl.description')}
-                    control={
-                      <TextControl
-                        value={remoteServerUrlDraft}
-                        placeholder="http://127.0.0.1:5087"
-                        disabled={serverConnectionSaving}
-                        onChange={setRemoteServerUrlDraft}
-                        commitOnBlur={false}
+                  {serverModeDraft === 'remote' ? (
+                    <>
+                      <SettingsRow
+                        icon={GitPullRequest}
+                        label={t('desktopConnection.transport.label')}
+                        description={t('desktopConnection.transport.description')}
+                        control={
+                          <SegmentedControl
+                            value={remoteTransportDraft}
+                            disabled={serverConnectionSaving}
+                            options={[
+                              { value: 'url', label: t('desktopConnection.transport.url') },
+                              { value: 'sshTunnel', label: t('desktopConnection.transport.sshTunnel') },
+                            ]}
+                            onChange={(value) => setRemoteTransportDraft(value as OratorioRemoteTransport)}
+                          />
+                        }
                       />
-                    }
-                  />
+                      {remoteTransportDraft === 'url' ? (
+                        <SettingsRow
+                          icon={Code2}
+                          label={t('desktopConnection.remoteUrl.label')}
+                          description={t('desktopConnection.remoteUrl.description')}
+                          control={
+                            <TextControl
+                              value={remoteServerUrlDraft}
+                              placeholder="http://127.0.0.1:5087"
+                              disabled={serverConnectionSaving}
+                              onChange={setRemoteServerUrlDraft}
+                              commitOnBlur={false}
+                            />
+                          }
+                        />
+                      ) : (
+                        <>
+                          <SettingsRow
+                            icon={Server}
+                            label={t('desktopConnection.sshTarget.label')}
+                            description={t('desktopConnection.sshTarget.description')}
+                            control={
+                              <TextControl
+                                value={sshTunnelDraft.sshTarget}
+                                placeholder="oratorio-remote"
+                                disabled={serverConnectionSaving}
+                                onChange={(value) => updateSshTunnelDraft({ sshTarget: value })}
+                                commitOnBlur={false}
+                              />
+                            }
+                          />
+                          <SettingsRow
+                            icon={Server}
+                            label={t('desktopConnection.sshAliases.label')}
+                            description={localSshConfigLoading ? t('desktopConnection.sshAliases.loading') : t('desktopConnection.sshAliases.description')}
+                            control={
+                              <SshChoiceList
+                                emptyLabel={localSshConfigLoading ? t('desktopConnection.sshAliases.checking') : t('desktopConnection.sshAliases.empty')}
+                                items={localSshAliases}
+                                renderItem={(alias) => (
+                                  <button
+                                    key={alias.alias}
+                                    type="button"
+                                    className="ssh-choice-button"
+                                    disabled={serverConnectionSaving}
+                                    onClick={() => updateSshTunnelDraft({ sshTarget: alias.alias, identityFile: null })}
+                                  >
+                                    <Server size={14} />
+                                    <span>
+                                      <strong>{alias.alias}</strong>
+                                      <small>{sshAliasSummary(alias)}</small>
+                                    </span>
+                                  </button>
+                                )}
+                              />
+                            }
+                          />
+                          <SettingsRow
+                            icon={KeyRound}
+                            label={t('desktopConnection.identity.label')}
+                            description={t('desktopConnection.identity.description')}
+                            control={
+                              <TextControl
+                                value={sshTunnelDraft.identityFile ?? ''}
+                                placeholder="~/.ssh/id_ed25519"
+                                disabled={serverConnectionSaving}
+                                onChange={(value) => updateSshTunnelDraft({ identityFile: value.trim() || null })}
+                                commitOnBlur={false}
+                              />
+                            }
+                          />
+                          {localSshIdentities.length > 0 ? (
+                            <SettingsRow
+                              icon={KeyRound}
+                              label={t('desktopConnection.identity.existing')}
+                              description={t('desktopConnection.identity.existingDescription')}
+                              control={
+                                <SshChoiceList
+                                  emptyLabel={t('desktopConnection.identity.empty')}
+                                  items={localSshIdentities}
+                                  renderItem={(identity) => (
+                                    <button
+                                      key={identity.path}
+                                      type="button"
+                                      className="ssh-choice-button"
+                                      disabled={serverConnectionSaving}
+                                      onClick={() => updateSshTunnelDraft({ identityFile: identity.path })}
+                                    >
+                                      <KeyRound size={14} />
+                                      <span>
+                                        <strong>{identity.path}</strong>
+                                        <small>{sshIdentitySummary(identity)}</small>
+                                      </span>
+                                    </button>
+                                  )}
+                                />
+                              }
+                            />
+                          ) : null}
+                          <SettingsRow
+                            icon={Code2}
+                            label={t('desktopConnection.remotePort.label')}
+                            description={t('desktopConnection.remotePort.description')}
+                            control={
+                              <NumberControl
+                                label={t('desktopConnection.remotePort.label')}
+                                value={sshTunnelDraft.remotePort}
+                                disabled={serverConnectionSaving}
+                                min={1}
+                                max={65535}
+                                onChange={(remotePort) => updateSshTunnelDraft({ remotePort })}
+                              />
+                            }
+                          />
+                          <SettingsRow
+                            icon={Activity}
+                            label={t('desktopConnection.localPortPolicy.label')}
+                            description={t('desktopConnection.localPortPolicy.description', { port: sshTunnelDraft.preferredLocalPort })}
+                            control={<ValuePill>{t('desktopConnection.localPortPolicy.value', { port: sshTunnelDraft.preferredLocalPort })}</ValuePill>}
+                          />
+                          {localSshConfig?.error ? <SettingsNotice tone="warn">{localSshConfig.error}</SettingsNotice> : null}
+                        </>
+                      )}
+                    </>
+                  ) : null}
                   <SettingsRow
                     icon={Activity}
                     label={t('desktopConnection.statusLabel')}
-                    description={serverConnectionStatus?.serverUrl ?? serverConnectionPreferences?.remoteServerUrl ?? t('desktopConnection.noServerUrl')}
+                    description={serverConnectionDescription}
                     control={
                       <span className="settings-inline-controls">
                         <StatusPill tone={serverConnectionStatusTone} label={serverConnectionStatusLabel} />
@@ -1255,7 +1460,7 @@ export function SettingsView({
                         <button
                           type="button"
                           className="primary-button inline compact-row-action settings-action-button"
-                          disabled={serverConnectionSaving || !serverConnectionChanged || remoteServerUrlRequired}
+                          disabled={serverConnectionSaving || !serverConnectionChanged || remoteServerUrlRequired || sshTunnelTargetRequired}
                           onClick={applyServerConnectionDraft}
                         >
                           <Check size={14} />
@@ -1447,7 +1652,7 @@ function SettingsRow({ icon: Icon, label, description, control }: { icon: Lucide
   )
 }
 
-function SettingsNotice({ tone, children }: { tone: 'error'; children: ReactNode }) {
+function SettingsNotice({ tone, children }: { tone: 'error' | 'warn'; children: ReactNode }) {
   return <div className={`settings-notice ${tone}`}>{children}</div>
 }
 
@@ -2363,6 +2568,46 @@ function ValuePill({ children }: { children: ReactNode }) {
   return <span className="value-pill">{children}</span>
 }
 
+function SshChoiceList<T>({ items, emptyLabel, renderItem }: { items: T[]; emptyLabel: string; renderItem: (item: T) => ReactNode }) {
+  if (items.length === 0) {
+    return <span className="ssh-choice-empty">{emptyLabel}</span>
+  }
+
+  return <span className="ssh-choice-list">{items.map((item) => renderItem(item))}</span>
+}
+
+function sshAliasSummary(alias: LocalSshHostAlias): string {
+  const parts = [
+    alias.user ? `${alias.user}@` : '',
+    alias.hostName ?? '',
+    alias.port ? `:${alias.port}` : '',
+  ].join('')
+  const identities = alias.identityFiles.length > 0 ? alias.identityFiles.slice(0, 2).join(', ') : ''
+  if (parts && identities) {
+    return i18n.t('settings:desktopConnection.sshAliases.summaryWithIdentity', { target: parts, identity: identities })
+  }
+  if (parts) {
+    return parts
+  }
+  if (identities) {
+    return identities
+  }
+  return i18n.t('settings:desktopConnection.sshAliases.aliasOnly')
+}
+
+function sshIdentitySummary(identity: LocalSshIdentity): string {
+  const aliases = identity.hostAliases?.filter(Boolean) ?? []
+  if (aliases.length > 0) {
+    return i18n.t('settings:desktopConnection.identity.usedBy', {
+      aliases: aliases.slice(0, 2).join(', '),
+      suffix: aliases.length > 2 ? '...' : '',
+    })
+  }
+  return identity.source === 'config'
+    ? i18n.t('settings:desktopConnection.identity.fromConfig')
+    : i18n.t('settings:desktopConnection.identity.defaultKey')
+}
+
 function SettingsAutosaveStatus({ saveState, onRetry }: { saveState: ConfigSaveState; onRetry: () => void }) {
   const { t } = useTranslation('settings')
   if (saveState === 'idle') {
@@ -2799,9 +3044,7 @@ function activeSectionCopy(section: SettingsSection) {
 }
 
 function authLabel(value?: string) {
-  if (value === 'githubApp+staticToken') return i18n.t('settings:credentials.authLabel.githubAppToken')
   if (value === 'githubApp') return i18n.t('settings:credentials.authLabel.githubApp')
-  if (value === 'staticToken') return i18n.t('settings:credentials.authLabel.staticToken')
   if (value === 'projectProfiles') return i18n.t('settings:credentials.authLabel.projectProfiles')
   if (value === 'accessToken' || value === 'token') return i18n.t('settings:credentials.authLabel.token')
   if (value === 'partial') return i18n.t('settings:credentials.authLabel.partial')
@@ -3049,7 +3292,6 @@ function migrateGitLabAutomationKeys(
 
 function normalizeGitHubSecrets(secrets?: GitHubSecretConfiguration | null): GitHubSecretConfiguration {
   return {
-    token: normalizeSecretField(secrets?.token),
     privateKey: normalizeSecretField(secrets?.privateKey),
     privateKeyPath: normalizeSecretField(secrets?.privateKeyPath),
     webhookSecret: normalizeSecretField(secrets?.webhookSecret),

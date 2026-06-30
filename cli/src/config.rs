@@ -21,6 +21,8 @@ pub const DEFAULT_MODEL: &str = "claude-opus-4-8";
 pub const DEFAULT_ORATORIO_PORT: u16 = 5087;
 pub const DEFAULT_APPSERVER_PORT: u16 = 19100;
 pub const DEFAULT_DASHBOARD_PORT: u16 = 18080;
+pub const DEFAULT_GITHUB_PRIVATE_KEY_CONTAINER_PATH: &str = "/secrets/github-app.pem";
+pub const DEFAULT_GITHUB_PRIVATE_KEY_FILE_NAME: &str = "github-app.pem";
 pub const CLI_TARGET: &str = "linux-x64";
 
 pub fn cli_artifact_name(version: &str) -> String {
@@ -44,6 +46,10 @@ impl GithubProject {
 
     pub fn repository(&self) -> String {
         format!("{}/{}", self.owner, self.repo)
+    }
+
+    pub fn owner(&self) -> &str {
+        &self.owner
     }
 
     pub fn default_clone_url(&self) -> String {
@@ -96,7 +102,35 @@ impl FromStr for GithubProject {
 pub struct GitHubAppConfig {
     pub app_id: String,
     pub private_key_path: String,
+    pub private_key_file: Option<PathBuf>,
+    pub installation_profiles: Vec<GitHubInstallationProfile>,
+    pub writes_enabled: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GitHubInstallationArg {
+    pub owner: String,
     pub installation_id: String,
+}
+
+impl FromStr for GitHubInstallationArg {
+    type Err = anyhow::Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        let Some((owner, installation_id)) = value.split_once('=') else {
+            bail!("GitHub installation must look like owner=installation_id");
+        };
+        let owner = owner.trim();
+        let installation_id = installation_id.trim();
+        if owner.is_empty() || installation_id.is_empty() || owner.contains('/') {
+            bail!("GitHub installation must look like owner=installation_id");
+        }
+
+        Ok(Self {
+            owner: owner.to_string(),
+            installation_id: installation_id.to_string(),
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -104,7 +138,6 @@ pub struct DeploymentOptions {
     pub provider: String,
     pub model: String,
     pub dotcraft_api_key: String,
-    pub github_token: String,
     pub github_app: Option<GitHubAppConfig>,
     pub repos: Vec<GithubProject>,
     pub auto_review: bool,
@@ -118,6 +151,7 @@ pub struct GeneratedDeployment {
     pub compose: String,
     pub env: String,
     pub config: String,
+    pub private_key_file: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug)]
@@ -237,12 +271,17 @@ pub struct AutomationConfig {
 
 pub fn build_deployment(options: &DeploymentOptions) -> Result<GeneratedDeployment> {
     validate_workspace_dir_names(&options.repos)?;
+    validate_github_app_options(options)?;
     let config = build_config(options);
     let config = serde_json::to_string_pretty(&config).context("failed to serialize config")?;
     Ok(GeneratedDeployment {
         compose: render_compose(options),
         env: render_env(options),
         config: format!("{config}\n"),
+        private_key_file: options
+            .github_app
+            .as_ref()
+            .and_then(|app| app.private_key_file.clone()),
     })
 }
 
@@ -256,20 +295,11 @@ pub fn build_config(options: &DeploymentOptions) -> ConfigDocument {
             .collect::<Vec<_>>(),
     );
     if let Some(app) = &options.github_app {
-        doc.oratorio.github.writes_enabled = true;
+        doc.oratorio.github.writes_enabled = app.writes_enabled;
         doc.oratorio.github.app_id = Some(app.app_id.clone());
         doc.oratorio.github.private_key_path = Some(app.private_key_path.clone());
-        doc.oratorio.github.installation_profiles = unique_sorted(
-            repos
-                .iter()
-                .map(|repo| GitHubInstallationProfile {
-                    instance: "github.com".to_string(),
-                    owner: repo.owner.clone(),
-                    installation_id: app.installation_id.clone(),
-                    source: "manual".to_string(),
-                })
-                .collect::<Vec<_>>(),
-        );
+        doc.oratorio.github.installation_profiles =
+            unique_sorted(app.installation_profiles.clone());
     }
 
     doc.oratorio.dotcraft.app_server_url = format!("ws://dotcraft:{}/ws", options.appserver_port);
@@ -287,6 +317,43 @@ pub fn build_config(options: &DeploymentOptions) -> ConfigDocument {
     }
 
     doc
+}
+
+pub fn build_github_app_config(
+    repos: &[GithubProject],
+    app_id: Option<String>,
+    private_key_path: Option<String>,
+    private_key_file: Option<PathBuf>,
+    installation_args: Vec<GitHubInstallationArg>,
+    installation_id: Option<String>,
+    writes_enabled: bool,
+) -> Result<GitHubAppConfig> {
+    let app_id = require_trimmed(app_id, "GitHub App ID is required.")?;
+    let (private_key_path, private_key_file) = match (
+        optional_trimmed(private_key_path),
+        private_key_file.filter(|path| !path.as_os_str().is_empty()),
+    ) {
+        (Some(_), Some(_)) => bail!(
+            "Use either --github-app-private-key-path or --github-app-private-key-file, not both."
+        ),
+        (Some(path), None) => (path, None),
+        (None, Some(file)) => (
+            DEFAULT_GITHUB_PRIVATE_KEY_CONTAINER_PATH.to_string(),
+            Some(file),
+        ),
+        (None, None) => bail!("GitHub App private key path or file is required."),
+    };
+
+    let installation_profiles =
+        build_installation_profiles(repos, installation_args, installation_id)?;
+
+    Ok(GitHubAppConfig {
+        app_id,
+        private_key_path,
+        private_key_file,
+        installation_profiles,
+        writes_enabled,
+    })
 }
 
 pub fn add_github_repo(
@@ -343,6 +410,12 @@ pub fn write_generated(paths: &DeploymentPaths, generated: &GeneratedDeployment)
     secure_secrets_dir(&paths.secrets)?;
     fs::write(&paths.compose, &generated.compose)?;
     write_secret_file(&paths.env, &generated.env)?;
+    if let Some(source) = &generated.private_key_file {
+        let private_key =
+            fs::read(source).with_context(|| format!("failed to read {}", source.display()))?;
+        let target = paths.secrets.join(DEFAULT_GITHUB_PRIVATE_KEY_FILE_NAME);
+        write_secret_bytes(&target, &private_key)?;
+    }
     fs::write(&paths.config, &generated.config)?;
     fs::write(
         paths.root.join(".gitignore"),
@@ -391,8 +464,6 @@ DOTCRAFT_API_KEY={dotcraft_api_key}
 ORATORIO_PORT={oratorio_port}
 ORATORIO_PUBLISH_HOST=127.0.0.1
 ORATORIO_WORKSPACE_DIR=./workspace
-
-GITHUB_TOKEN={github_token}
 "#,
         appserver_token = generate_token(),
         appserver_port = options.appserver_port,
@@ -400,8 +471,7 @@ GITHUB_TOKEN={github_token}
         provider = options.provider,
         model = options.model,
         dotcraft_api_key = options.dotcraft_api_key,
-        oratorio_port = options.oratorio_port,
-        github_token = options.github_token
+        oratorio_port = options.oratorio_port
     )
 }
 
@@ -441,7 +511,6 @@ services:
       ORATORIO_CONFIG_PATH: /etc/oratorio/oratorio.config.json
       Oratorio__Settings__Writable: "false"
       Oratorio__DotCraft__AppServerToken: ${{APPSERVER_TOKEN:-}}
-      Oratorio__GitHub__Token: ${{GITHUB_TOKEN:-}}
     volumes:
       - ${{ORATORIO_WORKSPACE_DIR:-./workspace}}:/workspace
       - ./oratorio.config.json:/etc/oratorio/oratorio.config.json:ro
@@ -468,6 +537,97 @@ fn push_unique(values: &mut Vec<String>, value: String) {
         values.push(value);
         values.sort_by_key(|item| item.to_lowercase());
     }
+}
+
+fn validate_github_app_options(options: &DeploymentOptions) -> Result<()> {
+    let Some(app) = &options.github_app else {
+        bail!(
+            "GitHub App credentials are required. Pass --github-app-id and either --github-app-private-key-path or --github-app-private-key-file."
+        );
+    };
+    if app.app_id.trim().is_empty() {
+        bail!("GitHub App ID is required.");
+    }
+    if app.private_key_path.trim().is_empty() {
+        bail!("GitHub App private key path is required.");
+    }
+
+    Ok(())
+}
+
+fn build_installation_profiles(
+    repos: &[GithubProject],
+    installation_args: Vec<GitHubInstallationArg>,
+    installation_id: Option<String>,
+) -> Result<Vec<GitHubInstallationProfile>> {
+    let owners = repos
+        .iter()
+        .map(|repo| repo.owner.clone())
+        .collect::<BTreeSet<_>>();
+    let mut profiles = Vec::new();
+    let mut seen_owner_keys = BTreeSet::new();
+
+    if let Some(installation_id) = optional_trimmed(installation_id) {
+        if !installation_args.is_empty() {
+            bail!(
+                "Use either --github-installation-id or --github-installation owner=id, not both."
+            );
+        }
+        if owners.len() != 1 {
+            bail!(
+                "--github-installation-id can only be used with a single repository owner. Use --github-installation owner=id for multiple owners."
+            );
+        }
+        let owner = owners.iter().next().cloned().unwrap_or_default();
+        profiles.push(github_installation_profile(owner, installation_id));
+        return Ok(profiles);
+    }
+
+    for arg in installation_args {
+        if !owners
+            .iter()
+            .any(|owner| owner.eq_ignore_ascii_case(&arg.owner))
+        {
+            bail!(
+                "GitHub installation owner `{}` is not one of the configured repository owners.",
+                arg.owner
+            );
+        }
+        let owner_key = arg.owner.to_lowercase();
+        if !seen_owner_keys.insert(owner_key) {
+            bail!(
+                "GitHub installation owner `{}` was provided more than once.",
+                arg.owner
+            );
+        }
+        profiles.push(github_installation_profile(arg.owner, arg.installation_id));
+    }
+
+    Ok(unique_sorted(profiles))
+}
+
+fn github_installation_profile(
+    owner: String,
+    installation_id: String,
+) -> GitHubInstallationProfile {
+    GitHubInstallationProfile {
+        instance: "github.com".to_string(),
+        owner,
+        installation_id,
+        source: "manual".to_string(),
+    }
+}
+
+fn require_trimmed(value: Option<String>, message: &str) -> Result<String> {
+    optional_trimmed(value)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| anyhow::anyhow!(message.to_string()))
+}
+
+fn optional_trimmed(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn workspace_path(repo: &GithubProject) -> String {
@@ -552,6 +712,16 @@ fn secure_secrets_dir(_path: &Path) -> Result<()> {
 
 #[cfg(unix)]
 fn write_secret_file(path: &Path, contents: &str) -> Result<()> {
+    write_secret_bytes(path, contents.as_bytes())
+}
+
+#[cfg(not(unix))]
+fn write_secret_file(path: &Path, contents: &str) -> Result<()> {
+    fs::write(path, contents).with_context(|| format!("failed to write {}", path.display()))
+}
+
+#[cfg(unix)]
+fn write_secret_bytes(path: &Path, contents: &[u8]) -> Result<()> {
     let mut file = OpenOptions::new()
         .write(true)
         .create(true)
@@ -559,14 +729,14 @@ fn write_secret_file(path: &Path, contents: &str) -> Result<()> {
         .mode(0o600)
         .open(path)
         .with_context(|| format!("failed to write {}", path.display()))?;
-    file.write_all(contents.as_bytes())
+    file.write_all(contents)
         .with_context(|| format!("failed to write {}", path.display()))?;
     fs::set_permissions(path, fs::Permissions::from_mode(0o600))
         .with_context(|| format!("failed to secure {}", path.display()))
 }
 
 #[cfg(not(unix))]
-fn write_secret_file(path: &Path, contents: &str) -> Result<()> {
+fn write_secret_bytes(path: &Path, contents: &[u8]) -> Result<()> {
     fs::write(path, contents).with_context(|| format!("failed to write {}", path.display()))
 }
 
@@ -590,8 +760,18 @@ mod tests {
             provider: DEFAULT_PROVIDER.to_string(),
             model: DEFAULT_MODEL.to_string(),
             dotcraft_api_key: "model-key".to_string(),
-            github_token: "github-token".to_string(),
-            github_app: None,
+            github_app: Some(GitHubAppConfig {
+                app_id: "12345".to_string(),
+                private_key_path: DEFAULT_GITHUB_PRIVATE_KEY_CONTAINER_PATH.to_string(),
+                private_key_file: None,
+                installation_profiles: vec![GitHubInstallationProfile {
+                    instance: "github.com".to_string(),
+                    owner: "owner".to_string(),
+                    installation_id: "67890".to_string(),
+                    source: "manual".to_string(),
+                }],
+                writes_enabled: true,
+            }),
             repos: vec!["github:owner/repo-a".parse().unwrap()],
             auto_review: true,
             oratorio_port: 5087,
@@ -632,6 +812,15 @@ mod tests {
                 .contains("Oratorio__Settings__Writable: \"false\"")
         );
         assert!(generated.env.contains("APPSERVER_PORT=19100"));
+        assert!(!generated.env.contains("GITHUB_TOKEN"));
+        assert!(!generated.compose.contains("Oratorio__GitHub__Token"));
+        assert!(generated.config.contains("\"AppId\": \"12345\""));
+        assert!(
+            generated
+                .config
+                .contains("\"PrivateKeyPath\": \"/secrets/github-app.pem\"")
+        );
+        assert!(generated.config.contains("\"WritesEnabled\": true"));
         assert!(
             generated
                 .config
@@ -643,6 +832,94 @@ mod tests {
                 .contains("\"WorkspacePath\": \"/workspace/owner__repo-a\"")
         );
         assert!(generated.config.contains("\"AutoReviewRepositories\""));
+    }
+
+    #[test]
+    fn build_deployment_rejects_missing_github_app() {
+        let mut options = options();
+        options.github_app = None;
+
+        let error = build_deployment(&options).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("GitHub App credentials are required")
+        );
+    }
+
+    #[test]
+    fn generated_config_can_disable_github_writes() {
+        let mut options = options();
+        options.github_app.as_mut().unwrap().writes_enabled = false;
+
+        let generated = build_deployment(&options).unwrap();
+
+        assert!(generated.config.contains("\"WritesEnabled\": false"));
+    }
+
+    #[test]
+    fn github_app_config_supports_single_owner_installation_id() {
+        let repos = vec!["owner/repo-a".parse().unwrap()];
+
+        let app = build_github_app_config(
+            &repos,
+            Some("12345".to_string()),
+            Some(DEFAULT_GITHUB_PRIVATE_KEY_CONTAINER_PATH.to_string()),
+            None,
+            Vec::new(),
+            Some("67890".to_string()),
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(app.installation_profiles.len(), 1);
+        assert_eq!(app.installation_profiles[0].owner, "owner");
+        assert_eq!(app.installation_profiles[0].installation_id, "67890");
+    }
+
+    #[test]
+    fn github_app_config_rejects_single_installation_id_for_multiple_owners() {
+        let repos = vec![
+            "owner/repo-a".parse().unwrap(),
+            "other/repo-b".parse().unwrap(),
+        ];
+
+        let error = build_github_app_config(
+            &repos,
+            Some("12345".to_string()),
+            Some(DEFAULT_GITHUB_PRIVATE_KEY_CONTAINER_PATH.to_string()),
+            None,
+            Vec::new(),
+            Some("67890".to_string()),
+            true,
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("--github-installation-id"));
+    }
+
+    #[test]
+    fn github_app_config_with_private_key_file_uses_container_secret_path() {
+        let repos = vec!["owner/repo-a".parse().unwrap()];
+        let private_key_file = PathBuf::from("github-app.pem");
+
+        let app = build_github_app_config(
+            &repos,
+            Some("12345".to_string()),
+            None,
+            Some(private_key_file.clone()),
+            Vec::new(),
+            None,
+            true,
+        )
+        .unwrap();
+
+        assert_eq!(
+            app.private_key_path,
+            DEFAULT_GITHUB_PRIVATE_KEY_CONTAINER_PATH
+        );
+        assert_eq!(app.private_key_file, Some(private_key_file));
     }
 
     #[test]
@@ -730,6 +1007,25 @@ mod tests {
         let secrets_mode = fs::metadata(&paths.secrets).unwrap().permissions().mode() & 0o777;
         assert_eq!(env_mode, 0o600);
         assert_eq!(secrets_mode, 0o700);
+    }
+
+    #[test]
+    fn write_generated_copies_private_key_file_to_secrets() {
+        let source_dir = tempfile::tempdir().unwrap();
+        let source = source_dir.path().join("source.pem");
+        fs::write(&source, "private-key").unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let paths = DeploymentPaths::new(root.path());
+        let mut options = options();
+        let app = options.github_app.as_mut().unwrap();
+        app.private_key_file = Some(source);
+        app.private_key_path = DEFAULT_GITHUB_PRIVATE_KEY_CONTAINER_PATH.to_string();
+        let generated = build_deployment(&options).unwrap();
+
+        write_generated(&paths, &generated).unwrap();
+
+        let target = paths.secrets.join(DEFAULT_GITHUB_PRIVATE_KEY_FILE_NAME);
+        assert_eq!(fs::read_to_string(target).unwrap(), "private-key");
     }
 
     #[test]

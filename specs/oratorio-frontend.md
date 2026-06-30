@@ -111,14 +111,22 @@ Desktop backend connection modes:
 - `local` is the default mode and preserves the current Desktop behavior:
   Desktop starts or reuses a local headless backend, passes the server URL to the
   renderer, and may restart or shut down only the backend process it owns.
-- `remote` connects to a single Desktop-local `remoteServerUrl`. Desktop must
-  not spawn, restart, or shut down a backend in this mode.
-- Desktop-local preferences include `serverMode: "local" | "remote"` and
-  `remoteServerUrl: string | null`. These values are local Desktop preferences,
-  not backend Settings or the server configuration overlay.
+- `remote` connects through either a direct Desktop-local `remoteServerUrl` or a
+  Desktop-owned SSH tunnel that forwards a local loopback port to the remote
+  Oratorio loopback port. Desktop must not spawn, restart, or shut down a
+  backend in this mode.
+- Desktop-local preferences include `serverMode: "local" | "remote"`,
+  `remoteTransport: "url" | "sshTunnel"`, `remoteServerUrl: string | null`,
+  and SSH tunnel fields (`sshTarget`, optional `identityFile`, remote host,
+  remote port, preferred local port, and auto-start). These values are local
+  Desktop preferences, not backend Settings or the server configuration overlay.
 - Remote URLs are HTTP or HTTPS origins with no v1 path prefix or authentication
   fields. Desktop validates a remote URL with `GET /health` and requires
   `{ service: "oratorio", status: "ok" }` before treating it as connected.
+- SSH tunnel mode uses the system `ssh` binary, local SSH config/agent/key
+  authentication, loopback-only `-L` forwarding, `BatchMode=yes`, and
+  `ExitOnForwardFailure=yes`. Desktop validates the tunneled local HTTP origin
+  with the same `/health` contract before treating it as connected.
 - The renderer derives API and realtime endpoints from the selected backend
   base URL: `<baseUrl>/api/v1` for HTTP requests and
   `ws(s)://<baseUrl>/api/v1/stream` for board updates.
@@ -128,9 +136,9 @@ Desktop backend connection modes:
 - The desktop bridge status exposes backend ownership explicitly, such as
   `backendKind: "managedLocal" | "reusedLocal" | "remote"`, instead of relying
   on `reusedExistingServer` to distinguish remote and local ownership.
-- The titlebar and status menus distinguish local and remote backends. Restart
-  controls are shown only for local backends; remote mode uses reconnect and
-  change-address controls instead.
+- The titlebar and status menus distinguish local, remote URL, and remote tunnel
+  backends. Restart controls are shown only for local backends; remote mode uses
+  reconnect and change-address controls instead.
 - Remote address entry is available on startup/error connection surfaces and
   from General local preferences after the renderer has loaded.
 

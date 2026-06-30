@@ -19,7 +19,7 @@ export const settingsDiagnosticsFixture = {
   gitHub: {
     available: true,
     enabled: true,
-    authentication: 'app',
+    authentication: 'githubApp',
     writesEnabled: true,
     writeConfigured: true,
     webhookSecretConfigured: true,
@@ -94,7 +94,6 @@ export const serverConfigurationFixture = {
       repositories: ['example-owner/oratorio'],
       writesEnabled: true,
       secrets: {
-        token: { configured: true, mode: 'unchanged', value: null },
         privateKey: { configured: true, mode: 'unchanged', value: null },
         privateKeyPath: { configured: false, mode: 'unchanged', value: null },
         webhookSecret: { configured: true, mode: 'unchanged', value: null },

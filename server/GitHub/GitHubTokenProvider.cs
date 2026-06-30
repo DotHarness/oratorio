@@ -31,14 +31,9 @@ public sealed class GitHubTokenProvider(
     {
         var current = options.CurrentValue;
         var status = credentials.Resolve(current);
-        if (status.HasStaticToken && !status.HasAppAuthentication)
-        {
-            return credentials.ResolveSecret(current.Token);
-        }
-
         if (!status.HasAppAuthentication)
         {
-            return status.HasStaticToken ? credentials.ResolveSecret(current.Token) : null;
+            throw new GitHubAppAuthenticationRequiredException();
         }
 
         var installationId = await installations.ResolveInstallationIdAsync(current, repository, ct)

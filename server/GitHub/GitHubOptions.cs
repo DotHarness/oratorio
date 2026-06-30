@@ -14,15 +14,12 @@ public sealed class GitHubOptions
     public string? PrivateKey { get; set; }
     public string? PrivateKeyPath { get; set; }
     public string? WebhookSecret { get; set; }
-    public string? Token { get; set; }
     public string[] Repositories { get; set; } = [];
     public bool WritesEnabled { get; set; }
 
     public bool HasAppAuthentication =>
         !string.IsNullOrWhiteSpace(AppId) &&
         (!string.IsNullOrWhiteSpace(PrivateKey) || !string.IsNullOrWhiteSpace(PrivateKeyPath));
-
-    public bool HasStaticToken => !string.IsNullOrWhiteSpace(Token);
 
     public bool CanWrite => WritesEnabled && HasAppAuthentication;
 }
