@@ -297,7 +297,10 @@ public sealed class GitHubSyncCoordinator(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "GitHub sync failed for repository run {RepositoryRunId}.", repositoryRunId);
-            await FailRepositoryRunAsync(repositoryRunId, "githubSyncFailed", ex.Message, ct);
+            var code = ex is GitHubAppAuthenticationRequiredException authRequired
+                ? authRequired.ErrorCode
+                : "githubSyncFailed";
+            await FailRepositoryRunAsync(repositoryRunId, code, ex.Message, ct);
         }
         finally
         {

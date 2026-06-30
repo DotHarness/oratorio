@@ -33,7 +33,7 @@ public sealed class GitHubTokenProvider(
         var status = credentials.Resolve(current);
         if (!status.HasAppAuthentication)
         {
-            return null;
+            throw new GitHubAppAuthenticationRequiredException();
         }
 
         var installationId = await installations.ResolveInstallationIdAsync(current, repository, ct)

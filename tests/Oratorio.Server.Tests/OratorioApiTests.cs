@@ -1251,6 +1251,28 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
+    public async Task GitHubSync_RequiresAppAuthentication()
+    {
+        await using var app = new TestOratorioApp(settings: new Dictionary<string, string?>
+        {
+            ["Oratorio:GitHub:AppId"] = "",
+            ["Oratorio:GitHub:PrivateKey"] = "",
+            ["Oratorio:GitHub:PrivateKeyPath"] = ""
+        });
+        var client = app.CreateClient();
+
+        var sync = await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+
+        Assert.Equal(["example-owner/oratorio"], sync.RepositoriesScanned);
+        Assert.Equal(0, sync.IssuesImported);
+        Assert.Equal(0, sync.PullRequestsImported);
+        var error = Assert.Single(sync.Errors);
+        Assert.Equal("example-owner/oratorio", error.Repository);
+        Assert.Equal("githubAppAuthRequired", error.Code);
+        Assert.Contains("GitHub App ID and private key", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task GitHubSync_ImportsIssuesPullRequestsComments_AndSupportsItemIdRoutes()
     {
         var fakeGitHub = new FakeGitHubApiClient();
@@ -4574,6 +4596,31 @@ public sealed class OratorioApiTests
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(JsonOptions);
         Assert.Equal("invalidTransition", error?.Error.Code);
+    }
+
+    [Fact]
+    public async Task GitHubTokenProvider_RequiresAppAuthentication()
+    {
+        var handler = new CountingHandler();
+        var provider = new GitHubTokenProvider(
+            new StaticHttpClientFactory(new HttpClient(handler) { BaseAddress = new Uri("https://api.github.test") }),
+            new StaticOptionsMonitor<GitHubOptions>(new GitHubOptions
+            {
+                Endpoint = "https://api.github.test"
+            }),
+            new FixedClock(DateTimeOffset.Parse("2026-05-04T00:00:00Z")),
+            new GitHubCredentialResolver(new PassthroughConfigurationSecretProtector()),
+            new GitHubInstallationResolver(
+                new StaticHttpClientFactory(new HttpClient(handler) { BaseAddress = new Uri("https://api.github.test") }),
+                new FixedClock(DateTimeOffset.Parse("2026-05-04T00:00:00Z")),
+                new GitHubCredentialResolver(new PassthroughConfigurationSecretProtector())));
+
+        var error = await Assert.ThrowsAsync<GitHubAppAuthenticationRequiredException>(
+            () => provider.GetBearerTokenAsync(new GitHubRepositoryRef("dotcraft", "oratorio"), CancellationToken.None));
+
+        Assert.Equal("githubAppAuthRequired", error.ErrorCode);
+        Assert.Contains("GitHub App ID and private key", error.Message, StringComparison.Ordinal);
+        Assert.Equal(0, handler.Count);
     }
 
     [Fact]

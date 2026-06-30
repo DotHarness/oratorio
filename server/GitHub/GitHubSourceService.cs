@@ -67,6 +67,10 @@ public sealed class GitHubSourceService(
                 comments += result.Comments;
                 skipped += result.Skipped;
             }
+            catch (GitHubAppAuthenticationRequiredException ex)
+            {
+                errors.Add(new GitHubSyncErrorDto(repository.FullName, ex.ErrorCode, ex.Message));
+            }
             catch (Exception ex) when (ex is HttpRequestException or JsonException or InvalidOperationException)
             {
                 errors.Add(new GitHubSyncErrorDto(repository.FullName, "githubSyncFailed", ex.Message));
