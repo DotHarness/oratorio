@@ -77,11 +77,16 @@ After the stack starts, the CLI prints the SSH tunnel command:
 ssh -N -L 5087:127.0.0.1:5087 user@your-server
 ```
 
-Then set Oratorio Desktop's backend URL to:
+In Oratorio Desktop, use **Remote > SSH tunnel** and choose a local SSH config
+alias such as `your-server`, or use **Remote > URL** after opening the tunnel
+manually. The tunneled backend URL is:
 
 ```text
 http://127.0.0.1:5087
 ```
+
+Desktop tunnel mode uses the system `ssh` binary and your local SSH config,
+keys, or agent. It does not store SSH passwords or private key contents.
 
 ## Operations
 

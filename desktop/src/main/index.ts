@@ -9,6 +9,7 @@ import {
 } from './OratorioServerManager'
 import { appBindingProtocol, canDeliverAppBindingHandoff, extractAppBindingUrls, shouldActivateWindowForAppBindingUrls } from './appBindingActivation'
 import { resolveDesktopPreferencesPath, resolveDesktopSettingsRoot } from './desktopPaths'
+import { inspectLocalSshConfig } from './localSshConfig'
 import { buildRendererStartupQuery, buildRendererStartupUrl, resolveStartupTheme } from './startupTheme'
 import { buildStatusPageHtml, svgToDataUri, type StatusPageTheme } from './statusPage'
 import {
@@ -25,6 +26,13 @@ import {
   type OratorioWindowState
 } from './windowChrome'
 import { applyWindowBackdropTheme, resolveWindowBackdropOptions } from './windowTheme'
+import {
+  DEFAULT_CONNECTION_PREFERENCES,
+  isValidSshTarget,
+  normalizeSshTunnelPreferences,
+  type OratorioRemoteTransport,
+  type OratorioSshTunnelPreferences
+} from '../shared/desktopConnection'
 
 let mainWindow: BrowserWindow | null = null
 let serverManager: OratorioServerManager | null = null
@@ -39,6 +47,8 @@ type DesktopPreferences = {
   closeBehavior?: OratorioWindowCloseBehavior
   serverMode?: OratorioServerConnectionPreferences['serverMode']
   remoteServerUrl?: string | null
+  remoteTransport?: OratorioRemoteTransport
+  sshTunnel?: Partial<OratorioSshTunnelPreferences> | null
 }
 
 app.setName('Oratorio')
@@ -159,6 +169,7 @@ function registerIpc(): void {
     serverConnection: getServerConnectionPreferences()
   }))
   ipcMain.handle('desktop:get-server-connection-preferences', () => getServerConnectionPreferences())
+  ipcMain.handle('desktop:get-local-ssh-config', () => inspectLocalSshConfig())
   ipcMain.handle('desktop:set-server-connection-preferences', async (_event, draft: Partial<OratorioServerConnectionPreferences>) => {
     if (!serverManager) {
       throw new Error('Server manager is not ready.')
@@ -429,24 +440,46 @@ function getServerConnectionPreferences(): OratorioServerConnectionPreferences {
 
 function normalizeStoredServerConnection(preferences: Partial<DesktopPreferences>): OratorioServerConnectionPreferences {
   const serverMode = preferences.serverMode === 'remote' ? 'remote' : 'local'
+  const remoteTransport = preferences.remoteTransport === 'sshTunnel' ? 'sshTunnel' : 'url'
   const remoteServerUrl = typeof preferences.remoteServerUrl === 'string' && preferences.remoteServerUrl.trim()
     ? preferences.remoteServerUrl.trim().replace(/\/+$/, '')
     : null
-  return { serverMode, remoteServerUrl }
+  return {
+    serverMode,
+    remoteServerUrl,
+    remoteTransport,
+    sshTunnel: normalizeSshTunnelPreferences(preferences.sshTunnel)
+  }
 }
 
 function normalizeServerConnectionDraft(draft: Partial<OratorioServerConnectionPreferences>): OratorioServerConnectionPreferences {
   const current = getServerConnectionPreferences()
   const serverMode = draft.serverMode === 'remote' ? 'remote' : 'local'
+  const remoteTransport = draft.remoteTransport === 'sshTunnel' || draft.remoteTransport === 'url'
+    ? draft.remoteTransport
+    : current.remoteTransport
   const remoteCandidate = draft.remoteServerUrl !== undefined ? draft.remoteServerUrl : current.remoteServerUrl
-  const remoteServerUrl = serverMode === 'remote'
+  const remoteServerUrl = serverMode === 'remote' && remoteTransport === 'url'
     ? (remoteCandidate?.trim() ? normalizeRemoteServerUrl(remoteCandidate) : null)
     : (remoteCandidate?.trim() ? remoteCandidate.trim().replace(/\/+$/, '') : null)
-  if (serverMode === 'remote' && !remoteServerUrl) {
+  const sshTunnel = normalizeSshTunnelPreferences({
+    ...current.sshTunnel,
+    ...draft.sshTunnel
+  })
+  if (serverMode === 'remote' && remoteTransport === 'url' && !remoteServerUrl) {
     throw new Error('Remote Oratorio server URL is not configured.')
   }
+  if (serverMode === 'remote' && remoteTransport === 'sshTunnel' && !isValidSshTarget(sshTunnel.sshTarget)) {
+    throw new Error('SSH target is required. Use a host, user@host, or SSH config alias.')
+  }
 
-  return { serverMode, remoteServerUrl }
+  return {
+    ...DEFAULT_CONNECTION_PREFERENCES,
+    serverMode,
+    remoteServerUrl,
+    remoteTransport,
+    sshTunnel
+  }
 }
 
 function getStartupTheme(): DesktopTheme {

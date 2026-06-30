@@ -34,7 +34,7 @@
   },
   "desktopConnection": {
     "title": "后端连接",
-    "description": "仅存储在本机 Desktop。远端模式会连接一个私有 Oratorio 后端 URL。",
+    "description": "仅存储在本机 Desktop。远端模式会连接一个私有 Oratorio 后端。",
     "remoteReadOnlyReason": "远端服务器配置由服务器侧管理。",
     "mode": {
       "label": "模式",
@@ -42,9 +42,47 @@
       "local": "本地",
       "remote": "远端"
     },
+    "transport": {
+      "label": "连接方式",
+      "description": "使用私有 URL，或让 Desktop 打开本机 SSH tunnel。",
+      "url": "URL",
+      "sshTunnel": "SSH tunnel"
+    },
     "remoteUrl": {
       "label": "远端 URL",
       "description": "仅支持 HTTP 或 HTTPS origin，例如 SSH tunnel 或 VPN 地址。"
+    },
+    "sshTarget": {
+      "label": "SSH target",
+      "description": "主机、user@host，或本机 SSH config 中的 alias。"
+    },
+    "sshAliases": {
+      "label": "已保存 SSH alias",
+      "description": "从本机 SSH config 读取。",
+      "loading": "正在读取本机 SSH config。",
+      "checking": "正在检查 SSH config...",
+      "empty": "没有找到已保存的 SSH alias。",
+      "aliasOnly": "SSH config alias",
+      "summaryWithIdentity": "{{target}} · {{identity}}"
+    },
+    "identity": {
+      "label": "Identity override",
+      "description": "可选。留空则使用 SSH config 或 ssh-agent。",
+      "existing": "已有密钥",
+      "existingDescription": "在本机检测到的 identity file。",
+      "empty": "没有找到 identity file。",
+      "usedBy": "用于 {{aliases}}{{suffix}}",
+      "fromConfig": "来自 SSH config",
+      "defaultKey": "默认密钥"
+    },
+    "remotePort": {
+      "label": "远端端口",
+      "description": "服务器 loopback 上的 Oratorio 后端端口。"
+    },
+    "localPortPolicy": {
+      "label": "本地端口",
+      "description": "Desktop 优先尝试 {{port}}，如被占用会自动选择其他 loopback 端口。",
+      "value": "优先 {{port}}"
     },
     "statusLabel": "后端状态",
     "noServerUrl": "当前没有可用后端 URL。",
@@ -55,6 +93,8 @@
       "stopped": "已停止",
       "starting": "启动中",
       "running": "运行中",
+      "tunnelStarting": "Tunnel 启动中",
+      "tunnelConnected": "Tunnel 已连接",
       "error": "错误",
       "unknown": "未知"
     }

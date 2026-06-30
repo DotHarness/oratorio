@@ -21,24 +21,11 @@ import {
 import { useTranslation } from 'react-i18next'
 import { Tooltip } from '../components/primitives/Tooltip'
 import type { DotCraftAppBindingStatusResponse } from '../lib/types'
-
-type OratorioServerState = 'stopped' | 'starting' | 'running' | 'error'
-type OratorioServerMode = 'local' | 'remote'
-type OratorioBackendKind = 'managedLocal' | 'reusedLocal' | 'remote'
-type OratorioServerConnectionPreferences = {
-  serverMode: OratorioServerMode
-  remoteServerUrl: string | null
-}
-
-type OratorioServerStatus = {
-  state: OratorioServerState
-  serverUrl: string | null
-  reusedExistingServer: boolean
-  backendKind: OratorioBackendKind
-  serverMode: OratorioServerMode
-  pid: number | null
-  errorMessage: string | null
-}
+import type {
+  LocalSshConfigInfo,
+  OratorioServerConnectionPreferences,
+  OratorioServerStatus,
+} from '../../../shared/desktopConnection'
 
 type OratorioWindowState = {
   isMaximized: boolean
@@ -66,6 +53,7 @@ type OratorioDesktopApi = {
   getStatus(): Promise<OratorioDesktopStatus>
   restartServer(): Promise<OratorioServerStatus>
   getServerConnectionPreferences(): Promise<OratorioServerConnectionPreferences>
+  getLocalSshConfig(): Promise<LocalSshConfigInfo>
   setServerConnectionPreferences(preferences: OratorioServerConnectionPreferences): Promise<OratorioDesktopServerConnectionUpdateResult>
   selectDirectory(defaultPath?: string): Promise<string | null>
   getTheme(): Promise<OratorioDesktopTheme | null>
@@ -178,7 +166,9 @@ export function DesktopTitlebar({ dotCraftAppBindingStatus = null, dotcraftIconS
   const backendKind = serverStatus?.backendKind ?? 'managedLocal'
   const isRemoteBackend = backendKind === 'remote' || serverStatus?.serverMode === 'remote'
   const serverLabel = t(`titlebar.serverState.${serverState}`)
-  const backendLabel = t(`titlebar.backendKind.${backendKind}`)
+  const backendLabel = backendKind === 'remote' && serverStatus?.remoteTransport === 'sshTunnel'
+    ? t('titlebar.backendKind.remoteTunnel')
+    : t(`titlebar.backendKind.${backendKind}`)
   const serverTitle = serverStatus?.errorMessage
     ? t('titlebar.serverErrorTitle', { label: backendLabel, message: serverStatus.errorMessage })
     : t('titlebar.serverTitle', { label: backendLabel, state: serverLabel.toLowerCase() })
@@ -249,7 +239,7 @@ export function DesktopTitlebar({ dotCraftAppBindingStatus = null, dotcraftIconS
               <span className={`desktop-status-dot ${serverState}`} aria-hidden="true" />
               <span>
                 <strong>{backendLabel}</strong>
-                <small>{serverStatus?.serverUrl ?? t('titlebar.localServer')}</small>
+                <small>{serverStatus?.tunnel?.localUrl ?? serverStatus?.serverUrl ?? t('titlebar.localServer')}</small>
               </span>
             </div>
             {serverStatus?.errorMessage ? <p className="desktop-titlebar-menu-error">{serverStatus.errorMessage}</p> : null}

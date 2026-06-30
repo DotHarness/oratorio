@@ -10,6 +10,7 @@ import {
 import { setServerBaseUrl } from '../../api'
 import { settingsSections } from '../../settingsSections'
 import { SettingsView } from '../SettingsView'
+import { DEFAULT_CONNECTION_PREFERENCES } from '../../../../shared/desktopConnection'
 
 const githubStatus = {
   available: true,
@@ -143,6 +144,78 @@ describe('SettingsView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Quit app' }))
 
     await waitFor(() => expect(setWindowCloseBehavior).toHaveBeenCalledWith('quitApp'))
+  })
+
+  it('applies a remote SSH tunnel connection from a local SSH alias', async () => {
+    const getLocalSshConfig = vi.fn(async () => ({
+      sshDir: 'C:/Users/test/.ssh',
+      configPath: 'C:/Users/test/.ssh/config',
+      configExists: true,
+      agentAvailable: false,
+      aliases: [
+        {
+          alias: 'oratorio-remote',
+          hostName: 'oratorio.example.test',
+          user: 'root',
+          port: '22',
+          identityFiles: ['~/.ssh/id_ed25519'],
+        },
+      ],
+      identities: [
+        {
+          path: '~/.ssh/id_ed25519',
+          source: 'config' as const,
+          exists: true,
+          hostAliases: ['oratorio-remote'],
+        },
+      ],
+    }))
+    Object.defineProperty(window, 'oratorioDesktop', {
+      configurable: true,
+      value: { getLocalSshConfig },
+    })
+    const onApplyServerConnectionPreferences = vi.fn(async (preferences) => ({
+      preferences,
+      status: {
+        state: 'running' as const,
+        serverUrl: 'http://127.0.0.1:5087',
+        reusedExistingServer: true,
+        backendKind: 'remote' as const,
+        serverMode: 'remote' as const,
+        remoteTransport: preferences.remoteTransport,
+        tunnel: null,
+        pid: null,
+        errorMessage: null,
+      },
+    }))
+
+    renderSettings('/settings/general', {
+      serverConnectionPreferences: DEFAULT_CONNECTION_PREFERENCES,
+      onApplyServerConnectionPreferences,
+    })
+
+    const connectionGroup = (await screen.findByText('Backend connection')).closest('.settings-group') as HTMLElement
+    fireEvent.click(within(connectionGroup).getByRole('button', { name: 'Remote' }))
+    fireEvent.click(within(connectionGroup).getByRole('button', { name: 'SSH tunnel' }))
+
+    expect(await within(connectionGroup).findByText('oratorio-remote')).toBeInTheDocument()
+    const aliasesRow = within(connectionGroup).getByText('Saved SSH aliases').closest('.settings-row') as HTMLElement
+    fireEvent.click(within(aliasesRow).getByRole('button', { name: /oratorio-remote/i }))
+    fireEvent.click(within(connectionGroup).getByRole('button', { name: 'Apply' }))
+
+    await waitFor(() => expect(onApplyServerConnectionPreferences).toHaveBeenCalledOnce())
+    expect(onApplyServerConnectionPreferences.mock.calls[0][0]).toMatchObject({
+      serverMode: 'remote',
+      remoteTransport: 'sshTunnel',
+      sshTunnel: {
+        sshTarget: 'oratorio-remote',
+        identityFile: null,
+        remoteHost: '127.0.0.1',
+        remotePort: 5087,
+        preferredLocalPort: 5087,
+        autoStart: true,
+      },
+    })
   })
 
   it('edits source project cards into source configuration and workspace draft fields', async () => {

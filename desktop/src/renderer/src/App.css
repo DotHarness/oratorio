@@ -6855,6 +6855,61 @@ textarea:focus-visible {
   gap: 8px;
 }
 
+.ssh-choice-list {
+  display: grid;
+  width: min(340px, 42vw);
+  max-height: 156px;
+  gap: 6px;
+  overflow: auto;
+}
+
+.ssh-choice-button {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 7px 9px;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ssh-choice-button:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--border-active);
+}
+
+.ssh-choice-button span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.ssh-choice-button strong,
+.ssh-choice-button small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssh-choice-button strong {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.ssh-choice-button small,
+.ssh-choice-empty {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .status-pill,
 .value-pill,
 .toggle-button,

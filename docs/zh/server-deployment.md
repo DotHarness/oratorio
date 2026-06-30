@@ -75,11 +75,16 @@ Stack 启动后，CLI 会输出 SSH tunnel 命令：
 ssh -N -L 5087:127.0.0.1:5087 user@your-server
 ```
 
-然后在 Oratorio Desktop 中把 backend URL 设置为：
+在 Oratorio Desktop 中，可以使用 **远端 > SSH tunnel** 并选择本机 SSH config
+里的 alias（例如 `your-server`）；也可以手动打开 tunnel 后使用 **远端 > URL**。
+tunnel 后的 backend URL 是：
 
 ```text
 http://127.0.0.1:5087
 ```
+
+Desktop tunnel 模式使用系统 `ssh` 和本机 SSH config、key 或 agent；不会保存
+SSH 密码或私钥内容。
 
 ## 日常运维
 

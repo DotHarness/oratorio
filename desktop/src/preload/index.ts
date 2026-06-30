@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcRendererEvent } from 'electron'
-import type { OratorioServerConnectionPreferences, OratorioServerStatus } from '../main/OratorioServerManager'
+import type { LocalSshConfigInfo, OratorioServerConnectionPreferences, OratorioServerStatus } from '../shared/desktopConnection'
 import type { OratorioWindowState } from '../main/windowChrome'
 
 export interface OratorioDesktopStatus {
@@ -40,6 +40,9 @@ const api = {
   },
   getServerConnectionPreferences(): Promise<OratorioServerConnectionPreferences> {
     return ipcRenderer.invoke('desktop:get-server-connection-preferences')
+  },
+  getLocalSshConfig(): Promise<LocalSshConfigInfo> {
+    return ipcRenderer.invoke('desktop:get-local-ssh-config')
   },
   setServerConnectionPreferences(preferences: OratorioServerConnectionPreferences): Promise<OratorioDesktopServerConnectionUpdateResult> {
     return ipcRenderer.invoke('desktop:set-server-connection-preferences', preferences)

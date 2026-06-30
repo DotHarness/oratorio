@@ -75,6 +75,11 @@ import type {
   WorkItem,
 } from '../lib/types'
 import {
+  DEFAULT_CONNECTION_PREFERENCES,
+  type OratorioServerConnectionPreferences,
+  type OratorioServerStatus,
+} from '../../../shared/desktopConnection'
+import {
   buildRoundHistory,
   clampNumberValue,
   defaultLocalTaskLabels,
@@ -153,22 +158,6 @@ const DEFAULT_APP_BINDING_STATUS: DotCraftAppBindingStatusResponse = {
 }
 type ThemeMode = 'dark' | 'light'
 type InitialLaunchPhase = 'loading' | 'revealing' | 'ready'
-type OratorioServerState = 'stopped' | 'starting' | 'running' | 'error'
-type OratorioServerMode = 'local' | 'remote'
-type OratorioBackendKind = 'managedLocal' | 'reusedLocal' | 'remote'
-type OratorioServerConnectionPreferences = {
-  serverMode: OratorioServerMode
-  remoteServerUrl: string | null
-}
-type OratorioServerStatus = {
-  state: OratorioServerState
-  serverUrl: string | null
-  reusedExistingServer: boolean
-  backendKind: OratorioBackendKind
-  serverMode: OratorioServerMode
-  pid: number | null
-  errorMessage: string | null
-}
 type OratorioDesktopServerConnectionUpdateResult = {
   preferences: OratorioServerConnectionPreferences
   status: OratorioServerStatus
@@ -302,10 +291,7 @@ function OratorioApp() {
   const [serverBaseUrl, setServerBaseUrlState] = useState(() => getServerBaseUrl())
   const [desktopServerStatus, setDesktopServerStatus] = useState<OratorioServerStatus | null>(null)
   const backendServerUrlRef = useRef<string | null>(serverBaseUrl || null)
-  const [serverConnectionPreferences, setServerConnectionPreferences] = useState<OratorioServerConnectionPreferences>({
-    serverMode: 'local',
-    remoteServerUrl: null,
-  })
+  const [serverConnectionPreferences, setServerConnectionPreferences] = useState<OratorioServerConnectionPreferences>(DEFAULT_CONNECTION_PREFERENCES)
   const [serverConnectionSaving, setServerConnectionSaving] = useState(false)
   const [serverConnectionError, setServerConnectionError] = useState<string | null>(null)
   const latestThemeRef = useRef<ThemeMode>(theme)
@@ -919,11 +905,16 @@ function OratorioApp() {
     setDesktopServerStatus(status)
     if (status.serverMode === 'remote') {
       setServerConnectionPreferences((current) => ({
+        ...current,
         serverMode: 'remote',
-        remoteServerUrl: status.serverUrl ?? current.remoteServerUrl,
+        remoteTransport: status.remoteTransport,
+        remoteServerUrl: status.remoteTransport === 'url'
+          ? status.serverUrl ?? current.remoteServerUrl
+          : current.remoteServerUrl,
       }))
     } else {
       setServerConnectionPreferences((current) => ({
+        ...current,
         serverMode: 'local',
         remoteServerUrl: current.remoteServerUrl,
       }))
@@ -2739,6 +2730,7 @@ function OratorioApp() {
             onReconnect: reconnectDesktopServer,
             onSwitchToLocal: async () => {
               await applyServerConnectionPreferences({
+                ...serverConnectionPreferences,
                 serverMode: 'local',
                 remoteServerUrl: serverConnectionPreferences.remoteServerUrl,
               })
@@ -2853,7 +2845,9 @@ function InitialLaunchOverlay({
     }
 
     void remoteConnection.onApply({
+      ...remoteConnection.preferences,
       serverMode: 'remote',
+      remoteTransport: 'url',
       remoteServerUrl: remoteUrlDraft,
     }).catch(() => {})
   }

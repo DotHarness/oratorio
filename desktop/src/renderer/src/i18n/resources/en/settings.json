@@ -34,7 +34,7 @@
   },
   "desktopConnection": {
     "title": "Backend connection",
-    "description": "Stored on this desktop only. Remote mode connects to one private Oratorio backend URL.",
+    "description": "Stored on this desktop only. Remote mode connects to a private Oratorio backend.",
     "remoteReadOnlyReason": "Remote server configuration is managed on the server.",
     "mode": {
       "label": "Mode",
@@ -42,9 +42,47 @@
       "local": "Local",
       "remote": "Remote"
     },
+    "transport": {
+      "label": "Connection method",
+      "description": "Use a direct private URL or let Desktop open a local SSH tunnel.",
+      "url": "URL",
+      "sshTunnel": "SSH tunnel"
+    },
     "remoteUrl": {
       "label": "Remote URL",
       "description": "HTTP or HTTPS origin only, for example a SSH tunnel or VPN address."
+    },
+    "sshTarget": {
+      "label": "SSH target",
+      "description": "Host, user@host, or an alias from your local SSH config."
+    },
+    "sshAliases": {
+      "label": "Saved SSH aliases",
+      "description": "Read from this device's SSH config.",
+      "loading": "Reading local SSH config.",
+      "checking": "Checking SSH config...",
+      "empty": "No saved SSH aliases found.",
+      "aliasOnly": "SSH config alias",
+      "summaryWithIdentity": "{{target}} · {{identity}}"
+    },
+    "identity": {
+      "label": "Identity override",
+      "description": "Optional. Leave empty to use SSH config or ssh-agent.",
+      "existing": "Existing keys",
+      "existingDescription": "Detected on this device.",
+      "empty": "No identity files found.",
+      "usedBy": "Used by {{aliases}}{{suffix}}",
+      "fromConfig": "From SSH config",
+      "defaultKey": "Default key"
+    },
+    "remotePort": {
+      "label": "Remote port",
+      "description": "Oratorio backend port on the server loopback interface."
+    },
+    "localPortPolicy": {
+      "label": "Local port",
+      "description": "Desktop tries {{port}} first and picks another loopback port if needed.",
+      "value": "{{port}} preferred"
     },
     "statusLabel": "Backend status",
     "noServerUrl": "No backend URL is available.",
@@ -55,6 +93,8 @@
       "stopped": "Stopped",
       "starting": "Starting",
       "running": "Running",
+      "tunnelStarting": "Tunnel starting",
+      "tunnelConnected": "Tunnel connected",
       "error": "Error",
       "unknown": "Unknown"
     }

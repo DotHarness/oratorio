@@ -149,7 +149,8 @@
     "backendKind": {
       "managedLocal": "本地后端",
       "reusedLocal": "本地后端",
-      "remote": "远端后端"
+      "remote": "远端后端",
+      "remoteTunnel": "远端 tunnel"
     },
     "serverTitle": "{{label}}{{state}}",
     "serverErrorTitle": "{{label}}：{{message}}",

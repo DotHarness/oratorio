@@ -5,31 +5,30 @@ import { dirname, join, resolve } from 'path'
 import { EventEmitter } from 'events'
 import type { App } from 'electron'
 import { resolveDesktopConfigPath, resolveDesktopStateRoot } from './desktopPaths'
+import { SshTunnelManager } from './SshTunnelManager'
+import {
+  createTunnelStatus,
+  DEFAULT_CONNECTION_PREFERENCES,
+  normalizeSshTunnelPreferences,
+  type OratorioServerConnectionPreferences,
+  type OratorioServerStatus
+} from '../shared/desktopConnection'
 
-export type OratorioServerState = 'stopped' | 'starting' | 'running' | 'error'
-export type OratorioServerMode = 'local' | 'remote'
-export type OratorioBackendKind = 'managedLocal' | 'reusedLocal' | 'remote'
-
-export interface OratorioServerConnectionPreferences {
-  serverMode: OratorioServerMode
-  remoteServerUrl: string | null
-}
-
-export interface OratorioServerStatus {
-  state: OratorioServerState
-  serverUrl: string | null
-  reusedExistingServer: boolean
-  backendKind: OratorioBackendKind
-  serverMode: OratorioServerMode
-  pid: number | null
-  errorMessage: string | null
-}
+export type {
+  LocalSshConfigInfo,
+  OratorioRemoteTransport,
+  OratorioServerConnectionPreferences,
+  OratorioServerStatus,
+  OratorioSshTunnelPreferences,
+  OratorioSshTunnelStatus
+} from '../shared/desktopConnection'
 
 export interface OratorioServerManagerOptions {
   app: Pick<App, 'isPackaged' | 'getAppPath' | 'getPath'>
   resourcesPath: string
   env?: NodeJS.ProcessEnv
   getConnectionPreferences?: () => OratorioServerConnectionPreferences
+  sshTunnels?: SshTunnelManager
 }
 
 export interface ResolvedServerExecutable {
@@ -43,16 +42,13 @@ const HEALTH_TIMEOUT_MS = 30_000
 const REMOTE_HEALTH_TIMEOUT_MS = 10_000
 const HEALTH_POLL_MS = 250
 const SHUTDOWN_GRACE_MS = 1_500
-const DEFAULT_CONNECTION_PREFERENCES: OratorioServerConnectionPreferences = {
-  serverMode: 'local',
-  remoteServerUrl: null
-}
 
 export class OratorioServerManager extends EventEmitter {
   private readonly app: OratorioServerManagerOptions['app']
   private readonly resourcesPath: string
   private readonly env: NodeJS.ProcessEnv
   private readonly getConnectionPreferences: () => OratorioServerConnectionPreferences
+  private readonly sshTunnels: SshTunnelManager
   private process: ChildProcess | null = null
   private status: OratorioServerStatus = {
     state: 'stopped',
@@ -60,6 +56,8 @@ export class OratorioServerManager extends EventEmitter {
     reusedExistingServer: false,
     backendKind: 'managedLocal',
     serverMode: 'local',
+    remoteTransport: 'url',
+    tunnel: null,
     pid: null,
     errorMessage: null
   }
@@ -71,6 +69,7 @@ export class OratorioServerManager extends EventEmitter {
     this.resourcesPath = options.resourcesPath
     this.env = options.env ?? process.env
     this.getConnectionPreferences = options.getConnectionPreferences ?? (() => DEFAULT_CONNECTION_PREFERENCES)
+    this.sshTunnels = options.sshTunnels ?? new SshTunnelManager()
   }
 
   getStatus(): OratorioServerStatus {
@@ -89,6 +88,10 @@ export class OratorioServerManager extends EventEmitter {
       reusedExistingServer: false,
       backendKind: connection.serverMode === 'remote' ? 'remote' : 'managedLocal',
       serverMode: connection.serverMode,
+      remoteTransport: connection.remoteTransport,
+      tunnel: connection.serverMode === 'remote' && connection.remoteTransport === 'sshTunnel'
+        ? createTunnelStatus('starting', connection.sshTunnel)
+        : null,
       pid: null,
       errorMessage: null
     }
@@ -96,10 +99,53 @@ export class OratorioServerManager extends EventEmitter {
 
     try {
       if (connection.serverMode === 'remote') {
+        if (connection.remoteTransport === 'sshTunnel') {
+          if (!connection.sshTunnel.autoStart) {
+            throw new Error('SSH tunnel auto-start is disabled for this remote connection.')
+          }
+
+          const tunnel = await this.sshTunnels.open(connection.sshTunnel)
+          if (!tunnel.localUrl) {
+            throw new Error('SSH tunnel did not return a local URL.')
+          }
+          this.status = {
+            ...this.status,
+            serverUrl: tunnel.localUrl,
+            tunnel
+          }
+          this.emit('status', this.getStatus())
+
+          try {
+            await waitForHealth(tunnel.localUrl, REMOTE_HEALTH_TIMEOUT_MS)
+          } catch (error) {
+            if (tunnel.owned) {
+              await this.sshTunnels.close()
+            }
+            const message = error instanceof Error ? error.message : String(error)
+            throw new Error(`Remote Oratorio did not become healthy through the SSH tunnel. ${message}`)
+          }
+
+          this.status = {
+            state: 'running',
+            serverUrl: tunnel.localUrl,
+            reusedExistingServer: true,
+            backendKind: 'remote',
+            serverMode: 'remote',
+            remoteTransport: 'sshTunnel',
+            tunnel,
+            pid: null,
+            errorMessage: null
+          }
+          this.emit('status', this.getStatus())
+          return this.getStatus()
+        }
+
         const serverUrl = normalizeRemoteServerUrl(connection.remoteServerUrl)
         this.status = {
           ...this.status,
-          serverUrl
+          serverUrl,
+          remoteTransport: 'url',
+          tunnel: null
         }
         this.emit('status', this.getStatus())
         await waitForHealth(serverUrl, REMOTE_HEALTH_TIMEOUT_MS)
@@ -110,6 +156,8 @@ export class OratorioServerManager extends EventEmitter {
           reusedExistingServer: true,
           backendKind: 'remote',
           serverMode: 'remote',
+          remoteTransport: 'url',
+          tunnel: null,
           pid: null,
           errorMessage: null
         }
@@ -128,6 +176,8 @@ export class OratorioServerManager extends EventEmitter {
           reusedExistingServer: true,
           backendKind: 'reusedLocal',
           serverMode: 'local',
+          remoteTransport: connection.remoteTransport,
+          tunnel: null,
           pid: null,
           errorMessage: null
         }
@@ -144,17 +194,26 @@ export class OratorioServerManager extends EventEmitter {
         reusedExistingServer: false,
         backendKind: 'managedLocal',
         serverMode: 'local',
+        remoteTransport: connection.remoteTransport,
+        tunnel: null,
         pid: this.process?.pid ?? null,
         errorMessage: null
       }
       this.emit('status', this.getStatus())
       return this.getStatus()
     } catch (error) {
+      if (connection.serverMode === 'remote' && connection.remoteTransport === 'sshTunnel') {
+        await this.sshTunnels.close()
+      }
+      const errorMessage = error instanceof Error ? error.message : String(error)
       this.status = {
         ...this.status,
         state: 'error',
         pid: this.process?.pid ?? null,
-        errorMessage: error instanceof Error ? error.message : String(error)
+        tunnel: connection.serverMode === 'remote' && connection.remoteTransport === 'sshTunnel'
+          ? createTunnelStatus('error', connection.sshTunnel, { errorMessage })
+          : this.status.tunnel,
+        errorMessage
       }
       this.emit('status', this.getStatus())
       throw error
@@ -167,6 +226,7 @@ export class OratorioServerManager extends EventEmitter {
   }
 
   async shutdown(): Promise<void> {
+    await this.sshTunnels.close()
     if (!this.process) {
       if (this.status.state !== 'running' || this.status.reusedExistingServer) {
         const connection = this.resolveConnectionPreferences()
@@ -176,6 +236,8 @@ export class OratorioServerManager extends EventEmitter {
           reusedExistingServer: false,
           backendKind: connection.serverMode === 'remote' ? 'remote' : 'managedLocal',
           serverMode: connection.serverMode,
+          remoteTransport: connection.remoteTransport,
+          tunnel: null,
           pid: null,
           errorMessage: null
         }
@@ -222,6 +284,8 @@ export class OratorioServerManager extends EventEmitter {
       reusedExistingServer: false,
       backendKind: this.resolveConnectionPreferences().serverMode === 'remote' ? 'remote' : 'managedLocal',
       serverMode: this.resolveConnectionPreferences().serverMode,
+      remoteTransport: this.resolveConnectionPreferences().remoteTransport,
+      tunnel: null,
       pid: null,
       errorMessage: null
     }
@@ -302,9 +366,11 @@ export class OratorioServerManager extends EventEmitter {
     const preferences = this.getConnectionPreferences()
     return {
       serverMode: preferences.serverMode === 'remote' ? 'remote' : 'local',
+      remoteTransport: preferences.remoteTransport === 'sshTunnel' ? 'sshTunnel' : 'url',
       remoteServerUrl: typeof preferences.remoteServerUrl === 'string' && preferences.remoteServerUrl.trim()
         ? preferences.remoteServerUrl.trim().replace(/\/+$/, '')
-        : null
+        : null,
+      sshTunnel: normalizeSshTunnelPreferences(preferences.sshTunnel)
     }
   }
 
