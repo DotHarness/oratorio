@@ -3,6 +3,7 @@ import type { ComponentProps } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ItemDetailView } from '../ItemDetailView'
 import type { Run, WorkItem } from '../../lib/types'
+import { buildSourceProjectFilterOptions } from '../../lib/sourceProjects'
 
 const item: WorkItem = {
   id: 'local:task-1',
@@ -201,6 +202,96 @@ describe('ItemDetailView', () => {
     expect(branchRow).toBeTruthy()
     expect(branchRow!).toHaveTextContent('feature/auth-refresh')
     expect(branchRow!).not.toHaveTextContent('No branch')
+  })
+
+  it('uses compact GitLab source project labels in read-only detail sections', () => {
+    const repository = 'gitlab:gitlab.example.test/group-alpha/team-alpha/project-alpha'
+    const sourceProjectOptions = buildSourceProjectFilterOptions([repository])
+    const gitlabItem: WorkItem = {
+      ...item,
+      sourceKey: 'gitlab',
+      source: 'GitLab',
+      kind: 'pullRequest',
+      type: 'pr',
+      number: '#4',
+      repository,
+      sourceUpdated: '1 min ago',
+      lastSourceSync: '1 min ago',
+      headSha: 'abcdef123456',
+      sourceState: 'open',
+      state: 'awaitingReview',
+      taskStatus: 'in_review',
+      sourceWrites: [
+        {
+          writeId: 'write-1',
+          kind: 'mergeRequestNote',
+          intent: 'reviewDecision',
+          status: 'succeeded',
+          repository,
+          number: 4,
+          externalUrl: null,
+          attemptCount: 1,
+          errorCode: null,
+          errorMessage: null,
+          updated: 'just now',
+        },
+      ],
+      followUpDrafts: [
+        {
+          draftId: 'follow-up-1',
+          itemId: 'task-1',
+          roundId: 'round-1',
+          runId: 'run-1',
+          status: 'draft',
+          title: 'Follow GitLab context',
+          body: 'Keep the generated work on the same GitLab project.',
+          rationale: null,
+          repository,
+          assignee: null,
+          branch: null,
+          labels: [],
+          createdItemId: null,
+          createdAt: '2026-05-10T00:00:00Z',
+          updatedAt: '2026-05-10T00:00:00Z',
+          resolvedAt: null,
+        },
+      ],
+    }
+
+    const { rerender } = renderDetail({
+      selectedItem: gitlabItem,
+      selectedDetailItem: gitlabItem,
+      sourceProjectOptions,
+      selectedHasSourceMetadata: true,
+      selectedIsLocalTask: false,
+      selectedIsPullRequest: true,
+    })
+
+    expect(screen.getByText('team-alpha/project-alpha')).toBeInTheDocument()
+    expect(screen.queryByText(repository)).not.toBeInTheDocument()
+
+    rerender(renderDetailElement({
+      selectedItem: gitlabItem,
+      selectedDetailItem: gitlabItem,
+      sourceProjectOptions,
+      selectedReviewStage: 'decision',
+      selectedHasSourceMetadata: true,
+      selectedIsLocalTask: false,
+      selectedIsPullRequest: true,
+    }))
+    expect(screen.getByText('team-alpha/project-alpha')).toBeInTheDocument()
+
+    rerender(renderDetailElement({
+      selectedItem: gitlabItem,
+      selectedDetailItem: gitlabItem,
+      sourceProjectOptions,
+      selectedReviewStage: 'review',
+      selectedHasSourceMetadata: true,
+      selectedIsLocalTask: false,
+      selectedIsPullRequest: true,
+    }))
+    expect(screen.getByText('Follow GitLab context')).toBeInTheDocument()
+    expect(screen.getByText('team-alpha/project-alpha')).toBeInTheDocument()
   })
 
   it('uses the app tooltip for Ask agent and omits the review drawer opener', async () => {

@@ -92,6 +92,7 @@ import { MarkdownBlock } from '../components/primitives/MarkdownBlock'
 import { SectionBlock } from '../components/primitives/SectionBlock'
 import { Tooltip } from '../components/primitives/Tooltip'
 import { ReviewStageNav } from '../components/review/ReviewStageNav'
+import { sourceProjectDisplay, type SourceProjectFilterOption } from '../lib/sourceProjects'
 
 export type ItemDetailViewProps = {
   selectedItem: WorkItem | null | undefined
@@ -99,6 +100,7 @@ export type ItemDetailViewProps = {
   selectedDetailItem: WorkItem | null
   selectedReviewStage: ReviewStageId
   selectedDetailFocus?: 'discussionComposer' | null
+  sourceProjectOptions?: SourceProjectFilterOption[]
   selectedIsLocalTask: boolean
   selectedIsPullRequest: boolean
   selectedCanEditLocalTask: boolean
@@ -160,6 +162,23 @@ export type ItemDetailViewProps = {
 
 function ReviewDraftMarkdownBlock({ value, className, compact = false }: { value: string; className?: string; compact?: boolean }) {
   return <MarkdownBlock value={value} className={className} compact={compact} />
+}
+
+function SourceProjectDisplayText({
+  value,
+  sourceProjectOptions,
+  providerHint,
+}: {
+  value: string | null | undefined
+  sourceProjectOptions: SourceProjectFilterOption[]
+  providerHint?: string | null
+}) {
+  const display = sourceProjectDisplay(value, sourceProjectOptions, providerHint)
+  return (
+    <Tooltip content={display.tooltip}>
+      <span>{display.label}</span>
+    </Tooltip>
+  )
 }
 
 function DraftSuggestionPreview({ comment }: { comment: ReviewDraftComment }) {
@@ -250,6 +269,7 @@ export function ItemDetailView({
   selectedDetailItem,
   selectedReviewStage,
   selectedDetailFocus = null,
+  sourceProjectOptions = [],
   selectedIsLocalTask,
   selectedIsPullRequest,
   selectedCanEditLocalTask,
@@ -577,7 +597,9 @@ export function ItemDetailView({
               description={t('source.description')}
             >
               <InfoRowGroup>
-                <InfoRow label={sourceProjectLabel}>{selectedItem.repository}</InfoRow>
+                <InfoRow label={sourceProjectLabel}>
+                  <SourceProjectDisplayText value={selectedItem.repository} sourceProjectOptions={sourceProjectOptions} providerHint={selectedItem.sourceKey} />
+                </InfoRow>
                 <InfoRow label={t('source.identifier')}>{selectedItem.number}</InfoRow>
                 <InfoRow label={t('source.sourceUpdated')}>{selectedItem.sourceUpdated ?? <MissingValue />}</InfoRow>
                 <InfoRow label={t('source.lastSourceSync')}>{selectedItem.lastSourceSync ?? <MissingValue />}</InfoRow>
@@ -741,7 +763,7 @@ export function ItemDetailView({
                         <span className={`write-status ${write.status}`}>{sourceWriteStatusLabel(write.status)}</span>
                         <strong>{sourceWriteKindLabel(write.kind)}</strong>
                         <span>
-                          {write.repository}
+                          <SourceProjectDisplayText value={write.repository} sourceProjectOptions={sourceProjectOptions} providerHint={selectedItem.sourceKey} />
                           {write.number ? ` #${write.number}` : ''} · {sourceWriteIntentLabel(write.intent)} · {t('sourceWrites.attempt', { count: write.attemptCount })}
                         </span>
                       </div>
@@ -958,7 +980,7 @@ export function ItemDetailView({
                             {followUpDraftStatusLabel(draft.status)}
                           </span>
                           <strong>{draft.title}</strong>
-                          <span>{draft.repository ?? selectedItem.repository}</span>
+                          <SourceProjectDisplayText value={draft.repository ?? selectedItem.repository} sourceProjectOptions={sourceProjectOptions} providerHint={selectedItem.sourceKey} />
                         </div>
                         <MarkdownBlock value={draft.body} className="summary-markdown compact" />
                         {draft.rationale ? <p className="stage-empty-copy">{draft.rationale}</p> : null}

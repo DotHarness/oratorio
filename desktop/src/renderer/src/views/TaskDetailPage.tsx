@@ -1,9 +1,12 @@
 import { ArrowLeft, CircleDot, FileText, Folder, GitPullRequest } from 'lucide-react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from '../i18n'
 import { ActionIcon } from '../components/primitives/ActionIcon'
 import { GithubGlyph, GitlabGlyph } from '../components/primitives/ProviderGlyphs'
+import { Tooltip } from '../components/primitives/Tooltip'
 import { taskStatusBadgeClass, taskStatusLabel } from '../lib/format'
+import { buildSourceProjectFilterOptions, sourceProjectDisplay, type SourceProjectFilterOption } from '../lib/sourceProjects'
 import type { ReviewStageId, WorkItem } from '../lib/types'
 import { ItemDetailView, type ItemDetailViewProps } from './ItemDetailView'
 
@@ -11,6 +14,8 @@ type TaskDetailPageProps = {
   item: WorkItem | null | undefined
   itemDetailProps: ItemDetailViewProps
   activeStage: ReviewStageId
+  repositories?: string[]
+  sourceProjectOptions?: SourceProjectFilterOption[]
   onBackToBoard: () => void
 }
 
@@ -45,9 +50,19 @@ export function TaskDetailPage({
   item,
   itemDetailProps,
   activeStage,
+  repositories = [],
+  sourceProjectOptions: providedSourceProjectOptions,
   onBackToBoard,
 }: TaskDetailPageProps) {
   const { t } = useTranslation('detail')
+  const computedSourceProjectOptions = useMemo(
+    () => buildSourceProjectFilterOptions(repositories),
+    [repositories],
+  )
+  const sourceProjectOptions = providedSourceProjectOptions ?? computedSourceProjectOptions
+  const sourceProject = item
+    ? sourceProjectDisplay(item.repository, sourceProjectOptions, item.sourceKey)
+    : null
   return (
     <section className="task-detail-page" aria-label={item ? t('page.detailForName', { name: item.shortId ?? item.title }) : t('page.detail')}>
       <header className="task-detail-header">
@@ -65,7 +80,11 @@ export function TaskDetailPage({
                 {kindChipIcon(item)}
                 <span>{kindChipLabel(item)}</span>
               </span>
-              {item.repository ? <span className="task-detail-breadcrumb-repo">{item.repository}</span> : null}
+              {item.repository && sourceProject ? (
+                <Tooltip content={sourceProject.tooltip}>
+                  <span className="task-detail-breadcrumb-repo">{sourceProject.label}</span>
+                </Tooltip>
+              ) : null}
               <span className="card-chip card-chip--id">{item.shortId ?? item.externalId ?? item.number}</span>
               <span className={`state-pill ${taskStatusBadgeClass(item.taskStatus)}`}>{taskStatusLabel(item.taskStatus)}</span>
               <span className="task-detail-stage-label">{t('page.stageLabel', { stage: activeStage })}</span>

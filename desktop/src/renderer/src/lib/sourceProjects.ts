@@ -11,6 +11,11 @@ export type SourceProjectFilterOption = {
   aliases: string[]
 }
 
+export type SourceProjectDisplay = {
+  label: string
+  tooltip: string
+}
+
 type SourceProjectEntry = {
   value: string
   provider: string | null
@@ -104,6 +109,55 @@ export function sourceProjectMatchesFilter(
 
 export function sourceProjectValuesEquivalent(left: string, right: string) {
   return sourceProjectMatchesFilter(left, right) || sourceProjectMatchesFilter(right, left)
+}
+
+export function sourceProjectDisplay(
+  value: string | null | undefined,
+  options: SourceProjectFilterOption[] = [],
+  providerHint?: string | null,
+): SourceProjectDisplay {
+  const trimmed = value?.trim() ?? ''
+  if (!trimmed || sameText(trimmed, 'local')) {
+    return { label: trimmed, tooltip: trimmed }
+  }
+
+  const exactOption = options.find((option) =>
+    sameText(option.value, trimmed) ||
+    option.aliases.some((alias) => sameText(alias, trimmed)))
+  if (exactOption) {
+    return { label: exactOption.label, tooltip: exactOption.tooltip }
+  }
+
+  const matchedOption = options.find((option) =>
+    sourceProjectMatchesFilter(trimmed, option.value, providerHint) ||
+    sourceProjectMatchesFilter(option.value, trimmed, providerHint))
+  if (matchedOption) {
+    return { label: matchedOption.label, tooltip: matchedOption.tooltip }
+  }
+
+  const parsed = parseCanonicalSourceProject(trimmed)
+  if (parsed) {
+    return {
+      label: compactSourceProjectLabel(parsed.projectPath),
+      tooltip: sourceProjectTooltip(parsed),
+    }
+  }
+
+  const projectPath = normalizeProjectPath(trimmed)
+  if (!projectPath) {
+    return { label: trimmed, tooltip: trimmed }
+  }
+
+  const provider = providerHint?.trim().toLowerCase() || 'github'
+  const fallback = {
+    provider,
+    instance: provider === 'github' ? 'github.com' : null,
+    projectPath,
+  }
+  return {
+    label: compactSourceProjectLabel(projectPath),
+    tooltip: sourceProjectTooltip(fallback),
+  }
 }
 
 export function sourceProjectDisplayLabel(value: string | null | undefined) {
@@ -313,6 +367,10 @@ function sourceProjectTooltip(group: Pick<SourceProjectGroup, 'provider' | 'inst
 function compactPathLabel(projectPath: string, depth: number) {
   const segments = pathSegments(projectPath)
   return segments.slice(Math.max(0, segments.length - depth)).join('/')
+}
+
+function compactSourceProjectLabel(projectPath: string) {
+  return compactPathLabel(projectPath, Math.min(2, Math.max(1, pathSegments(projectPath).length)))
 }
 
 function normalizeProjectPath(value: string) {

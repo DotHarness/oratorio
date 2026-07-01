@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildSourceProjectFilterOptions,
+  sourceProjectDisplay,
   sourceProjectMatchesFilter,
   sourceProjectValuesEquivalent,
 } from '../sourceProjects'
@@ -85,5 +86,65 @@ describe('source project display helpers', () => {
       'gitlab:gitlab.example.test/group-alpha/project-alpha',
       'gitlab',
     )).toBe(true)
+  })
+
+  it('formats GitLab canonical source projects with the same compact label as filters', () => {
+    const options = buildSourceProjectFilterOptions([
+      'gitlab:gitlab.example.test/group-alpha/team-alpha/project-alpha',
+    ])
+
+    expect(sourceProjectDisplay(
+      'gitlab:gitlab.example.test/group-alpha/team-alpha/project-alpha',
+      options,
+      'gitlab',
+    )).toEqual({
+      label: 'team-alpha/project-alpha',
+      tooltip: 'GitLab · gitlab.example.test/group-alpha/team-alpha/project-alpha',
+    })
+  })
+
+  it('uses compact collision disambiguation when formatting source projects', () => {
+    const options = buildSourceProjectFilterOptions([
+      'gitlab:gitlab.example.test/group-alpha/team-shared/project-alpha',
+      'gitlab:gitlab.example.test/group-beta/team-shared/project-alpha',
+    ])
+
+    expect(sourceProjectDisplay(
+      'gitlab:gitlab.example.test/group-alpha/team-shared/project-alpha',
+      options,
+      'gitlab',
+    ).label).toBe('group-alpha/team-shared/project-alpha')
+    expect(sourceProjectDisplay(
+      'gitlab:gitlab.example.test/group-beta/team-shared/project-alpha',
+      options,
+      'gitlab',
+    ).label).toBe('group-beta/team-shared/project-alpha')
+  })
+
+  it('formats canonical GitHub projects like legacy owner/repo values', () => {
+    const options = buildSourceProjectFilterOptions([
+      'owner-alpha/repo-alpha',
+      'github:github.com/owner-alpha/repo-alpha',
+    ])
+
+    expect(sourceProjectDisplay(
+      'github:github.com/owner-alpha/repo-alpha',
+      options,
+      'github',
+    )).toMatchObject({
+      label: 'owner-alpha/repo-alpha',
+      tooltip: 'GitHub · github.com/owner-alpha/repo-alpha',
+    })
+  })
+
+  it('formats bare GitLab paths with a GitLab provider hint', () => {
+    expect(sourceProjectDisplay(
+      'group-alpha/team-alpha/project-alpha',
+      [],
+      'gitlab',
+    )).toEqual({
+      label: 'team-alpha/project-alpha',
+      tooltip: 'GitLab · group-alpha/team-alpha/project-alpha',
+    })
   })
 })

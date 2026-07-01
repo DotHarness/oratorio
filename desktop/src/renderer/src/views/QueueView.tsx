@@ -1,6 +1,8 @@
 import { CircleDot, GitPullRequest, Plus, RefreshCw, Search } from 'lucide-react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ItemState, WorkItem } from '../lib/types'
+import { buildSourceProjectFilterOptions, sourceProjectDisplay } from '../lib/sourceProjects'
 import {
   checkIcon,
   checkLabel,
@@ -46,6 +48,10 @@ export function QueueView({
   openItemFromQueue,
 }: QueueViewProps) {
   const { t } = useTranslation('board')
+  const sourceProjectOptions = useMemo(
+    () => buildSourceProjectFilterOptions(repositories),
+    [repositories],
+  )
   return (
     <>
               <section className="queue-pane" aria-label={t('queue.reviewQueue')}>
@@ -86,35 +92,40 @@ export function QueueView({
                 </div>
 
                 <div className="item-list">
-                  {visibleItems.map((item) => (
-                    <button
-                      key={item.id}
-                      className={`item-row board-item-row ${selectedItem?.id === item.id ? 'active' : ''}`}
-                      onClick={() => openItemFromQueue(item)}
-                    >
-                      <span className={`item-icon ${item.type}`}>
-                        {item.type === 'pr' ? <GitPullRequest size={17} /> : <CircleDot size={17} />}
-                      </span>
-                      <span className="item-main">
-                        <span className="item-title-line">
-                          <span className="item-title">{item.title}</span>
-                          <span className={`state-dot ${stateClassName(item.state)}`} />
+                  {visibleItems.map((item) => {
+                    const sourceProject = sourceProjectDisplay(item.repository, sourceProjectOptions, item.sourceKey)
+                    return (
+                      <button
+                        key={item.id}
+                        className={`item-row board-item-row ${selectedItem?.id === item.id ? 'active' : ''}`}
+                        onClick={() => openItemFromQueue(item)}
+                      >
+                        <span className={`item-icon ${item.type}`}>
+                          {item.type === 'pr' ? <GitPullRequest size={17} /> : <CircleDot size={17} />}
                         </span>
-                        <span className="item-meta">{item.repository} {item.number}</span>
-                        <span className="item-source-meta">{sourceMetaLabel(item)} · {t('card.updated', { value: item.updated })}</span>
-                        <span className="item-badges">
-                          {sourceLifecycleBadge(item)}
-                          <Tooltip content={`oratorio/review: ${checkLabel(item.check)}`}>
-                            <span className={`mini-check ${item.check}`}>
-                              {checkIcon(item.check)}
-                              <span className="chip-text">{checkLabel(item.check)}</span>
-                            </span>
+                        <span className="item-main">
+                          <span className="item-title-line">
+                            <span className="item-title">{item.title}</span>
+                            <span className={`state-dot ${stateClassName(item.state)}`} />
+                          </span>
+                          <Tooltip content={sourceProject.tooltip}>
+                            <span className="item-meta">{sourceProject.label} {item.number}</span>
                           </Tooltip>
-                          {queueLabelBadges(item)}
+                          <span className="item-source-meta">{sourceMetaLabel(item)} · {t('card.updated', { value: item.updated })}</span>
+                          <span className="item-badges">
+                            {sourceLifecycleBadge(item)}
+                            <Tooltip content={`oratorio/review: ${checkLabel(item.check)}`}>
+                              <span className={`mini-check ${item.check}`}>
+                                {checkIcon(item.check)}
+                                <span className="chip-text">{checkLabel(item.check)}</span>
+                              </span>
+                            </Tooltip>
+                            {queueLabelBadges(item)}
+                          </span>
                         </span>
-                      </span>
-                    </button>
-                  ))}
+                      </button>
+                    )
+                  })}
                 </div>
               </section>
     </>

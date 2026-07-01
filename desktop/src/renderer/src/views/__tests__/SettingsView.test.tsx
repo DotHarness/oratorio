@@ -902,6 +902,43 @@ describe('SettingsView', () => {
     expect(lastUpdateRequest.configuration.automation.autoDispatchAllowLabels).toEqual([])
   })
 
+  it('shows compact GitLab allowlist labels while saving canonical project keys', async () => {
+    const projectPath = 'group-alpha/team-alpha/project-alpha'
+    const projectKey = `gitlab:gitlab.example.test/${projectPath}`
+    serverConfigurationResponse.configuration.gitHub.repositories = []
+    serverConfigurationResponse.configuration.gitLab.enabled = true
+    serverConfigurationResponse.configuration.gitLab.endpoint = 'https://gitlab.example.test'
+    serverConfigurationResponse.configuration.gitLab.apiBaseUrl = 'https://gitlab.example.test/api/v4'
+    serverConfigurationResponse.configuration.gitLab.projects = [projectPath]
+    serverConfigurationResponse.configuration.dotCraft.repositoryWorkspaces = {
+      [projectKey]: 'C:/example/workspaces/project-alpha',
+    }
+    serverConfigurationResponse.configuration.automation.autoReviewRepositories = [projectKey]
+
+    renderSettings('/settings/review')
+
+    await screen.findByText('Automatic review')
+    const allowlistCard = screen.getByText('Project allowlist').closest('.repository-allowlist-card') as HTMLElement
+    expect(within(allowlistCard).getByText('team-alpha/project-alpha')).toBeInTheDocument()
+    expect(within(allowlistCard).queryByText(projectKey)).not.toBeInTheDocument()
+
+    const publishCard = screen.getByText('Publish allowlist').closest('.repository-allowlist-card') as HTMLElement
+    fireEvent.click(within(publishCard).getByRole('button', { name: 'Manage' }))
+
+    const modal = await screen.findByRole('dialog', { name: 'Select publish projects' })
+    const search = within(modal).getByRole('textbox', { name: 'Search source projects' })
+    fireEvent.change(search, { target: { value: projectKey } })
+    expect(within(modal).getByRole('checkbox', { name: /team-alpha\/project-alpha/i })).toBeInTheDocument()
+    fireEvent.change(search, { target: { value: 'gitlab.example.test' } })
+    expect(within(modal).getByRole('checkbox', { name: /team-alpha\/project-alpha/i })).toBeInTheDocument()
+    fireEvent.change(search, { target: { value: 'project-alpha' } })
+    fireEvent.click(within(modal).getByRole('checkbox', { name: /team-alpha\/project-alpha/i }))
+    fireEvent.click(within(modal).getByRole('button', { name: 'Apply selection (1 selected)' }))
+
+    await waitFor(() => expect(lastUpdateRequest).toBeTruthy())
+    expect(lastUpdateRequest.configuration.automation.autoReviewPublishRepositories).toEqual([projectKey])
+  })
+
   it('saves Draft auto-publish from the publish allowlist manager', async () => {
     renderSettings('/settings/review')
 

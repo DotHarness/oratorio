@@ -129,6 +129,30 @@ describe('BoardView', () => {
     expect(screen.queryByRole('option', { name: /gitlab:gitlab\.example\.test/ })).not.toBeInTheDocument()
   })
 
+  it('uses compact source project labels on GitLab task cards', () => {
+    const item = makeItem({
+      id: 'gitlab-1',
+      title: 'GitLab source project card',
+      shortId: 'DEF-12',
+      taskStatus: 'todo',
+      sourceKey: 'gitlab',
+      source: 'GitLab',
+      repository: 'gitlab:gitlab.example.test/group-alpha/team-alpha/project-alpha',
+    })
+
+    renderBoard([item], {
+      repositories: ['gitlab:gitlab.example.test/group-alpha/team-alpha/project-alpha'],
+    })
+
+    const sourceChipText = screen.getByText('team-alpha/project-alpha')
+    expect(sourceChipText).toBeInTheDocument()
+    expect(screen.queryByText('gitlab:gitlab.example.test/group-alpha/team-alpha/project-alpha')).not.toBeInTheDocument()
+
+    fireEvent.pointerEnter(sourceChipText.closest('.card-chip') as HTMLElement)
+
+    expect(screen.getByRole('tooltip')).toHaveTextContent('GitLab · gitlab.example.test/group-alpha/team-alpha/project-alpha')
+  })
+
   it('matches canonical GitHub repository filters against legacy repository items', () => {
     const matching = makeItem({
       id: 'match-1',

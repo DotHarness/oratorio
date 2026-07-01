@@ -36,7 +36,15 @@ import { useBoardStream } from '../hooks/useBoardStream'
 import { reduceLiveActivity, type LiveActivity } from '../lib/liveActivity'
 import { applyBoardEvent } from '../lib/sortOrder'
 import { parseTaskSearchQuery, taskSearchApiSource } from '../lib/taskSearch'
-import { hostFromUrl, providerLabel, sourceProjectAliases, sourceProjectDisplayLabel } from '../lib/sourceProjects'
+import {
+  buildSourceProjectFilterOptions,
+  hostFromUrl,
+  providerLabel,
+  sourceProjectAliases,
+  sourceProjectDisplay,
+  sourceProjectDisplayLabel,
+  type SourceProjectFilterOption,
+} from '../lib/sourceProjects'
 import { DesktopTitlebar } from './DesktopTitlebar'
 import type {
   BoardEvent,
@@ -568,6 +576,10 @@ function OratorioApp() {
 
     return Array.from(new Set(known.filter((repository) => repository && repository !== 'local'))).sort()
   }, [githubStatus.repositories, knownItems, sourceProviders])
+  const sourceProjectDisplayOptions = useMemo(
+    () => buildSourceProjectFilterOptions(repositories),
+    [repositories],
+  )
   const taskSourceProjectOptions = useMemo(
     () => buildLocalTaskSourceProjectOptions(sourceProviders, githubStatus.repositories, knownItems),
     [githubStatus.repositories, knownItems, sourceProviders],
@@ -1480,9 +1492,9 @@ function OratorioApp() {
     const repositoryRuns = githubSyncJob?.repositories ?? []
     const failedRuns = repositoryRuns.filter((run) => run.status === 'failed')
     if (status !== 'succeeded') {
-      showNotice(t('common:shell.notices.githubSyncFinishedWithFailures', { names: formatRepositoryNames(failedRuns, t('common:shell.syncFallback.failedRepositories')) }), 'error')
+      showNotice(t('common:shell.notices.githubSyncFinishedWithFailures', { names: formatRepositoryNames(failedRuns, t('common:shell.syncFallback.failedRepositories'), sourceProjectDisplayOptions) }), 'error')
     }
-  }, [githubSyncJob, refreshAll, showNotice, t])
+  }, [githubSyncJob, refreshAll, showNotice, sourceProjectDisplayOptions, t])
 
   useEffect(() => {
     const previousStatuses = sourceSyncStatusesRef.current
@@ -1508,7 +1520,7 @@ function OratorioApp() {
       const failedRuns = projectRuns.filter((run) => run.status === 'failed')
       const providerName = providerLabel(provider)
       if (status !== 'succeeded') {
-        showNotice(t('common:shell.notices.sourceSyncFinishedWithFailures', { provider: providerName, names: formatSourceProjectNames(failedRuns, t('common:shell.syncFallback.failedProjects')) }), 'error')
+        showNotice(t('common:shell.notices.sourceSyncFinishedWithFailures', { provider: providerName, names: formatSourceProjectNames(failedRuns, t('common:shell.syncFallback.failedProjects'), sourceProjectDisplayOptions) }), 'error')
       }
     }
 
@@ -1516,7 +1528,7 @@ function OratorioApp() {
     if (shouldRefresh) {
       void refreshAll({ background: true })
     }
-  }, [sourceSyncJobs, refreshAll, showNotice, t])
+  }, [sourceSyncJobs, refreshAll, showNotice, sourceProjectDisplayOptions, t])
 
   useEffect(() => {
     if (taskFormMode !== 'create' || taskForm.repository || rememberedLocalTaskProjectAppliedRef.current) {
@@ -2449,6 +2461,7 @@ function OratorioApp() {
     selectedDetailItem,
     selectedReviewStage,
     selectedDetailFocus,
+    sourceProjectOptions: sourceProjectDisplayOptions,
     selectedIsLocalTask,
     selectedIsPullRequest,
     selectedCanEditLocalTask,
@@ -2632,6 +2645,7 @@ function OratorioApp() {
           item={selectedItem}
           itemDetailProps={itemDetailViewProps}
           activeStage={selectedReviewStage}
+          sourceProjectOptions={sourceProjectDisplayOptions}
           onBackToBoard={returnToTaskBoard}
         />
       ) : (
@@ -2643,6 +2657,7 @@ function OratorioApp() {
             setQuery={setQuery}
             repositoryFilter={repositoryFilter}
             repositories={repositories}
+            sourceProjectOptions={sourceProjectDisplayOptions}
             setRepositoryFilter={setRepositoryFilter}
             openCreateLocalTask={openCreateLocalTask}
             refreshAll={refreshAll}
@@ -3254,8 +3269,14 @@ function applySourceSyncProjectUpdate(current: SourceSyncJob | null, update: Sou
   }
 }
 
-function formatRepositoryNames(runs: GitHubSyncRepositoryRun[], fallback = i18n.t('common:shell.syncFallback.repositories')) {
-  const names = runs.map((run) => run.repository).filter(Boolean)
+function formatRepositoryNames(
+  runs: GitHubSyncRepositoryRun[],
+  fallback = i18n.t('common:shell.syncFallback.repositories'),
+  sourceProjectOptions: SourceProjectFilterOption[] = [],
+) {
+  const names = runs
+    .map((run) => sourceProjectDisplay(run.repository, sourceProjectOptions, 'github').label)
+    .filter(Boolean)
   if (names.length === 0) {
     return fallback
   }
@@ -3267,8 +3288,14 @@ function formatRepositoryNames(runs: GitHubSyncRepositoryRun[], fallback = i18n.
   return i18n.t('common:shell.syncFallback.moreSuffix', { names: names.slice(0, 3).join(', '), count: names.length - 3 })
 }
 
-function formatSourceProjectNames(runs: SourceSyncProjectRun[], fallback = i18n.t('common:shell.syncFallback.projects')) {
-  const names = runs.map((run) => run.displayName || run.projectPath || run.sourceProjectKey).filter(Boolean)
+function formatSourceProjectNames(
+  runs: SourceSyncProjectRun[],
+  fallback = i18n.t('common:shell.syncFallback.projects'),
+  sourceProjectOptions: SourceProjectFilterOption[] = [],
+) {
+  const names = runs
+    .map((run) => sourceProjectDisplay(run.sourceProjectKey || run.projectPath || run.displayName, sourceProjectOptions, run.provider).label)
+    .filter(Boolean)
   if (names.length === 0) {
     return fallback
   }

@@ -48,6 +48,7 @@ import type {
   SourceSyncSchedule,
   SourceSyncScheduleUpdateRequest,
 } from '../lib/types'
+import { buildSourceProjectFilterOptions, sourceProjectDisplay, type SourceProjectFilterOption } from '../lib/sourceProjects'
 import {
   DEFAULT_CONNECTION_PREFERENCES,
   type LocalSshConfigInfo,
@@ -877,6 +878,10 @@ export function SettingsView({
     () => projectCards.map((card) => card.canonicalKey).filter(Boolean),
     [projectCards],
   )
+  const sourceProjectOptions = useMemo(
+    () => buildSourceProjectFilterOptions(configuredProjects),
+    [configuredProjects],
+  )
   const hasGitLabProject = providerCards.some((provider) => provider.provider === 'gitlab' && provider.configured) ||
     projectCards.some((card) => card.provider === 'gitlab')
   const deliveryLabel = hasGitLabProject ? t('worktree.automation.deliveryLabelAutoPrMr') : t('worktree.automation.deliveryLabelAutoPr')
@@ -1557,6 +1562,7 @@ export function SettingsView({
                   title={hasGitLabProject ? t('review.projectAllowlist') : t('review.repositoryAllowlist')}
                   description={`${autoReviewAllowlistDescription} ${reviewSourceSupports}`}
                   repositories={configDraft?.automation.autoReviewRepositories ?? []}
+                  sourceProjectOptions={sourceProjectOptions}
                   disabled={!configWritable}
                   manageDisabled={allowlistManageDisabled}
                   emptyLabel={allowlistEmptyLabel}
@@ -1567,6 +1573,7 @@ export function SettingsView({
                   title={t('review.publishAllowlist')}
                   description={publishAllowlistDescription}
                   repositories={effectiveAutoReviewPublishRepositories(configDraft?.automation)}
+                  sourceProjectOptions={sourceProjectOptions}
                   disabled={!configWritable}
                   manageDisabled={allowlistManageDisabled}
                   emptyLabel={allowlistEmptyLabel}
@@ -1577,6 +1584,7 @@ export function SettingsView({
                   title={t('review.followUpAllowlist')}
                   description={t('review.followUpAllowlistDescription')}
                   repositories={effectiveAutoFollowUpRepositories(configDraft?.automation)}
+                  sourceProjectOptions={sourceProjectOptions}
                   disabled={!configWritable}
                   manageDisabled={allowlistManageDisabled}
                   emptyLabel={allowlistEmptyLabel}
@@ -1593,6 +1601,7 @@ export function SettingsView({
           <RepositoryAllowlistModal
             kind={repositoryAllowlistModal}
             repositories={configuredProjects}
+            sourceProjectOptions={sourceProjectOptions}
             selectedRepositories={
               repositoryAllowlistModal === 'autoReview'
                 ? configDraft?.automation.autoReviewRepositories ?? []
@@ -2307,6 +2316,7 @@ function RepositoryAllowlistCard({
   title,
   description,
   repositories,
+  sourceProjectOptions,
   disabled,
   manageDisabled,
   emptyLabel,
@@ -2316,6 +2326,7 @@ function RepositoryAllowlistCard({
   title: string
   description: string
   repositories: string[]
+  sourceProjectOptions: SourceProjectFilterOption[]
   disabled: boolean
   manageDisabled: boolean
   emptyLabel: string
@@ -2341,14 +2352,13 @@ function RepositoryAllowlistCard({
       <div className="repository-allowlist-card-body">
         {normalized.length ? (
           normalized.map((repository) => (
-            <div className="repository-allowlist-row" key={repository}>
-              <strong>{repository}</strong>
-              <Tooltip content={t('review.allowlistCard.removeTooltip', { name: repository })}>
-                <button className="icon-button repository-allowlist-remove" type="button" aria-label={t('review.allowlistCard.removeAria', { name: repository })} disabled={disabled} onClick={() => onRemove(repository)}>
-                  <Trash2 size={14} />
-                </button>
-              </Tooltip>
-            </div>
+            <RepositoryAllowlistRow
+              key={repository}
+              repository={repository}
+              sourceProjectOptions={sourceProjectOptions}
+              disabled={disabled}
+              onRemove={onRemove}
+            />
           ))
         ) : (
           <p>{emptyLabel}</p>
@@ -2358,9 +2368,37 @@ function RepositoryAllowlistCard({
   )
 }
 
+function RepositoryAllowlistRow({
+  repository,
+  sourceProjectOptions,
+  disabled,
+  onRemove,
+}: {
+  repository: string
+  sourceProjectOptions: SourceProjectFilterOption[]
+  disabled: boolean
+  onRemove: (repository: string) => void
+}) {
+  const { t } = useTranslation('settings')
+  const display = sourceProjectDisplay(repository, sourceProjectOptions)
+  return (
+    <div className="repository-allowlist-row">
+      <Tooltip content={display.tooltip}>
+        <strong>{display.label}</strong>
+      </Tooltip>
+      <Tooltip content={t('review.allowlistCard.removeTooltip', { name: repository })}>
+        <button className="icon-button repository-allowlist-remove" type="button" aria-label={t('review.allowlistCard.removeAria', { name: repository })} disabled={disabled} onClick={() => onRemove(repository)}>
+          <Trash2 size={14} />
+        </button>
+      </Tooltip>
+    </div>
+  )
+}
+
 function RepositoryAllowlistModal({
   kind,
   repositories,
+  sourceProjectOptions,
   selectedRepositories,
   targetTerm,
   publishRouteTerm,
@@ -2369,6 +2407,7 @@ function RepositoryAllowlistModal({
 }: {
   kind: RepositoryAllowlistKind
   repositories: string[]
+  sourceProjectOptions: SourceProjectFilterOption[]
   selectedRepositories: string[]
   targetTerm: string
   publishRouteTerm: string
@@ -2400,7 +2439,7 @@ function RepositoryAllowlistModal({
     : kind === 'followUp'
       ? t('review.modal.followUpDescription')
       : t('review.modal.publishDescription', { route: publishRouteTerm })
-  const filteredRepositories = normalizedRepositories.filter((repository) => repositoryMatchesQuery(repository, query))
+  const filteredRepositories = normalizedRepositories.filter((repository) => repositoryMatchesQuery(repository, query, sourceProjectOptions))
 
   const toggleRepository = (repository: string) => {
     setDraftSelection((current) => current.some((candidate) => sameRepository(candidate, repository)) ? removeRepository(current, repository) : [...current, repository])
@@ -2442,14 +2481,14 @@ function RepositoryAllowlistModal({
         <div className="settings-repository-picker-list">
           {filteredRepositories.length ? (
             filteredRepositories.map((repository) => {
-              const { owner, name } = repositoryParts(repository)
               const selected = draftSelection.some((candidate) => sameRepository(candidate, repository))
+              const display = sourceProjectDisplay(repository, sourceProjectOptions)
               return (
                 <label className="settings-repository-picker-row" key={repository}>
                   <input type="checkbox" checked={selected} onChange={() => toggleRepository(repository)} />
                   <span>
-                    <strong>{name}</strong>
-                    {owner ? <small>{owner}</small> : null}
+                    <strong>{display.label}</strong>
+                    {display.tooltip && display.tooltip !== display.label ? <small>{display.tooltip}</small> : null}
                   </span>
                 </label>
               )
@@ -3811,13 +3850,13 @@ function repositoryParts(repository: string) {
   return { owner: nameParts.length ? owner : '', name }
 }
 
-function repositoryMatchesQuery(repository: string, query: string) {
+function repositoryMatchesQuery(repository: string, query: string, sourceProjectOptions: SourceProjectFilterOption[]) {
   const needle = query.trim().toLowerCase()
   if (!needle) return true
-  const { owner, name } = repositoryParts(repository)
+  const display = sourceProjectDisplay(repository, sourceProjectOptions)
   return repository.toLowerCase().includes(needle) ||
-    owner.toLowerCase().includes(needle) ||
-    name.toLowerCase().includes(needle)
+    display.label.toLowerCase().includes(needle) ||
+    display.tooltip.toLowerCase().includes(needle)
 }
 
 function normalizeLabels(labels: string[]) {

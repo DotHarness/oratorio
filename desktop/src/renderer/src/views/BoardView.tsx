@@ -16,7 +16,7 @@ import { useBoardCommander } from '../hooks/useBoardCommander'
 import { resolveDrag } from '../lib/dragMatrix'
 import { sortItemsForBoard } from '../lib/sortOrder'
 import { parseTaskSearchQuery, taskMatchesSearch } from '../lib/taskSearch'
-import { sourceProjectMatchesFilter } from '../lib/sourceProjects'
+import { buildSourceProjectFilterOptions, sourceProjectDisplay, sourceProjectMatchesFilter, type SourceProjectFilterOption } from '../lib/sourceProjects'
 import type { GitHubSourceStatus, GitHubSyncJob, MockOutcome, RunnerMode, TaskStatus, UiNotice, WorkItem } from '../lib/types'
 import {
   activeTaskStatusColumns,
@@ -38,6 +38,7 @@ type BoardViewProps = {
   setQuery: (value: string) => void
   repositoryFilter: string
   repositories: string[]
+  sourceProjectOptions?: SourceProjectFilterOption[]
   setRepositoryFilter: (value: string) => void
   openCreateLocalTask: () => void
   refreshAll: () => Promise<void>
@@ -124,6 +125,7 @@ export function BoardView({
   setQuery,
   repositoryFilter,
   repositories,
+  sourceProjectOptions: providedSourceProjectOptions,
   setRepositoryFilter,
   openCreateLocalTask,
   refreshAll,
@@ -225,6 +227,11 @@ export function BoardView({
 
   const isActiveView = viewMode === 'active'
   const viewItems = isActiveView ? commander.boardItems : closedItems
+  const computedSourceProjectOptions = useMemo(
+    () => buildSourceProjectFilterOptions(repositories),
+    [repositories],
+  )
+  const sourceProjectOptions = providedSourceProjectOptions ?? computedSourceProjectOptions
   const assigneeOptions = useMemo(() => Array.from(new Set(viewItems.map((item) => item.assignee).filter(Boolean))).sort(), [viewItems])
   const parsedSearchQuery = useMemo(() => parseTaskSearchQuery(query), [query])
 
@@ -413,6 +420,7 @@ export function BoardView({
                             {(dragProvided, dragSnapshot) => (
                               <TaskCard
                                 item={item}
+                                sourceProjectOptions={sourceProjectOptions}
                                 selected={selectedItem?.id === item.id}
                                 onOpen={() => openItemFromQueue(item)}
                                 provided={dragProvided}
@@ -460,6 +468,7 @@ export function BoardView({
               <TaskCard
                 key={item.id}
                 item={item}
+                sourceProjectOptions={sourceProjectOptions}
                 selected={selectedItem?.id === item.id}
                 onOpen={() => openItemFromQueue(item)}
                 staticCard
@@ -517,16 +526,16 @@ function sourceChipIcon(item: WorkItem) {
   return <Folder {...chipIconProps} />
 }
 
-function sourceChipLabel(item: WorkItem) {
+function sourceChipLabel(item: WorkItem, sourceProjectOptions: SourceProjectFilterOption[]) {
   if (item.sourceKey === 'github' || item.sourceKey === 'gitlab') {
-    return item.repository || item.sourceKey
+    return sourceProjectDisplay(item.repository, sourceProjectOptions, item.sourceKey).label || item.sourceKey
   }
   return i18n.t('board:chip.local')
 }
 
-function sourceChipTooltip(item: WorkItem) {
+function sourceChipTooltip(item: WorkItem, sourceProjectOptions: SourceProjectFilterOption[]) {
   if (item.sourceKey === 'github' || item.sourceKey === 'gitlab') {
-    return `${item.sourceKey === 'github' ? 'GitHub' : 'GitLab'} · ${item.repository || ''}`
+    return sourceProjectDisplay(item.repository, sourceProjectOptions, item.sourceKey).tooltip
   }
   return i18n.t('board:chip.localTask')
 }
@@ -560,6 +569,7 @@ function cardAccentTone(item: WorkItem): 'awaiting' | 'failed' | 'running' | nul
 
 function TaskCard({
   item,
+  sourceProjectOptions,
   selected,
   onOpen,
   provided,
@@ -568,6 +578,7 @@ function TaskCard({
   staticCard,
 }: {
   item: WorkItem
+  sourceProjectOptions: SourceProjectFilterOption[]
   selected: boolean
   onOpen: () => void
   provided?: DraggableProvided
@@ -611,10 +622,10 @@ function TaskCard({
       onKeyDownCapture={handleKeyDown}
     >
       <div className="task-card-topline">
-        <Tooltip content={sourceChipTooltip(item)}>
+        <Tooltip content={sourceChipTooltip(item, sourceProjectOptions)}>
           <span className={`card-chip card-chip--source card-chip--source-${item.sourceKey}`}>
             {sourceChipIcon(item)}
-            <span>{sourceChipLabel(item)}</span>
+            <span>{sourceChipLabel(item, sourceProjectOptions)}</span>
           </span>
         </Tooltip>
         <Tooltip content={kindChipTooltip(item)}>

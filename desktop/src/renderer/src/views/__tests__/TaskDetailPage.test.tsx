@@ -35,13 +35,32 @@ describe('TaskDetailPage', () => {
     expect(onBackToBoard).toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: 'Open drawer' })).not.toBeInTheDocument()
   })
+
+  it('uses compact source project labels in the breadcrumb', () => {
+    render(
+      <TaskDetailPage
+        item={makeItem({
+          sourceKey: 'gitlab',
+          source: 'GitLab',
+          repository: 'gitlab:gitlab.example.test/group-alpha/team-alpha/project-alpha',
+        })}
+        itemDetailProps={{} as ItemDetailViewProps}
+        activeStage="intake"
+        repositories={['gitlab:gitlab.example.test/group-alpha/team-alpha/project-alpha']}
+        onBackToBoard={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('team-alpha/project-alpha')).toBeInTheDocument()
+    expect(screen.queryByText('gitlab:gitlab.example.test/group-alpha/team-alpha/project-alpha')).not.toBeInTheDocument()
+  })
 })
 
-function makeItem(): WorkItem {
+function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
     id: 'item-1',
     itemId: 'item-1',
-    sourceKey: 'local',
+    sourceKey: overrides.sourceKey ?? 'local',
     externalId: 'task:test',
     currentRunId: null,
     type: 'task',
@@ -49,8 +68,8 @@ function makeItem(): WorkItem {
     number: 'local',
     title: 'Focused task detail',
     description: 'Drawer task description.',
-    repository: 'example-owner/oratorio',
-    source: 'Local',
+    repository: overrides.repository ?? 'example-owner/oratorio',
+    source: overrides.source ?? 'Local',
     state: 'awaitingReview',
     shortId: 'DEF-1',
     taskStatus: 'in_review',
