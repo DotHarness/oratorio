@@ -292,6 +292,11 @@ public sealed class GitLabSyncCoordinator(
             logger.LogWarning(ex, "GitLab sync credentials failed for project run {ProjectRunId}.", projectRunId);
             await FailProjectRunAsync(projectRunId, ex.Code, ex.Message, ct);
         }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "GitLab sync was canceled for project run {ProjectRunId}.", projectRunId);
+            await FailProjectRunAsync(projectRunId, "gitLabSyncFailed", ex.Message, ct);
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "GitLab sync failed for project run {ProjectRunId}.", projectRunId);

@@ -1446,6 +1446,42 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
+    public async Task GitHubSyncJob_RecordsRepositoryTimeouts_AndClearsActiveJob()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        fakeGitHub.CancelingIssueRepositories.Add("example-owner/oratorio");
+        fakeGitHub.IssuesByRepository["example-owner/second-repo"] = [TestGitHubIssue(3001, 7, "Second repository issue", "example-owner/second-repo")];
+        fakeGitHub.PullRequestsByRepository["example-owner/second-repo"] = [];
+        await using var app = new TestOratorioApp(
+            services =>
+            {
+                services.RemoveAll<IGitHubApiClient>();
+                services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+            },
+            new Dictionary<string, string?>
+            {
+                ["Oratorio:GitHub:Repositories:1"] = "example-owner/second-repo"
+            });
+        var client = app.CreateClient();
+
+        var job = await PostAsync<GitHubSyncJobDto>(client, "/api/v1/sources/github/sync-jobs", new { });
+        var completed = await WaitForGitHubSyncJobAsync(client, job.JobId);
+
+        Assert.Equal(GitHubSyncStatus.PartialFailed, completed.Status);
+        var failed = Assert.Single(completed.Repositories, x => x.Repository == "example-owner/oratorio");
+        Assert.Equal(GitHubSyncRepositoryStatus.Failed, failed.Status);
+        Assert.Equal(GitHubSyncRepositoryPhase.Failed, failed.Phase);
+        Assert.Equal("githubSyncFailed", failed.ErrorCode);
+        Assert.Contains("timeout", failed.ErrorMessage ?? "", StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(completed.Repositories, x => x.Repository == "example-owner/second-repo" && x.Status == GitHubSyncRepositoryStatus.Succeeded);
+
+        var activeResponse = await client.GetAsync("/api/v1/sources/github/sync-jobs/active");
+        Assert.Equal(HttpStatusCode.OK, activeResponse.StatusCode);
+        var activeBody = await activeResponse.Content.ReadAsStringAsync();
+        Assert.True(string.IsNullOrWhiteSpace(activeBody) || activeBody == "null", activeBody);
+    }
+
+    [Fact]
     public async Task GitHubSyncJob_ImportsRepositoryWithOnlyPullRequestShapedIssue()
     {
         var fakeGitHub = new FakeGitHubApiClient();
@@ -5180,6 +5216,7 @@ internal sealed class FakeGitHubApiClient : IGitHubApiClient
     public Dictionary<string, List<GitHubPullRequest>> PullRequestsByRepository { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, TimeSpan> ListIssueDelays { get; } = new(StringComparer.OrdinalIgnoreCase);
     public HashSet<string> FailingIssueRepositories { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public HashSet<string> CancelingIssueRepositories { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, List<DateTimeOffset?>> IssueSinceArguments { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, List<GitHubListState>> IssueStateArguments { get; } = new(StringComparer.OrdinalIgnoreCase);
     public Dictionary<string, List<GitHubListState>> PullRequestStateArguments { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -5297,6 +5334,11 @@ internal sealed class FakeGitHubApiClient : IGitHubApiClient
         if (FailingIssueRepositories.Contains(repository.FullName))
         {
             throw new HttpRequestException($"Synthetic GitHub list failure for {repository.FullName}.");
+        }
+
+        if (CancelingIssueRepositories.Contains(repository.FullName))
+        {
+            throw new TaskCanceledException($"Synthetic GitHub list timeout for {repository.FullName}.");
         }
 
         if (!IssueSinceArguments.TryGetValue(repository.FullName, out var sinceArguments))

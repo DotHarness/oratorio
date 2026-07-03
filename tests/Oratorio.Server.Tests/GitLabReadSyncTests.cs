@@ -161,6 +161,31 @@ public sealed class GitLabReadSyncTests
     }
 
     [Fact]
+    public async Task GitLabSyncJob_RecordsProjectTimeouts_AndClearsActiveJob()
+    {
+        var fakeGitLab = new FakeGitLabApiClient();
+        fakeGitLab.CancelingIssueProjects.Add("group/subgroup/project");
+        await using var app = GitLabApp(fakeGitLab);
+        var client = app.CreateClient();
+
+        var job = await EnqueueGitLabSyncAsync(client, SourceSyncMode.Incremental);
+        var completed = await WaitForSourceSyncJobAsync(client, job.JobId);
+
+        Assert.Equal(SourceSyncStatus.Failed, completed.Status);
+        Assert.Equal(1, completed.ProjectsFailed);
+        var failed = Assert.Single(completed.Projects);
+        Assert.Equal(SourceSyncProjectStatus.Failed, failed.Status);
+        Assert.Equal(SourceSyncProjectPhase.Failed, failed.Phase);
+        Assert.Equal("gitLabSyncFailed", failed.ErrorCode);
+        Assert.Contains("timeout", failed.ErrorMessage ?? "", StringComparison.OrdinalIgnoreCase);
+
+        var activeResponse = await client.GetAsync("/api/v1/sources/sync-jobs/active?provider=gitlab");
+        Assert.Equal(HttpStatusCode.OK, activeResponse.StatusCode);
+        var activeBody = await activeResponse.Content.ReadAsStringAsync();
+        Assert.True(string.IsNullOrWhiteSpace(activeBody) || activeBody == "null", activeBody);
+    }
+
+    [Fact]
     public async Task AutoReview_CanonicalGitHubAndGitLabAllowlistQueuesBothProviders()
     {
         var fakeGitLab = new FakeGitLabApiClient();
@@ -1704,15 +1729,23 @@ public sealed class GitLabReadSyncTests
         public int FailNextMergeRequestNoteCount { get; set; }
         public bool FailMergeRequestDiffReads { get; set; }
         public int MergeRequestDiffReadCount { get; private set; }
+        public HashSet<string> CancelingIssueProjects { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public Task<GitLabProject> GetProjectAsync(GitLabProjectRef project, CancellationToken ct) =>
             Task.FromResult(new GitLabProject(99, ProjectPath, "https://gitlab.example.test/group/subgroup/project", "main"));
 
-        public Task<IReadOnlyList<GitLabIssue>> ListIssuesAsync(GitLabProjectRef project, GitLabListState state, DateTimeOffset? updatedAfter, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<GitLabIssue>>(Issues
+        public Task<IReadOnlyList<GitLabIssue>> ListIssuesAsync(GitLabProjectRef project, GitLabListState state, DateTimeOffset? updatedAfter, CancellationToken ct)
+        {
+            if (CancelingIssueProjects.Contains(project.ProjectPath))
+            {
+                throw new TaskCanceledException($"Synthetic GitLab list timeout for {project.ProjectPath}.");
+            }
+
+            return Task.FromResult<IReadOnlyList<GitLabIssue>>(Issues
                 .Where(issue => MatchesState(issue.State, state))
                 .Where(issue => updatedAfter is null || issue.UpdatedAt >= updatedAfter)
                 .ToArray());
+        }
 
         public Task<IReadOnlyList<GitLabMergeRequest>> ListMergeRequestsAsync(GitLabProjectRef project, GitLabListState state, DateTimeOffset? updatedAfter, CancellationToken ct) =>
             Task.FromResult<IReadOnlyList<GitLabMergeRequest>>(MergeRequests

@@ -294,6 +294,11 @@ public sealed class GitHubSyncCoordinator(
                 await CompleteRepositoryRunAsync(repositoryRunId, result, ct);
             }
         }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "GitHub sync was canceled for repository run {RepositoryRunId}.", repositoryRunId);
+            await FailRepositoryRunAsync(repositoryRunId, "githubSyncFailed", ex.Message, ct);
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "GitHub sync failed for repository run {RepositoryRunId}.", repositoryRunId);
