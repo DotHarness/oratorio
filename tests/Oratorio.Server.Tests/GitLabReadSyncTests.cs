@@ -113,6 +113,65 @@ public sealed class GitLabReadSyncTests
     }
 
     [Fact]
+    public async Task GitLabMergeRequestReview_RetriesMissingDraft_AndReusesFailedThread()
+    {
+        var fakeGitLab = new FakeGitLabApiClient();
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft);
+        fakeAppServer.ScriptedOutcomes.Enqueue(FakeAppServerOutcome.Success);
+        fakeAppServer.ScriptedOutcomes.Enqueue(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft);
+        var workspace = Path.Combine(Path.GetTempPath(), "oratorio-test-workspace");
+        await using var app = GitLabApp(
+            fakeGitLab,
+            GitLabSettings(),
+            services =>
+            {
+                services.RemoveAll<IClock>();
+                services.AddSingleton<IClock, SystemClock>();
+                services.RemoveAll<IDotCraftAppServerProcessManager>();
+                services.RemoveAll<IDotCraftAppServerClientFactory>();
+                services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+                services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+                services.RemoveAll<IOptionsMonitor<DotCraftOptions>>();
+                services.AddSingleton<IOptionsMonitor<DotCraftOptions>>(new StaticOptionsMonitor<DotCraftOptions>(new DotCraftOptions
+                {
+                    RepositoryWorkspaces = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["gitlab:gitlab.example.test/group/subgroup/project"] = workspace
+                    },
+                    MaxRunAttempts = 2,
+                    RetryBackoffSeconds = 1,
+                    MaxRetryBackoffSeconds = 1
+                }));
+            });
+        var client = app.CreateClient();
+
+        var job = await EnqueueGitLabSyncAsync(client, SourceSyncMode.Incremental);
+        await WaitForSourceSyncJobAsync(client, job.JobId);
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=gitlab&kind=pullRequest", JsonOptions);
+        var mergeRequest = Assert.Single(list!.Items);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{mergeRequest.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Retry a missing merge request review draft.", null, null));
+
+        var reviewed = await WaitForItemByIdAsync(
+            client,
+            mergeRequest.ItemId!,
+            x => x.Item.State == ItemState.AwaitingReview && x.ReviewDrafts.Count == 1 && x.Runs.Count == 2);
+        var runs = reviewed.Runs.OrderBy(x => x.Attempt).ToArray();
+
+        Assert.Equal("gitlab", reviewed.Item.Source);
+        Assert.Equal("reviewDraftRequired", runs[0].ErrorCode);
+        Assert.Equal(RunStatus.Failed, runs[0].Status);
+        Assert.Equal(RunStatus.Succeeded, runs[1].Status);
+        Assert.Equal("thread-test-1", runs[0].ThreadId);
+        Assert.Equal("thread-test-1", runs[1].ThreadId);
+        Assert.Equal(1, fakeAppServer.StartThreadCount);
+        Assert.Equal(1, fakeAppServer.ThreadResumeAttemptCount);
+    }
+
+    [Fact]
     public async Task GitLabSyncJob_FailsOnlyProjectMissingProfileToken()
     {
         var settings = GitLabSettings();
@@ -1427,7 +1486,10 @@ public sealed class GitLabReadSyncTests
                     {
                         ["example-owner/oratorio"] = defaultWorkspace,
                         ["gitlab:gitlab.example.test/group/subgroup/project"] = defaultWorkspace
-                    }
+                    },
+                    MaxRunAttempts = 1,
+                    RetryBackoffSeconds = 1,
+                    MaxRetryBackoffSeconds = 1
                 }));
                 configureServices?.Invoke(services);
             },

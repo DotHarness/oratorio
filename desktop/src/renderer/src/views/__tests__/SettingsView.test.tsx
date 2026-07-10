@@ -1035,7 +1035,7 @@ describe('SettingsView', () => {
     fireEvent.focus(implementationTurnsInput)
     fireEvent.change(implementationTurnsInput, { target: { value: '12' } })
     fireEvent.blur(implementationTurnsInput)
-    fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'Retry attempts' }), { key: 'ArrowUp' })
+    fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'Maximum total attempts, including the initial run' }), { key: 'ArrowUp' })
     fireEvent.click(screen.getByRole('button', { name: 'Implementation delivery' }))
     fireEvent.click(screen.getByRole('option', { name: 'Auto PR/MR' }))
 

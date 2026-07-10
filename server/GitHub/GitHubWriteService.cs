@@ -246,13 +246,16 @@ public sealed class GitHubWriteService(
         }
 
         var now = clock.UtcNow;
+        var superseded = string.Equals(run.ErrorCode, "reviewRetrySuperseded", StringComparison.Ordinal);
         var request = new Dictionary<string, object?>
         {
             ["name"] = CheckRunName,
             ["status"] = "completed",
             ["conclusion"] = "cancelled",
-            ["title"] = "Oratorio review cancelled",
-            ["summary"] = "The active Oratorio review run was cancelled by the operator.",
+            ["title"] = superseded ? "Oratorio review superseded" : "Oratorio review cancelled",
+            ["summary"] = superseded
+                ? "The queued Oratorio review retry targeted an older head and was superseded."
+                : "The active Oratorio review run was cancelled by the operator.",
             ["runId"] = run.RunId
         };
         var checkRunId = await FindLatestReviewGateCheckRunIdAsync(run.ItemId, run.RoundId, headSha, ct);

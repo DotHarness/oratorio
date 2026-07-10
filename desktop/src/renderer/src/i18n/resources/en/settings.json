@@ -383,7 +383,7 @@
     "concurrency": "Concurrency",
     "concurrencyDescription": "Global, per repository, and per source active run limits.",
     "retries": "Retries",
-    "retriesDescription": "Attempts plus initial and maximum backoff.",
+    "retriesDescription": "Maximum total attempts, including the initial run, plus initial and maximum backoff.",
     "stallTimeout": "Stall timeout",
     "stallTimeoutDescription": "How long a silent active run can continue before being treated as stalled.",
     "retention": "Retention",
@@ -396,8 +396,8 @@
       "perSource": "Per source concurrency"
     },
     "retry": {
-      "attempts": "Attempts",
-      "attemptsLabel": "Retry attempts",
+      "attempts": "Max attempts",
+      "attemptsLabel": "Maximum total attempts, including the initial run",
       "initial": "Initial",
       "initialBackoff": "Initial backoff",
       "maximum": "Maximum",
