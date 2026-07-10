@@ -106,6 +106,12 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
                 x.CompletedAt
             })
             .ToListAsync(ct);
+        var previousRetryAttempt = run.RetryCount > 0
+            ? allRuns
+                .Where(x => x.RoundId == run.RoundId && x.Attempt == run.Attempt - 1)
+                .OrderByDescending(x => x.CompletedAt ?? x.StartedAt ?? DateTimeOffset.MinValue)
+                .FirstOrDefault()
+            : null;
         var isPullRequestReview = run.Purpose == RunPurpose.ReviewAnalysis && item.Source is "github" or "gitlab" && item.Kind == ItemKind.PullRequest;
         var priorOpenFindings = isPullRequestReview
             ? await db.ReviewDraftComments.AsNoTracking()
@@ -244,6 +250,7 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
                 round.RoundNumber,
                 round.Status,
                 run.Attempt,
+                run.RetryCount,
                 run.Purpose,
                 run.DispatchTrigger,
                 run.TargetHeadSha,
@@ -386,6 +393,31 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
             foreach (var feedback in feedbackForThisRound)
             {
                 prompt.AppendLine($"- {feedback.Kind}: {feedback.Body.Trim()}");
+            }
+        }
+
+        if (previousRetryAttempt is not null)
+        {
+            prompt.AppendLine();
+            prompt.AppendLine("Retry recovery:");
+            prompt.AppendLine($"- This is attempt {run.Attempt}; attempt {previousRetryAttempt.Attempt} ended with {previousRetryAttempt.ErrorCode ?? previousRetryAttempt.Status.ToString()}.");
+            if (!string.IsNullOrWhiteSpace(previousRetryAttempt.ErrorMessage))
+            {
+                prompt.AppendLine($"- Previous failure: {previousRetryAttempt.ErrorMessage.Trim()}");
+            }
+
+            if (string.Equals(previousRetryAttempt.ErrorCode, "reviewDraftRequired", StringComparison.Ordinal))
+            {
+                prompt.AppendLine("- Reuse the prior analysis when available, repair any rejected Review Draft payload, and call oratorio.SubmitReviewDraft.");
+                prompt.AppendLine("- Do not finish this turn until oratorio.SubmitReviewDraft returns a successful result, including for a clean review.");
+            }
+            else if (previousRetryAttempt.ErrorCode is "appServerTurnFailed" or "appServerTurnCancelled")
+            {
+                prompt.AppendLine("- Continue the interrupted review, verify the result against the current target, and complete the required oratorio.SubmitReviewDraft delivery before finishing.");
+            }
+            else
+            {
+                prompt.AppendLine("- Re-run the requested work and complete all required Oratorio dynamic-tool deliveries before finishing.");
             }
         }
 

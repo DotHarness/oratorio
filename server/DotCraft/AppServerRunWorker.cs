@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DotCraft.Sdk.Wire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Oratorio.Server.Api;
@@ -83,54 +84,60 @@ public sealed class AppServerRunWorker(
 
     private async Task RecoverInterruptedRunsAsync(CancellationToken ct)
     {
-        using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
-        var activeRuns = await db.Runs
-            .Include(x => x.Item)
-            .Include(x => x.Round)
+        string[] activeRunIds;
+        using (var scope = scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
+            activeRunIds = await db.Runs.AsNoTracking()
             .Where(x => x.RunnerKind == "appServer" && ActiveWorkerStatuses.Contains(x.Status))
-            .ToListAsync(ct);
-        if (activeRuns.Count == 0)
+                .Select(x => x.RunId)
+                .ToArrayAsync(ct);
+        }
+
+        if (activeRunIds.Length == 0)
         {
             return;
         }
 
-        var now = clock.UtcNow;
-        foreach (var run in activeRuns)
+        foreach (var runId in activeRunIds)
         {
-            FailRun(run, now, RunStatus.Failed, "appServerRunnerInterrupted", "The DotCraft AppServer runner was interrupted before it completed.", allowRetry: true);
+            await FailRunAsync(
+                runId,
+                RunStatus.Failed,
+                "appServerRunnerInterrupted",
+                "The DotCraft AppServer runner was interrupted before it completed.",
+                allowRetry: true,
+                ct);
         }
-
-        await RecordFailedReviewGatesAsync(scope, activeRuns, ct);
-        await db.SaveChangesAsync(ct);
     }
 
     private async Task ReconcileStalledRunsAsync(CancellationToken ct)
     {
         var value = options.CurrentValue;
         var staleBefore = clock.UtcNow - value.StallTimeout;
-        using var scope = scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
-        var stalledRuns = await db.Runs
-            .Include(x => x.Item)
-            .Include(x => x.Round)
-            .Where(x =>
-                x.RunnerKind == "appServer" &&
-                ActiveWorkerStatuses.Contains(x.Status) &&
-                x.LastHeartbeatAt != null &&
-                x.LastHeartbeatAt < staleBefore)
-            .ToListAsync(ct);
-
-        var now = clock.UtcNow;
-        foreach (var run in stalledRuns)
+        string[] stalledRunIds;
+        using (var scope = scopeFactory.CreateScope())
         {
-            FailRun(run, now, RunStatus.TimedOut, "appServerStalled", "DotCraft AppServer run heartbeat stalled.", allowRetry: true);
+            var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
+            stalledRunIds = await db.Runs.AsNoTracking()
+                .Where(x =>
+                    x.RunnerKind == "appServer" &&
+                    ActiveWorkerStatuses.Contains(x.Status) &&
+                    x.LastHeartbeatAt != null &&
+                    x.LastHeartbeatAt < staleBefore)
+                .Select(x => x.RunId)
+                .ToArrayAsync(ct);
         }
 
-        if (stalledRuns.Count > 0)
+        foreach (var runId in stalledRunIds)
         {
-            await RecordFailedReviewGatesAsync(scope, stalledRuns, ct);
-            await db.SaveChangesAsync(ct);
+            await FailRunAsync(
+                runId,
+                RunStatus.TimedOut,
+                "appServerStalled",
+                "DotCraft AppServer run heartbeat stalled.",
+                allowRetry: true,
+                ct);
         }
     }
 
@@ -139,10 +146,12 @@ public sealed class AppServerRunWorker(
         var value = options.CurrentValue;
         var now = clock.UtcNow;
         var runIdsToStart = new List<string>();
+        var supersededItems = new List<OratorioItem>();
 
         using (var scope = scopeFactory.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
+            var stateChanged = false;
             var activeRuns = await db.Runs.AsNoTracking()
                 .Include(x => x.Item)
                 .Where(x => x.RunnerKind == "appServer" && ActiveWorkerStatuses.Contains(x.Status))
@@ -157,6 +166,8 @@ public sealed class AppServerRunWorker(
 
             var candidates = await db.Runs
                 .Include(x => x.Item)
+                .ThenInclude(x => x!.TimelineEvents)
+                .Include(x => x.Round)
                 .Where(x =>
                     x.RunnerKind == "appServer" &&
                     x.Status == RunStatus.Queued &&
@@ -167,6 +178,13 @@ public sealed class AppServerRunWorker(
 
             foreach (var run in candidates)
             {
+                if (await SupersedeObsoleteReviewRetryAsync(scope, run, now, ct))
+                {
+                    stateChanged = true;
+                    supersededItems.Add(run.Item!);
+                    continue;
+                }
+
                 if (activeTotal >= value.EffectiveGlobalMaxActiveRuns || run.Item is null)
                 {
                     break;
@@ -196,16 +214,68 @@ public sealed class AppServerRunWorker(
                 activeBySource[sourceKey] = activeBySource.GetValueOrDefault(sourceKey) + 1;
             }
 
-            if (runIdsToStart.Count > 0)
+            if (stateChanged || runIdsToStart.Count > 0)
             {
                 await db.SaveChangesAsync(ct);
             }
+        }
+
+        foreach (var item in supersededItems)
+        {
+            boardEvents.PublishTaskUpdated(item, now);
         }
 
         foreach (var runId in runIdsToStart)
         {
             StartRunTask(runId, ct);
         }
+    }
+
+    private async Task<bool> SupersedeObsoleteReviewRetryAsync(
+        IServiceScope scope,
+        OratorioRun run,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        if (run.RetryCount <= 0 ||
+            !RequiresReviewDraft(run) ||
+            string.IsNullOrWhiteSpace(run.TargetHeadSha) ||
+            string.IsNullOrWhiteSpace(run.Item?.HeadSha) ||
+            SameHead(run.TargetHeadSha, run.Item.HeadSha))
+        {
+            return false;
+        }
+
+        var message = $"Review retry target changed from {run.TargetHeadSha} to {run.Item!.HeadSha}; the queued retry was superseded.";
+        run.Status = RunStatus.Cancelled;
+        run.CompletedAt = now;
+        run.Summary = message;
+        run.ErrorCode = "reviewRetrySuperseded";
+        run.ErrorMessage = message;
+        run.ProgressPercent = 100;
+        run.StatusMessage = message;
+        run.LastHeartbeatAt = now;
+        run.LeaseOwner = null;
+        run.LeaseAcquiredAt = null;
+
+        run.Round!.Status = RoundStatus.Superseded;
+        run.Round.Summary = message;
+        run.Round.CompletedAt = now;
+
+        run.Item.State = ItemState.Discovered;
+        if (run.Item.CurrentRunId == run.RunId)
+        {
+            run.Item.CurrentRunId = null;
+        }
+        run.Item.LatestSummary = message;
+        run.Item.CheckState = CheckState.Attention;
+        run.Item.UpdatedAt = now;
+
+        AddTimeline(run, TimelineEventKind.RunCancelled, ActorKind.System, "oratorio/retry", "Review retry superseded", message, now);
+        AddTimeline(run, TimelineEventKind.CheckUpdated, ActorKind.System, "oratorio/review", "Check superseded", "The queued retry targeted an older review head.", now);
+        var writes = scope.ServiceProvider.GetRequiredService<GitHubWriteService>();
+        await writes.RecordReviewGateRunCancelledAsync(run, ct);
+        return true;
     }
 
     private void StartRunTask(string runId, CancellationToken ct)
@@ -305,9 +375,27 @@ public sealed class AppServerRunWorker(
             {
                 threadId = reusableThread.ThreadId;
                 boundThreadId = threadId;
-                await client.ResumeThreadAsync(threadId, dynamicTools, prompt.RuntimeAdditionalContext, timeout.Token);
-
-                await MarkThreadReusedAsync(runId, reusableThread, prompt.ContextJson, endpoint.Url, timeout.Token);
+                try
+                {
+                    await client.ResumeThreadAsync(threadId, dynamicTools, prompt.RuntimeAdditionalContext, timeout.Token);
+                    await MarkThreadReusedAsync(runId, reusableThread, prompt.ContextJson, endpoint.Url, timeout.Token);
+                }
+                catch (Exception ex) when (IsThreadResumeRejection(ex))
+                {
+                    logger.LogInformation(ex, "Compatible AppServer thread {ThreadId} could not be resumed for run {RunId}; creating a fresh thread in the same attempt.", threadId, runId);
+                    threadCreationReason = $"Compatible thread {threadId} could not be resumed: {ex.Message}";
+                    reusableThread = null;
+                    boundThreadId = null;
+                    prompt = await BuildPromptAsync(runId, executionWorkspacePath, requiredDynamicTools, incremental: false, timeout.Token);
+                    threadId = await client.StartThreadAsync(new AppServerThreadStartRequest(
+                        DisplayName: prompt.DisplayName,
+                        WorkspacePath: executionWorkspacePath,
+                        ApprovalPolicy: string.IsNullOrWhiteSpace(value.ApprovalPolicy) ? "interrupt" : value.ApprovalPolicy,
+                        AgentInstructions: "You are connected through Oratorio. Follow the prompt exactly and use Oratorio dynamic tools when instructed.",
+                        DynamicTools: dynamicTools,
+                        RuntimeAdditionalContext: prompt.RuntimeAdditionalContext), timeout.Token);
+                    await MarkThreadCreatedAsync(runId, threadId, prompt.ContextJson, endpoint.Url, threadCreationReason, timeout.Token);
+                }
             }
 
             boundThreadId = threadId;
@@ -864,6 +952,28 @@ public sealed class AppServerRunWorker(
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
         var run = await db.Runs.AsNoTracking().FirstAsync(x => x.RunId == runId, ct);
+
+        if (run.RetryCount > 0)
+        {
+            var previousAttempt = await db.Runs.AsNoTracking()
+                .Where(x =>
+                    x.RoundId == run.RoundId &&
+                    x.Attempt == run.Attempt - 1 &&
+                    x.RunnerKind == "appServer" &&
+                    x.ThreadId != null &&
+                    x.PromptContextJson != null)
+                .FirstOrDefaultAsync(ct);
+            if (previousAttempt is not null &&
+                IsReviewThreadRecoveryError(previousAttempt.ErrorCode) &&
+                SameHead(previousAttempt.TargetHeadSha, run.TargetHeadSha) &&
+                IsCompatiblePromptContext(previousAttempt.PromptContextJson!, workspacePath, requiredDynamicTools))
+            {
+                return new AppServerThreadReuseCandidate(previousAttempt.ThreadId!, previousAttempt.RunId, IsRetryRecovery: true);
+            }
+
+            return null;
+        }
+
         var candidates = await db.Runs.AsNoTracking()
             .Where(x =>
                 x.ItemId == run.ItemId &&
@@ -880,7 +990,7 @@ public sealed class AppServerRunWorker(
         {
             if (IsCompatiblePromptContext(candidate.PromptContextJson!, workspacePath, requiredDynamicTools))
             {
-                return new AppServerThreadReuseCandidate(candidate.ThreadId!, candidate.RunId);
+                return new AppServerThreadReuseCandidate(candidate.ThreadId!, candidate.RunId, IsRetryRecovery: false);
             }
         }
 
@@ -1054,7 +1164,10 @@ public sealed class AppServerRunWorker(
         run.ProgressPercent = Math.Max(run.ProgressPercent, 30);
         run.StatusMessage = "DotCraft thread reused.";
         run.LastHeartbeatAt = now;
-        AddTimeline(run, TimelineEventKind.RunStarted, ActorKind.Agent, "DotCraft", "DotCraft thread reused", $"{candidate.ThreadId} reused from run {ShortId(candidate.RunId)} with matching workspace and dynamic tools.", now);
+        var reason = candidate.IsRetryRecovery
+            ? $"{candidate.ThreadId} resumed from failed attempt {ShortId(candidate.RunId)} with matching target, workspace, and dynamic tools."
+            : $"{candidate.ThreadId} reused from run {ShortId(candidate.RunId)} with matching workspace and dynamic tools.";
+        AddTimeline(run, TimelineEventKind.RunStarted, ActorKind.Agent, "DotCraft", "DotCraft thread reused", reason, now);
         await db.SaveChangesAsync(ct);
     }
 
@@ -1145,13 +1258,18 @@ public sealed class AppServerRunWorker(
                     RunStatus.Failed,
                     "reviewDraftRequired",
                     "Source review runs must submit oratorio.SubmitReviewDraft before completing.",
-                    allowRetry: false);
+                    allowRetry: true);
                 await RecordFailedReviewGateAsync(scope, run, ct);
                 await db.SaveChangesAsync(ct);
                 return;
             }
         }
 
+        await CompleteRunAsync(scope, db, run, summary, ct);
+    }
+
+    private async Task CompleteRunAsync(IServiceScope scope, OratorioDbContext db, OratorioRun run, string summary, CancellationToken ct)
+    {
         var now = clock.UtcNow;
 
         run.Status = RunStatus.Succeeded;
@@ -1186,23 +1304,67 @@ public sealed class AppServerRunWorker(
         if (run.Purpose == RunPurpose.ReviewAnalysis)
         {
             var drafts = scope.ServiceProvider.GetRequiredService<ReviewDraftService>();
-            await drafts.AutoPublishRunDraftsAsync(runId, ct);
+            await drafts.AutoPublishRunDraftsAsync(run.RunId, ct);
         }
     }
 
-    private async Task FailRunAsync(string runId, RunStatus status, string errorCode, string errorMessage, bool allowRetry, CancellationToken ct)
+    private async Task<bool> FailRunAsync(string runId, RunStatus status, string errorCode, string errorMessage, bool allowRetry, CancellationToken ct)
     {
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
         var run = await LoadRunAsync(db, runId, ct);
         if (IsTerminal(run.Status))
         {
-            return;
+            return false;
+        }
+
+        if (await TryCompleteReviewFromDraftAsync(scope, db, run, errorCode, errorMessage, ct))
+        {
+            return true;
         }
 
         FailRun(run, clock.UtcNow, status, errorCode, errorMessage, allowRetry);
         await RecordFailedReviewGateAsync(scope, run, ct);
         await db.SaveChangesAsync(ct);
+        return false;
+    }
+
+    private async Task<bool> TryCompleteReviewFromDraftAsync(
+        IServiceScope scope,
+        OratorioDbContext db,
+        OratorioRun run,
+        string terminalErrorCode,
+        string terminalErrorMessage,
+        CancellationToken ct)
+    {
+        if (!RequiresReviewDraft(run))
+        {
+            return false;
+        }
+
+        var draftSummary = await db.ReviewDrafts.AsNoTracking()
+            .Where(x =>
+                x.RunId == run.RunId &&
+                x.Status != ReviewDraftStatus.Discarded)
+            .OrderByDescending(x => x.CreatedAt)
+            .Select(x => x.SummaryBody)
+            .FirstOrDefaultAsync(ct);
+        if (string.IsNullOrWhiteSpace(draftSummary))
+        {
+            return false;
+        }
+
+        AddTimeline(
+            run,
+            TimelineEventKind.ItemUpdated,
+            ActorKind.System,
+            "oratorio/review",
+            "Review draft retained after AppServer termination",
+            $"A valid Review Draft was submitted before the AppServer terminated: {terminalErrorMessage}",
+            clock.UtcNow,
+            JsonSerializer.Serialize(new { code = terminalErrorCode, message = terminalErrorMessage }, JsonOptions));
+        await CompleteRunAsync(scope, db, run, draftSummary, ct);
+        return true;
     }
 
     private void FailRun(OratorioRun run, DateTimeOffset now, RunStatus status, string errorCode, string errorMessage, bool allowRetry)
@@ -1290,15 +1452,6 @@ public sealed class AppServerRunWorker(
         };
     }
 
-    private static async Task RecordFailedReviewGatesAsync(IServiceScope scope, IEnumerable<OratorioRun> runs, CancellationToken ct)
-    {
-        var writes = scope.ServiceProvider.GetRequiredService<GitHubWriteService>();
-        foreach (var run in runs)
-        {
-            await writes.RecordReviewGateRunFailedAsync(run, ct);
-        }
-    }
-
     private static async Task RecordFailedReviewGateAsync(IServiceScope scope, OratorioRun run, CancellationToken ct)
     {
         if (run.Item?.State != ItemState.Failed)
@@ -1335,8 +1488,23 @@ public sealed class AppServerRunWorker(
         }
 
         return status == RunStatus.TimedOut ||
-            errorCode is "appServerDisconnected" or "appServerFailed" or "appServerTimedOut" or "appServerStalled" or "gitCommandFailed";
+            errorCode is "appServerDisconnected" or
+                "appServerFailed" or
+                "appServerTimedOut" or
+                "appServerStalled" or
+                "appServerRunnerInterrupted" or
+                "gitCommandFailed" ||
+            (RequiresReviewDraft(run) && IsReviewThreadRecoveryError(errorCode));
     }
+
+    private static bool IsReviewThreadRecoveryError(string? errorCode) =>
+        errorCode is "reviewDraftRequired" or "appServerTurnFailed" or "appServerTurnCancelled";
+
+    private static bool IsThreadResumeRejection(Exception ex) =>
+        ex is JsonRpcException or InvalidOperationException;
+
+    private static bool SameHead(string? left, string? right) =>
+        string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsTransientPreparationError(string code) =>
         code is "gitCommandFailed";
@@ -1421,17 +1589,33 @@ public sealed class AppServerRunWorker(
 
             if (notification.Method == "turn/failed")
             {
-                runCoordinator.UpdateRunStatus(runId, null, "failed");
-                PublishRunStatus(runId, "failed", null, "appServerTurnFailed", ExtractText(notification.Params), 100, "DotCraft turn failed.");
-                await FailRunAsync(runId, RunStatus.Failed, "appServerTurnFailed", ExtractText(notification.Params) ?? "DotCraft turn failed.", allowRetry: false, ct);
+                var errorMessage = ExtractText(notification.Params) ?? "DotCraft turn failed.";
+                var completedFromDraft = await FailRunAsync(runId, RunStatus.Failed, "appServerTurnFailed", errorMessage, allowRetry: true, ct);
+                runCoordinator.UpdateRunStatus(runId, null, completedFromDraft ? "completed" : "failed");
+                PublishRunStatus(
+                    runId,
+                    completedFromDraft ? "completed" : "failed",
+                    null,
+                    completedFromDraft ? null : "appServerTurnFailed",
+                    completedFromDraft ? null : errorMessage,
+                    100,
+                    completedFromDraft ? "Review draft retained after DotCraft turn failure." : "DotCraft turn failed.");
                 return;
             }
 
             if (notification.Method == "turn/cancelled")
             {
-                runCoordinator.UpdateRunStatus(runId, null, "cancelled");
-                PublishRunStatus(runId, "cancelled", null, "appServerTurnCancelled", "DotCraft turn was cancelled.", 100, "DotCraft turn was cancelled.");
-                await FailRunAsync(runId, RunStatus.Failed, "appServerTurnCancelled", "DotCraft turn was cancelled.", allowRetry: false, ct);
+                const string errorMessage = "DotCraft turn was cancelled.";
+                var completedFromDraft = await FailRunAsync(runId, RunStatus.Failed, "appServerTurnCancelled", errorMessage, allowRetry: true, ct);
+                runCoordinator.UpdateRunStatus(runId, null, completedFromDraft ? "completed" : "cancelled");
+                PublishRunStatus(
+                    runId,
+                    completedFromDraft ? "completed" : "cancelled",
+                    null,
+                    completedFromDraft ? null : "appServerTurnCancelled",
+                    completedFromDraft ? null : errorMessage,
+                    100,
+                    completedFromDraft ? "Review draft retained after DotCraft turn cancellation." : errorMessage);
                 return;
             }
 
@@ -1665,7 +1849,15 @@ public sealed class AppServerRunWorker(
             .Include(x => x.Round)
             .FirstAsync(x => x.RunId == runId, ct);
 
-    private static void AddTimeline(OratorioRun run, TimelineEventKind kind, ActorKind actorKind, string actorName, string title, string? body, DateTimeOffset createdAt)
+    private static void AddTimeline(
+        OratorioRun run,
+        TimelineEventKind kind,
+        ActorKind actorKind,
+        string actorName,
+        string title,
+        string? body,
+        DateTimeOffset createdAt,
+        string? metadataJson = null)
     {
         run.Item!.TimelineEvents.Add(new OratorioTimelineEvent
         {
@@ -1677,6 +1869,7 @@ public sealed class AppServerRunWorker(
             ActorName = actorName,
             Title = title,
             Body = body,
+            MetadataJson = metadataJson,
             CreatedAt = createdAt
         });
     }
@@ -1844,4 +2037,4 @@ public sealed class AppServerRunWorker(
     }
 }
 
-internal sealed record AppServerThreadReuseCandidate(string ThreadId, string RunId);
+internal sealed record AppServerThreadReuseCandidate(string ThreadId, string RunId, bool IsRetryRecovery);

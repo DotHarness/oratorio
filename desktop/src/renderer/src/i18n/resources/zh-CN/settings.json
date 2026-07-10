@@ -383,7 +383,7 @@
     "concurrency": "并发",
     "concurrencyDescription": "全局、单仓库及单来源的活动运行上限。",
     "retries": "重试",
-    "retriesDescription": "尝试次数以及初始与最大退避。",
+    "retriesDescription": "包含首次运行的最大总尝试次数，以及初始与最大退避。",
     "stallTimeout": "停滞超时",
     "stallTimeoutDescription": "静默的活动运行在被视为停滞前可持续的时长。",
     "retention": "保留",
@@ -396,8 +396,8 @@
       "perSource": "单来源并发"
     },
     "retry": {
-      "attempts": "尝试次数",
-      "attemptsLabel": "重试尝试次数",
+      "attempts": "最大尝试次数",
+      "attemptsLabel": "最大总尝试次数（包含首次运行）",
       "initial": "初始",
       "initialBackoff": "初始退避",
       "maximum": "最大",

@@ -605,7 +605,8 @@ Allowed Settings content:
 - Agents configuration for DotCraft bridge status, AppServer endpoint
   discovery, Hub discovery, approval policy, and run timeout;
 - Worktree configuration for managed worktrees, concurrency, retry, cleanup,
-  and implementation auto-dispatch policy;
+  and implementation auto-dispatch policy; `maxRunAttempts` is presented as
+  maximum total attempts including the initial run, not additional retries;
 - Review configuration for PR Auto Review triggers and Review Draft
   auto-publish policy.
 

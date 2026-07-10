@@ -2240,6 +2240,64 @@ public sealed class OratorioApiTests
     }
 
     [Fact]
+    public async Task CancelRun_RemainsAuthoritativeWhenReviewDraftAlreadyExists()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.Hold);
+        await using var app = new TestOratorioApp(services =>
+        {
+            services.RemoveAll<IGitHubApiClient>();
+            services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+            services.RemoveAll<IDotCraftAppServerProcessManager>();
+            services.RemoveAll<IDotCraftAppServerClientFactory>();
+            services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+            services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+        });
+        var client = app.CreateClient();
+
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Hold after a Review Draft is stored.", null, null));
+        var running = await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.Running);
+        var run = Assert.Single(running.Runs, x => x.RunId == running.Item.CurrentRunId);
+
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
+            var now = DateTimeOffset.UtcNow;
+            db.ReviewDrafts.Add(new OratorioReviewDraft
+            {
+                ItemId = pr.ItemId!,
+                RoundId = run.RoundId,
+                RunId = run.RunId,
+                Status = ReviewDraftStatus.Draft,
+                SummaryBody = "No issues found.",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var cancelled = await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/cancel-run",
+            new CancelRunRequest("Operator cancellation wins."));
+        await Task.Delay(300);
+        var afterNotification = await client.GetFromJsonAsync<ItemDetailResponse>($"/api/v1/items/id/{pr.ItemId}", JsonOptions);
+
+        Assert.Equal(ItemState.Discovered, cancelled.Item.State);
+        Assert.Equal(RunStatus.Cancelled, Assert.Single(afterNotification!.Runs, x => x.RunId == run.RunId).Status);
+        Assert.Equal("operatorCancelled", Assert.Single(afterNotification.Runs, x => x.RunId == run.RunId).ErrorCode);
+        Assert.Single(afterNotification.ReviewDrafts);
+        Assert.DoesNotContain(afterNotification.Timeline, x => x.Title == "Review draft retained after AppServer termination");
+        Assert.Equal("cancelled", Assert.Single(fakeGitHub.CheckRuns).Conclusion);
+    }
+
+    [Fact]
     public async Task AppServerDispatch_RunTimeoutInterruptsTurn_AndKeepsRunTimedOut()
     {
         var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.TimeoutAfterTurnStarted);
@@ -2971,6 +3029,208 @@ public sealed class OratorioApiTests
             write.Status == SourceWriteStatus.Succeeded);
     }
 
+    [Theory]
+    [InlineData(FakeAppServerOutcome.Success, "reviewDraftRequired")]
+    [InlineData(FakeAppServerOutcome.Fail, "appServerTurnFailed")]
+    [InlineData(FakeAppServerOutcome.Cancel, "appServerTurnCancelled")]
+    public async Task PullRequestReviewRun_RetriesRecoverableFailure_AndReusesFailedThread(
+        FakeAppServerOutcome firstOutcome,
+        string expectedErrorCode)
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft);
+        fakeAppServer.ScriptedOutcomes.Enqueue(firstOutcome);
+        fakeAppServer.ScriptedOutcomes.Enqueue(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft);
+        await using var app = new TestOratorioApp(
+            services =>
+            {
+                services.RemoveAll<IGitHubApiClient>();
+                services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+                services.RemoveAll<IDotCraftAppServerProcessManager>();
+                services.RemoveAll<IDotCraftAppServerClientFactory>();
+                services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+                services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+            },
+            new Dictionary<string, string?>
+            {
+                ["Oratorio:DotCraft:MaxRunAttempts"] = "2",
+                ["Oratorio:DotCraft:RetryBackoffSeconds"] = "1",
+                ["Oratorio:DotCraft:MaxRetryBackoffSeconds"] = "1"
+            });
+        var client = app.CreateClient();
+
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Retry a missing review draft.", null, null));
+
+        var reviewed = await WaitForItemByIdAsync(
+            client,
+            pr.ItemId!,
+            x => x.Item.State == ItemState.AwaitingReview && x.ReviewDrafts.Count == 1 && x.Runs.Count(run => run.RunnerKind == "appServer") == 2);
+        var runs = reviewed.Runs.Where(x => x.RunnerKind == "appServer").OrderBy(x => x.Attempt).ToArray();
+
+        Assert.Equal(RunStatus.Failed, runs[0].Status);
+        Assert.Equal(expectedErrorCode, runs[0].ErrorCode);
+        Assert.Equal(RunStatus.Succeeded, runs[1].Status);
+        Assert.Equal(1, runs[1].RetryCount);
+        Assert.Equal("thread-test-1", runs[0].ThreadId);
+        Assert.Equal("thread-test-1", runs[1].ThreadId);
+        Assert.Equal(1, fakeAppServer.StartThreadCount);
+        Assert.Single(fakeAppServer.ThreadResumeRequests);
+        Assert.Contains("Retry recovery:", fakeAppServer.TurnPrompts[1], StringComparison.Ordinal);
+        Assert.Contains(expectedErrorCode, fakeAppServer.TurnPrompts[1], StringComparison.Ordinal);
+        Assert.Contains(reviewed.Timeline, x => x.Title == "Retry scheduled");
+        var check = Assert.Single(fakeGitHub.CheckRuns);
+        Assert.Equal("completed", check.Status);
+        Assert.Equal("neutral", check.Conclusion);
+    }
+
+    [Theory]
+    [InlineData(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraftThenFail, "Synthetic failure after draft submission")]
+    [InlineData(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraftThenDisconnect, "disconnected before the run completed")]
+    public async Task PullRequestReviewRun_UsesPersistedDraftWhenAppServerTerminatesAfterSubmission(
+        FakeAppServerOutcome outcome,
+        string expectedWarning)
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        var fakeAppServer = new FakeAppServerClientFactory(outcome);
+        await using var app = new TestOratorioApp(services =>
+        {
+            services.RemoveAll<IGitHubApiClient>();
+            services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+            services.RemoveAll<IDotCraftAppServerProcessManager>();
+            services.RemoveAll<IDotCraftAppServerClientFactory>();
+            services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+            services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+        });
+        var client = app.CreateClient();
+
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Keep the submitted draft if the turn fails.", null, null));
+
+        var reviewed = await WaitForItemByIdAsync(
+            client,
+            pr.ItemId!,
+            x => x.Item.State == ItemState.AwaitingReview && x.ReviewDrafts.Count == 1);
+        var run = Assert.Single(reviewed.Runs, x => x.RunnerKind == "appServer");
+
+        Assert.Equal(RunStatus.Succeeded, run.Status);
+        Assert.Null(run.ErrorCode);
+        Assert.Equal("No issues found.", run.Summary);
+        Assert.Single(reviewed.ReviewDrafts);
+        Assert.Equal(1, fakeAppServer.StartThreadCount);
+        Assert.Empty(fakeAppServer.ThreadResumeRequests);
+        Assert.Contains(reviewed.Timeline, x =>
+            x.Title == "Review draft retained after AppServer termination" &&
+            x.Body!.Contains(expectedWarning, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task PullRequestReviewRun_StartsFreshThreadWhenFailedThreadResumeIsRejected()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft)
+        {
+            FailThreadResume = true
+        };
+        fakeAppServer.ScriptedOutcomes.Enqueue(FakeAppServerOutcome.Success);
+        fakeAppServer.ScriptedOutcomes.Enqueue(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft);
+        await using var app = new TestOratorioApp(
+            services =>
+            {
+                services.RemoveAll<IGitHubApiClient>();
+                services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+                services.RemoveAll<IDotCraftAppServerProcessManager>();
+                services.RemoveAll<IDotCraftAppServerClientFactory>();
+                services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+                services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+            },
+            new Dictionary<string, string?>
+            {
+                ["Oratorio:DotCraft:MaxRunAttempts"] = "2"
+            });
+        var client = app.CreateClient();
+
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Fall back when thread resume is rejected.", null, null));
+
+        var reviewed = await WaitForItemByIdAsync(
+            client,
+            pr.ItemId!,
+            x => x.Item.State == ItemState.AwaitingReview && x.Runs.Count(run => run.RunnerKind == "appServer") == 2);
+
+        Assert.Equal(1, fakeAppServer.ThreadResumeAttemptCount);
+        Assert.Empty(fakeAppServer.ThreadResumeRequests);
+        Assert.Equal(2, fakeAppServer.StartThreadCount);
+        Assert.Equal(["thread-test-1", "thread-test-2"], fakeAppServer.TurnThreadIds);
+        Assert.Contains(reviewed.Timeline, x =>
+            x.Title == "DotCraft thread created" &&
+            x.Body!.Contains("could not be resumed", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("Retry recovery:", fakeAppServer.TurnPrompts[1], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PullRequestReviewRun_StartsFreshThreadAfterInfrastructureFailure()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft);
+        fakeAppServer.ScriptedOutcomes.Enqueue(FakeAppServerOutcome.Disconnect);
+        fakeAppServer.ScriptedOutcomes.Enqueue(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft);
+        await using var app = new TestOratorioApp(
+            services =>
+            {
+                services.RemoveAll<IGitHubApiClient>();
+                services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+                services.RemoveAll<IDotCraftAppServerProcessManager>();
+                services.RemoveAll<IDotCraftAppServerClientFactory>();
+                services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+                services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+            },
+            new Dictionary<string, string?>
+            {
+                ["Oratorio:DotCraft:MaxRunAttempts"] = "2"
+            });
+        var client = app.CreateClient();
+
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+
+        await PostAsync<ItemDetailResponse>(
+            client,
+            $"/api/v1/items/id/{pr.ItemId}/dispatch",
+            new DispatchRequest("appServer", "Use a fresh thread after infrastructure failure.", null, null));
+
+        var reviewed = await WaitForItemByIdAsync(
+            client,
+            pr.ItemId!,
+            x => x.Item.State == ItemState.AwaitingReview && x.Runs.Count(run => run.RunnerKind == "appServer") == 2);
+        var runs = reviewed.Runs.Where(x => x.RunnerKind == "appServer").OrderBy(x => x.Attempt).ToArray();
+
+        Assert.Equal("appServerDisconnected", runs[0].ErrorCode);
+        Assert.Equal(RunStatus.Succeeded, runs[1].Status);
+        Assert.Equal(2, fakeAppServer.StartThreadCount);
+        Assert.Equal(0, fakeAppServer.ThreadResumeAttemptCount);
+        Assert.Equal(["thread-test-1", "thread-test-2"], fakeAppServer.TurnThreadIds);
+    }
+
     [Fact]
     public async Task PullRequestReviewRun_AllowsSummaryOnlyReviewDraft()
     {
@@ -3101,6 +3361,115 @@ public sealed class OratorioApiTests
         Assert.Contains(reviewed.SourceWrites, x => x.Kind == SourceWriteKind.CheckRun && x.Intent == "reviewGateStart" && x.HeadSha == "abc123");
         Assert.Contains(reviewed.SourceWrites, x => x.Kind == SourceWriteKind.CheckRun && x.Intent == "reviewGateComplete" && x.HeadSha == "abc123");
         Assert.DoesNotContain(reviewed.SourceWrites, x => x.DecisionId is not null);
+    }
+
+    [Fact]
+    public async Task AutoReview_StopsAfterReviewRetryAttemptsAreExhaustedForSameHead()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.Success);
+        var automation = new MutableOptionsMonitor<OratorioAutomationOptions>(
+            new OratorioAutomationOptions { AutoReviewRepositories = ["example-owner/oratorio"] });
+        await using var app = new TestOratorioApp(
+            services =>
+            {
+                services.RemoveAll<IGitHubApiClient>();
+                services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+                services.RemoveAll<IDotCraftAppServerProcessManager>();
+                services.RemoveAll<IDotCraftAppServerClientFactory>();
+                services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+                services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+                services.RemoveAll<IOptionsMonitor<OratorioAutomationOptions>>();
+                services.AddSingleton<IOptionsMonitor<OratorioAutomationOptions>>(automation);
+            },
+            new Dictionary<string, string?>
+            {
+                ["Oratorio:DotCraft:MaxRunAttempts"] = "2"
+            });
+        var client = app.CreateClient();
+
+        await DispatchAutoReviewAsync(app);
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+        await DispatchAutoReviewAsync(app);
+
+        var failed = await WaitForItemByIdAsync(
+            client,
+            pr.ItemId!,
+            x => x.Item.State == ItemState.Failed && x.Runs.Count(run => run.RunnerKind == "appServer") == 2);
+        Assert.All(failed.Runs.Where(x => x.RunnerKind == "appServer"), x => Assert.Equal("reviewDraftRequired", x.ErrorCode));
+
+        await DispatchAutoReviewAsync(app);
+        await Task.Delay(1200);
+        await DispatchAutoReviewAsync(app);
+        var afterRescan = await client.GetFromJsonAsync<ItemDetailResponse>($"/api/v1/items/id/{pr.ItemId}", JsonOptions);
+
+        Assert.Equal(ItemState.Failed, afterRescan!.Item.State);
+        Assert.Equal(2, afterRescan.Runs.Count(x => x.RunnerKind == "appServer"));
+        Assert.Single(fakeGitHub.CheckRuns);
+        Assert.Equal("failure", fakeGitHub.CheckRuns[0].Conclusion);
+    }
+
+    [Fact]
+    public async Task AutoReview_SupersedesQueuedRetryWhenHeadChanges()
+    {
+        var fakeGitHub = new FakeGitHubApiClient();
+        var fakeAppServer = new FakeAppServerClientFactory(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft);
+        fakeAppServer.ScriptedOutcomes.Enqueue(FakeAppServerOutcome.Success);
+        fakeAppServer.ScriptedOutcomes.Enqueue(FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft);
+        var automation = new MutableOptionsMonitor<OratorioAutomationOptions>(
+            new OratorioAutomationOptions { AutoReviewRepositories = ["example-owner/oratorio"] });
+        await using var app = new TestOratorioApp(
+            services =>
+            {
+                services.RemoveAll<IGitHubApiClient>();
+                services.AddSingleton<IGitHubApiClient>(fakeGitHub);
+                services.RemoveAll<IDotCraftAppServerProcessManager>();
+                services.RemoveAll<IDotCraftAppServerClientFactory>();
+                services.AddSingleton<IDotCraftAppServerProcessManager, FakeDotCraftProcessManager>();
+                services.AddSingleton<IDotCraftAppServerClientFactory>(fakeAppServer);
+                services.RemoveAll<IOptionsMonitor<OratorioAutomationOptions>>();
+                services.AddSingleton<IOptionsMonitor<OratorioAutomationOptions>>(automation);
+            },
+            new Dictionary<string, string?>
+            {
+                ["Oratorio:DotCraft:MaxRunAttempts"] = "2",
+                ["Oratorio:DotCraft:RetryBackoffSeconds"] = "2",
+                ["Oratorio:DotCraft:MaxRetryBackoffSeconds"] = "2"
+            });
+        var client = app.CreateClient();
+
+        await DispatchAutoReviewAsync(app);
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+        var list = await client.GetFromJsonAsync<ItemListResponse>("/api/v1/items?source=github", JsonOptions);
+        var pr = Assert.Single(list!.Items, x => x.Kind == ItemKind.PullRequest);
+        await DispatchAutoReviewAsync(app);
+        await WaitForItemByIdAsync(
+            client,
+            pr.ItemId!,
+            x => x.Runs.Any(run => run.Attempt == 2 && run.Status == RunStatus.Queued));
+
+        MoveDefaultPullRequestHead(fakeGitHub, "def456", DateTimeOffset.UtcNow.AddMinutes(1));
+        await PostAsync<GitHubSyncResponse>(client, "/api/v1/sources/github/sync", new { });
+
+        var reviewed = await WaitForItemByIdAsync(
+            client,
+            pr.ItemId!,
+            x => x.Item.State == ItemState.AwaitingReview && x.Item.CurrentRound == 2 && x.ReviewDrafts.Count == 1);
+        var oldRetry = Assert.Single(reviewed.Runs, x => x.RoundId == reviewed.Rounds.Single(r => r.RoundNumber == 1).RoundId && x.Attempt == 2);
+        var newHeadRun = Assert.Single(reviewed.Runs, x => x.RoundId == reviewed.Rounds.Single(r => r.RoundNumber == 2).RoundId);
+
+        Assert.Equal(RunStatus.Cancelled, oldRetry.Status);
+        Assert.Equal("reviewRetrySuperseded", oldRetry.ErrorCode);
+        Assert.Equal(RoundStatus.Superseded, reviewed.Rounds.Single(x => x.RoundNumber == 1).Status);
+        Assert.Equal(1, newHeadRun.Attempt);
+        Assert.Equal("def456", newHeadRun.TargetHeadSha);
+        Assert.Equal(RunStatus.Succeeded, newHeadRun.Status);
+        Assert.Equal(2, fakeAppServer.StartThreadCount);
+        Assert.Equal(0, fakeAppServer.ThreadResumeAttemptCount);
+        Assert.Contains(reviewed.SourceWrites, x => x.Intent == "reviewGateRunCancelled" && x.HeadSha == "abc123");
+        Assert.Contains(reviewed.SourceWrites, x => x.Intent == "reviewGateComplete" && x.HeadSha == "def456");
     }
 
     [Theory]
@@ -5125,6 +5494,9 @@ internal sealed class TestOratorioApp : WebApplicationFactory<Program>
         Directory.CreateDirectory(defaultWorkspace);
         builder.UseSetting("Oratorio:DatabasePath", _databasePath);
         builder.UseSetting("Oratorio:SeedData", "false");
+        builder.UseSetting("Oratorio:DotCraft:MaxRunAttempts", "1");
+        builder.UseSetting("Oratorio:DotCraft:RetryBackoffSeconds", "1");
+        builder.UseSetting("Oratorio:DotCraft:MaxRetryBackoffSeconds", "1");
         builder.UseSetting("Oratorio:DotCraft:RepositoryWorkspaces:example-owner/oratorio", defaultWorkspace);
         builder.UseSetting("Oratorio:GitHub:Token", "test-token");
         builder.UseSetting("Oratorio:GitHub:WritesEnabled", "true");
@@ -5730,7 +6102,7 @@ internal sealed class MutableClock(DateTimeOffset utcNow) : IClock
     public void Advance(TimeSpan duration) => UtcNow = UtcNow.Add(duration);
 }
 
-internal enum FakeAppServerOutcome
+public enum FakeAppServerOutcome
 {
     Success,
     DrawerItemPublishFailure,
@@ -5743,6 +6115,8 @@ internal enum FakeAppServerOutcome
     SubmitRetryAnchorReviewDraft,
     SubmitCleanReviewDraft,
     SubmitSummaryOnlyReviewDraft,
+    SubmitSummaryOnlyReviewDraftThenFail,
+    SubmitSummaryOnlyReviewDraftThenDisconnect,
     SubmitInvalidReviewDraft,
     SubmitLegacyReviewDraft,
     SubmitMissingSuggestionOldTextReviewDraft,
@@ -5754,7 +6128,9 @@ internal enum FakeAppServerOutcome
     SubmitNoOpReviewDraft,
     SubmitImplementationDraft,
     SubmitFollowUpDraft,
-    SubmitDiscussionReply
+    SubmitDiscussionReply,
+    Cancel,
+    Disconnect
 }
 
 internal sealed class FakeDotCraftProcessManager : IDotCraftAppServerProcessManager
@@ -5872,19 +6248,23 @@ internal sealed record GitDeliveryPush(SourceProjectKey Project, string BranchNa
 internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) : IDotCraftAppServerClientFactory
 {
     public FakeAppServerOutcome Outcome { get; set; } = outcome;
+    public Queue<FakeAppServerOutcome> ScriptedOutcomes { get; } = new();
     public string? FollowUpDraftRepository { get; set; } = "example-owner/oratorio";
     public string? FollowUpDraftBranch { get; set; } = "main";
     public AppServerThreadStartRequest? LastThreadStartRequest { get; private set; }
     public AppBindingConnectionConnectRequest? LastAppConnectionConnectRequest { get; private set; }
     public List<AppServerThreadStartRequest> ThreadStartRequests { get; } = [];
     public List<AppServerThreadResumeRequest> ThreadResumeRequests { get; } = [];
+    public int ThreadResumeAttemptCount { get; private set; }
     public List<AppBindingContextBlockUpsertRequest> AppBindingContextBlockUpsertRequests { get; } = [];
     public int StartThreadCount { get; private set; }
     public int ConnectCount { get; private set; }
     public List<string> StartedThreadIds { get; } = [];
     public List<string> TurnThreadIds { get; } = [];
+    public List<string> TurnPrompts { get; } = [];
     public List<(string ThreadId, string TurnId)> InterruptedTurns { get; } = [];
     public bool UseMismatchedToolThreadId { get; set; }
+    public bool FailThreadResume { get; set; }
     public bool SupportsDynamicToolRebind { get; set; } = true;
     public bool SupportsRuntimeAdditionalContext { get; set; } = true;
     public AppServerDynamicToolResult? LastToolResult { get; set; }
@@ -5899,8 +6279,9 @@ internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) :
     public Task<IDotCraftAppServerClient> ConnectAsync(string appServerUrl, CancellationToken ct, string? token = null)
     {
         ConnectCount++;
+        var connectionOutcome = ScriptedOutcomes.Count > 0 ? ScriptedOutcomes.Dequeue() : Outcome;
         return Task.FromResult<IDotCraftAppServerClient>(new FakeAppServerClient(
-            Outcome,
+            connectionOutcome,
             request =>
             {
                 LastThreadStartRequest = request;
@@ -5912,6 +6293,12 @@ internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) :
             },
             resumeRequest =>
             {
+                ThreadResumeAttemptCount++;
+                if (FailThreadResume)
+                {
+                    throw new InvalidOperationException("Synthetic thread resume rejection.");
+                }
+
                 ThreadResumeRequests.Add(resumeRequest);
             },
             threadId =>
@@ -5920,6 +6307,7 @@ internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) :
                 _turnCount++;
                 return $"turn-test-{_turnCount}";
             },
+            prompt => TurnPrompts.Add(prompt),
             (threadId, turnId) => InterruptedTurns.Add((threadId, turnId)),
             () => SupportsDynamicToolRebind,
             () => SupportsRuntimeAdditionalContext,
@@ -5942,6 +6330,7 @@ internal sealed class FakeAppServerClient(
     Func<AppServerThreadStartRequest, string> startThread,
     Action<AppServerThreadResumeRequest> resumeThread,
     Func<string, string> startTurn,
+    Action<string> captureTurnPrompt,
     Action<string, string> interruptTurn,
     Func<bool> supportsDynamicToolRebind,
     Func<bool> supportsRuntimeAdditionalContext,
@@ -5996,6 +6385,7 @@ internal sealed class FakeAppServerClient(
 
     public Task<string?> StartTurnAsync(string threadId, string prompt, CancellationToken ct)
     {
+        captureTurnPrompt(prompt);
         var turnId = startTurn(threadId);
         _notifications.Writer.TryWrite(Notification("turn/started", new { threadId, turnId }));
         if (outcome == FakeAppServerOutcome.Success)
@@ -6011,10 +6401,11 @@ internal sealed class FakeAppServerClient(
             _notifications.Writer.TryWrite(Notification("turn/completed", new { threadId, turnId, summary = "DotCraft analysis complete." }));
             _notifications.Writer.TryComplete();
         }
-        else if (outcome is FakeAppServerOutcome.SubmitReviewDraft or FakeAppServerOutcome.SubmitDef208BadAnchorReviewDraft or FakeAppServerOutcome.SubmitRetryAnchorReviewDraft or FakeAppServerOutcome.SubmitCleanReviewDraft or FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft or FakeAppServerOutcome.SubmitInvalidReviewDraft or FakeAppServerOutcome.SubmitLegacyReviewDraft or FakeAppServerOutcome.SubmitMissingSuggestionOldTextReviewDraft or FakeAppServerOutcome.SubmitSuggestionTextNotFoundReviewDraft or FakeAppServerOutcome.SubmitAmbiguousSuggestionTextReviewDraft or FakeAppServerOutcome.SubmitMismatchedSuggestionCountReviewDraft or FakeAppServerOutcome.SubmitMultiLineReviewDraft or FakeAppServerOutcome.SubmitContextLineReviewDraft or FakeAppServerOutcome.SubmitNoOpReviewDraft)
+        else if (outcome is FakeAppServerOutcome.SubmitReviewDraft or FakeAppServerOutcome.SubmitDef208BadAnchorReviewDraft or FakeAppServerOutcome.SubmitRetryAnchorReviewDraft or FakeAppServerOutcome.SubmitCleanReviewDraft or FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft or FakeAppServerOutcome.SubmitSummaryOnlyReviewDraftThenFail or FakeAppServerOutcome.SubmitSummaryOnlyReviewDraftThenDisconnect or FakeAppServerOutcome.SubmitInvalidReviewDraft or FakeAppServerOutcome.SubmitLegacyReviewDraft or FakeAppServerOutcome.SubmitMissingSuggestionOldTextReviewDraft or FakeAppServerOutcome.SubmitSuggestionTextNotFoundReviewDraft or FakeAppServerOutcome.SubmitAmbiguousSuggestionTextReviewDraft or FakeAppServerOutcome.SubmitMismatchedSuggestionCountReviewDraft or FakeAppServerOutcome.SubmitMultiLineReviewDraft or FakeAppServerOutcome.SubmitContextLineReviewDraft or FakeAppServerOutcome.SubmitNoOpReviewDraft)
         {
             _ = Task.Run(async () =>
             {
+                var isSummaryOnly = outcome is FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft or FakeAppServerOutcome.SubmitSummaryOnlyReviewDraftThenFail or FakeAppServerOutcome.SubmitSummaryOnlyReviewDraftThenDisconnect;
                 if (_dynamicToolHandler is not null)
                 {
                     if (outcome == FakeAppServerOutcome.SubmitRetryAnchorReviewDraft)
@@ -6082,7 +6473,7 @@ internal sealed class FakeAppServerClient(
                     {
                         object[] comments = outcome switch
                         {
-                            FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft => [],
+                            FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft or FakeAppServerOutcome.SubmitSummaryOnlyReviewDraftThenFail or FakeAppServerOutcome.SubmitSummaryOnlyReviewDraftThenDisconnect => [],
                             FakeAppServerOutcome.SubmitInvalidReviewDraft => new object[]
                             {
                             new
@@ -6298,15 +6689,15 @@ internal sealed class FakeAppServerClient(
                         {
                             summary = new
                             {
-                                majorCount = outcome == FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft ? 0 : 1,
-                                minorCount = outcome == FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft ? 0 : 1,
+                                majorCount = isSummaryOnly ? 0 : 1,
+                                minorCount = isSummaryOnly ? 0 : 1,
                                 suggestionCount = outcome switch
                                 {
-                                    FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft => 0,
+                                    FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft or FakeAppServerOutcome.SubmitSummaryOnlyReviewDraftThenFail or FakeAppServerOutcome.SubmitSummaryOnlyReviewDraftThenDisconnect => 0,
                                     FakeAppServerOutcome.SubmitMismatchedSuggestionCountReviewDraft => 4,
                                     _ => 1
                                 },
-                                body = outcome == FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft
+                                body = isSummaryOnly
                                     ? "Verbose clean review summary from DotCraft."
                                     : "Verbose review summary from DotCraft."
                             },
@@ -6318,11 +6709,18 @@ internal sealed class FakeAppServerClient(
                     }
                 }
 
-                var completion = outcome == FakeAppServerOutcome.SubmitSummaryOnlyReviewDraft
+                var completion = isSummaryOnly
                     ? "DotCraft analysis complete."
                     : "DotCraft review draft submitted.";
                 _notifications.Writer.TryWrite(Notification("item/agentMessage/delta", new { delta = completion + " " }));
-                _notifications.Writer.TryWrite(Notification("turn/completed", new { threadId, turnId, summary = completion }));
+                if (outcome == FakeAppServerOutcome.SubmitSummaryOnlyReviewDraftThenFail)
+                {
+                    _notifications.Writer.TryWrite(Notification("turn/failed", new { threadId, turnId, error = new { message = "Synthetic failure after draft submission." } }));
+                }
+                else if (outcome != FakeAppServerOutcome.SubmitSummaryOnlyReviewDraftThenDisconnect)
+                {
+                    _notifications.Writer.TryWrite(Notification("turn/completed", new { threadId, turnId, summary = completion }));
+                }
                 _notifications.Writer.TryComplete();
             });
         }
@@ -6423,6 +6821,15 @@ internal sealed class FakeAppServerClient(
         else if (outcome == FakeAppServerOutcome.Fail)
         {
             _notifications.Writer.TryWrite(Notification("turn/failed", new { threadId, turnId, error = new { message = "Synthetic DotCraft failure." } }));
+            _notifications.Writer.TryComplete();
+        }
+        else if (outcome == FakeAppServerOutcome.Cancel)
+        {
+            _notifications.Writer.TryWrite(Notification("turn/cancelled", new { threadId, turnId }));
+            _notifications.Writer.TryComplete();
+        }
+        else if (outcome == FakeAppServerOutcome.Disconnect)
+        {
             _notifications.Writer.TryComplete();
         }
 

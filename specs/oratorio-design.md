@@ -580,6 +580,20 @@ and `comments: []`. A GitHub PR or GitLab MR review run that completes without a
 Review Draft fails with the stable error code `reviewDraftRequired`; Oratorio
 must not synthesize the draft on the agent's behalf.
 
+`reviewDraftRequired`, AppServer turn failure, and a non-operator AppServer
+turn cancellation are recoverable PR/MR review failures. They schedule a new
+run attempt in the same round according to the configured bounded retry policy.
+The immediately preceding failed thread may be resumed only when its failure is
+semantic or turn-level, its workspace and required Dynamic Tools still match,
+and the AppServer supports Dynamic Tool rebind. Timeout, disconnection, stalled
+heartbeat, and interrupted-run recovery start a fresh thread.
+
+A successfully persisted Review Draft is the authoritative result of a review
+analysis run. If a non-operator terminal failure arrives after the draft is
+stored, Oratorio completes the run from the draft, records the terminal signal
+as an operator-visible warning, and must not ask the agent to submit a duplicate
+draft. Explicit Oratorio operator cancellation remains authoritative.
+
 Review Draft publication may be manual or automatic by Draft auto-publish
 policy. Draft auto-publish is globally gated and repository opt-in by exact
 `owner/name`. It must publish only a GitHub `COMMENT` review, never `APPROVE`,
@@ -1098,6 +1112,15 @@ Managed worktree and concurrency contract:
 - Transient preparation, AppServer, timeout, disconnection, and stalled-run
   failures may schedule bounded retries with exponential backoff capped at five
   minutes.
+- `MaxRunAttempts` is the maximum total number of runs in the automatic retry
+  set, including the initial run. Intermediate attempt failures keep the round
+  and source review gate pending; only success or exhausted retries complete
+  the gate.
+- A queued PR/MR review retry remains bound to its target head SHA. If source
+  sync observes a different head before the retry starts, Oratorio cancels the
+  queued run with `reviewRetrySuperseded`, marks the round `Superseded`, closes
+  the old head's review gate, and leaves the new head eligible for a new review
+  round with a fresh attempt budget.
 - Successful managed worktrees are retained briefly for inspection and then
   cleaned. Failed or timed-out worktrees are retained longer for debugging.
   Cleanup is allowed only for persisted Oratorio-managed paths under the
