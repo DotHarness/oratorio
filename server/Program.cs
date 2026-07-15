@@ -85,6 +85,7 @@ builder.Services.AddScoped<OratorioAppBindingToolHandler>();
 builder.Services.AddScoped<AutoReviewDispatchService>();
 builder.Services.AddScoped<ImplementationFollowUpDispatchService>();
 builder.Services.AddSingleton<OratorioAppBindingService>();
+builder.Services.AddSingleton<OratorioBindingMcpRuntime>();
 builder.Services.AddScoped<OratorioSeeder>();
 builder.Services.AddScoped<OratorioSchemaMigrator>();
 builder.Services.AddSingleton<BoardEventHub>();
@@ -146,6 +147,9 @@ app.MapGet("/health", () => new
 
 app.MapOratorioApi();
 app.MapBoardStream();
+app.MapMethods("/dotcraft/bindings/{bindingId}/mcp", ["POST", "DELETE"],
+    (HttpContext context, string bindingId, OratorioBindingMcpRuntime runtime) =>
+        runtime.HandleAsync(context, bindingId));
 
 RegisterStartupBanner(app);
 

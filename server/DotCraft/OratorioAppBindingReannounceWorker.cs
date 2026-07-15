@@ -1,21 +1,15 @@
-using System.Text.Json;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 
 namespace Oratorio.Server.DotCraft;
 
 /// <summary>
-/// On startup, silently re-announces Oratorio's current loopback surface endpoint
-/// to DotCraft using the persisted durable binding. Because Oratorio Desktop may
-/// bind a new dynamic port each launch, this keeps the DotCraft-side apiBase live
-/// so the embedded board reconnects with no manual re-bind. It is best-effort: if
-/// DotCraft's app-server is not running, it logs and exits quietly.
+/// Rebinds saved application connections after restart with fresh, memory-only MCP bearers.
 /// </summary>
 public sealed class OratorioAppBindingReannounceWorker(
     IHostApplicationLifetime lifetime,
     IServer server,
-    IDotCraftAppServerClientFactory clientFactory,
-    OratorioDotCraftBindingStore bindingStore,
+    OratorioAppBindingService appBindingService,
     ILogger<OratorioAppBindingReannounceWorker> logger) : IHostedService
 {
     private CancellationTokenRegistration _registration;
@@ -38,31 +32,15 @@ public sealed class OratorioAppBindingReannounceWorker(
     {
         try
         {
-            if (!bindingStore.TryLoad(out var binding))
-            {
-                return;
-            }
-
             var baseUrl = ResolveLiveBaseUrl();
-            var metadata = OratorioAppBindingService.BuildPublicConnectionMetadata(baseUrl);
-            if (metadata is null)
+            if (baseUrl is null)
             {
                 logger.LogDebug("Skipping DotCraft re-announce: no live loopback surface URL resolved.");
                 return;
             }
 
-            var proof = JsonDocument.Parse(binding.ConnectionProofJson).RootElement.Clone();
-
-            await using var client = await clientFactory.ConnectAsync(binding.AppServerUrl, ct);
-            await client.InitializeAsync(ct);
-            await client.RefreshAppConnectionMetadataAsync(
-                new AppBindingConnectionMetadataRefreshRequest(binding.AppId, proof, metadata),
-                ct);
-
-            logger.LogInformation(
-                "Re-announced Oratorio loopback surface to DotCraft for {AppId} at {BaseUrl}.",
-                binding.AppId,
-                baseUrl);
+            await appBindingService.RebindPersistedAsync(baseUrl, ct);
+            logger.LogInformation("Rebound persisted Oratorio MCP bindings at {BaseUrl}.", baseUrl);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

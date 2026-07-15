@@ -12,15 +12,21 @@
     <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
     <AssemblyVersion>0.1.7</AssemblyVersion>
     <Version>0.1.7</Version>
+    <DotCraftSdkProjectPath Condition="'$(DotCraftSdkProjectPath)' == ''">$(MSBuildThisFileDirectory)..\..\dotcraft\sdk\dotnet\src\DotCraft.Sdk\DotCraft.Sdk.csproj</DotCraftSdkProjectPath>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.1" />
-    <PackageReference Include="DotCraft.Sdk" Version="0.1.0" />
+    <ProjectReference Include="$(DotCraftSdkProjectPath)" />
   </ItemGroup>
 
+  <Target Name="ValidateDotCraftSdkProjectPath" BeforeTargets="ResolveProjectReferences"
+          Condition="!Exists('$(DotCraftSdkProjectPath)')">
+    <Error Text="DotCraft SDK project was not found at '$(DotCraftSdkProjectPath)'. Clone dotcraft as a sibling repository or override DotCraftSdkProjectPath." />
+  </Target>
+
   <ItemGroup>
-    <!-- DotCraft Interactive Tool UI documents served on item/resource/read. -->
+    <!-- Bundled MCP Apps documents served through standard resources/read. -->
     <Content Include="UiResources\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

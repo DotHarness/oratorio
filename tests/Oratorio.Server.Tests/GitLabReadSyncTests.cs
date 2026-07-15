@@ -339,7 +339,7 @@ public sealed class GitLabReadSyncTests
         Assert.Equal(0, draft.SuggestionCount);
         Assert.Equal(0, draft.AcceptedCount);
         Assert.Empty(draft.Comments);
-        Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitReviewDraft");
+        Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio_run" && tool.Name == "SubmitReviewDraft");
         Assert.NotNull(fakeAppServer.LastThreadStartRequest?.RuntimeAdditionalContext);
     }
 

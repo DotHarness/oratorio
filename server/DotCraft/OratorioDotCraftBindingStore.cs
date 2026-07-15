@@ -3,12 +3,8 @@ using System.Text.Json;
 namespace Oratorio.Server.DotCraft;
 
 /// <summary>
-/// Persists the durable DotCraft App Binding so Oratorio can silently re-announce
-/// its current loopback surface endpoint after a restart (the desktop allocates a
-/// dynamic port per launch). Stored next to the Oratorio database as a small JSON
-/// file. Only what is needed to replay the connection is kept: the resolved
-/// DotCraft app-server endpoint, the app id, and the exact app-owned connection
-/// proof JSON (replayed verbatim so DotCraft's proof match succeeds).
+/// Persists the durable application connection state. The principal
+/// credential is encrypted by ConfigurationSecretProtector before it reaches this store.
 /// </summary>
 public sealed class OratorioDotCraftBindingStore(string filePath)
 {
@@ -49,7 +45,7 @@ public sealed class OratorioDotCraftBindingStore(string filePath)
                 if (loaded is null
                     || string.IsNullOrWhiteSpace(loaded.AppServerUrl)
                     || string.IsNullOrWhiteSpace(loaded.AppId)
-                    || string.IsNullOrWhiteSpace(loaded.ConnectionProofJson))
+                    || string.IsNullOrWhiteSpace(loaded.ProtectedCredential))
                 {
                     return false;
                 }
@@ -66,11 +62,18 @@ public sealed class OratorioDotCraftBindingStore(string filePath)
 }
 
 /// <summary>
-/// Durable record of the DotCraft App Binding Oratorio completed, sufficient to
-/// re-announce a refreshed loopback surface endpoint on startup.
+/// Durable principal and rebind hints. MCP bearers and sessions are deliberately absent.
 /// </summary>
 public sealed record OratorioDotCraftBinding(
     string AppServerUrl,
     string AppId,
-    string ConnectionProofJson,
-    string? AccountLabel);
+    string PrincipalId,
+    string ProtectedCredential,
+    DateTimeOffset PrincipalExpiresAt,
+    string? AccountLabel,
+    IReadOnlyList<OratorioBindingRebindHint>? Bindings = null);
+
+public sealed record OratorioBindingRebindHint(
+    string BindingId,
+    string ThreadId,
+    long AuthorityRevision);

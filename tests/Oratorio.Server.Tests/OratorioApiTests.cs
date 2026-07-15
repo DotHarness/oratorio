@@ -2170,7 +2170,7 @@ public sealed class OratorioApiTests
         Assert.Contains(reviewed.Timeline, x => x.Title == "Agent summary captured");
 
         Assert.NotNull(fakeAppServer.LastThreadStartRequest?.RuntimeAdditionalContext);
-        Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitReviewDraft");
+        Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio_run" && tool.Name == "SubmitReviewDraft");
     }
 
     [Fact]
@@ -2480,8 +2480,8 @@ public sealed class OratorioApiTests
         Assert.Equal(["thread-test-1", "thread-test-1"], fakeAppServer.TurnThreadIds);
         var resume = Assert.Single(fakeAppServer.ThreadResumeRequests);
         Assert.Equal("thread-test-1", resume.ThreadId);
-        Assert.Contains(resume.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitReviewDraft");
-        Assert.Contains(resume.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitFollowUpDraft");
+        Assert.Contains(resume.DynamicTools ?? [], tool => tool.Namespace == "oratorio_run" && tool.Name == "SubmitReviewDraft");
+        Assert.Contains(resume.DynamicTools ?? [], tool => tool.Namespace == "oratorio_run" && tool.Name == "SubmitFollowUpDraft");
         Assert.NotNull(resume.RuntimeAdditionalContext);
 
         var secondRun = Assert.Single(
@@ -2851,7 +2851,7 @@ public sealed class OratorioApiTests
         Assert.Equal(["thread-test-1", "thread-test-1"], fakeAppServer.TurnThreadIds);
         var resume = Assert.Single(fakeAppServer.ThreadResumeRequests);
         Assert.Equal("thread-test-1", resume.ThreadId);
-        Assert.Contains(resume.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitDiscussionReply");
+        Assert.Contains(resume.DynamicTools ?? [], tool => tool.Namespace == "oratorio_run" && tool.Name == "SubmitDiscussionReply");
         Assert.NotNull(resume.RuntimeAdditionalContext);
         Assert.NotNull(fakeAppServer.LastToolResult);
         Assert.True(fakeAppServer.LastToolResult!.Success);
@@ -3769,7 +3769,7 @@ public sealed class OratorioApiTests
 
         Assert.Equal("reviewDraftRequired", run.ErrorCode);
         Assert.Empty(failed.ReviewDrafts);
-        Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitReviewDraft");
+        Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio_run" && tool.Name == "SubmitReviewDraft");
         var toolResult = Assert.Single(fakeAppServer.ToolResults);
         Assert.False(toolResult.Success);
         Assert.Equal("reviewDraftAnchorNotCommentable", toolResult.ErrorCode);
@@ -4159,7 +4159,7 @@ public sealed class OratorioApiTests
         var reviewed = await WaitForItemByIdAsync(client, issue.ItemId!, x => x.Item.State == ItemState.AwaitingReview && x.ImplementationDrafts.Count == 1);
         var draft = Assert.Single(reviewed.ImplementationDrafts);
 
-        Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitImplementationDraft");
+        Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio_run" && tool.Name == "SubmitImplementationDraft");
         Assert.NotNull(fakeAppServer.LastThreadStartRequest?.RuntimeAdditionalContext);
         Assert.Equal(RunPurpose.Implementation, Assert.Single(reviewed.Runs, x => x.RunnerKind == "appServer").Purpose);
         Assert.Equal(ImplementationDraftStatus.Delivered, draft.Status);
@@ -4564,8 +4564,8 @@ public sealed class OratorioApiTests
         var reviewed = await WaitForItemByIdAsync(client, pr.ItemId!, x => x.Item.State == ItemState.AwaitingReview && x.FollowUpDrafts.Count == 1);
         var draft = Assert.Single(reviewed.FollowUpDrafts);
 
-        Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitReviewDraft");
-        Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio" && tool.Name == "SubmitFollowUpDraft");
+        Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio_run" && tool.Name == "SubmitReviewDraft");
+        Assert.Contains(fakeAppServer.LastThreadStartRequest?.DynamicTools ?? [], tool => tool.Namespace == "oratorio_run" && tool.Name == "SubmitFollowUpDraft");
         Assert.NotNull(fakeAppServer.LastThreadStartRequest?.RuntimeAdditionalContext);
         Assert.Equal(FollowUpDraftStatus.Draft, draft.Status);
         Assert.Equal("Split out migration cleanup", draft.Title);
@@ -5462,7 +5462,7 @@ public sealed class OratorioApiTests
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<OratorioDbContext>();
         var run = await db.Runs.Include(x => x.Round).FirstAsync(x => x.RunId == runId);
-        run.PromptContextJson = """{"promptMode":"legacy","workspace":{"path":"/workspace/sample"},"requiredDynamicTools":["oratorio.SubmitReviewDraft"]}""";
+        run.PromptContextJson = """{"promptMode":"legacy","workspace":{"path":"/workspace/sample"},"requiredDynamicTools":["oratorio_run.SubmitReviewDraft"]}""";
         if (run.Round is not null)
         {
             run.Round.PromptContextJson = run.PromptContextJson;
@@ -6252,11 +6252,9 @@ internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) :
     public string? FollowUpDraftRepository { get; set; } = "example-owner/oratorio";
     public string? FollowUpDraftBranch { get; set; } = "main";
     public AppServerThreadStartRequest? LastThreadStartRequest { get; private set; }
-    public AppBindingConnectionConnectRequest? LastAppConnectionConnectRequest { get; private set; }
     public List<AppServerThreadStartRequest> ThreadStartRequests { get; } = [];
     public List<AppServerThreadResumeRequest> ThreadResumeRequests { get; } = [];
     public int ThreadResumeAttemptCount { get; private set; }
-    public List<AppBindingContextBlockUpsertRequest> AppBindingContextBlockUpsertRequests { get; } = [];
     public int StartThreadCount { get; private set; }
     public int ConnectCount { get; private set; }
     public List<string> StartedThreadIds { get; } = [];
@@ -6269,11 +6267,6 @@ internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) :
     public bool SupportsRuntimeAdditionalContext { get; set; } = true;
     public AppServerDynamicToolResult? LastToolResult { get; set; }
     public List<AppServerDynamicToolResult> ToolResults { get; } = [];
-    public AppBindingConnectionStatus ConnectionStatus { get; set; } = new(
-        AppServerDynamicToolCatalog.AppId,
-        "connected",
-        ConnectedAt: DateTimeOffset.UtcNow,
-        AccountLabel: "Oratorio");
     private int _turnCount;
 
     public Task<IDotCraftAppServerClient> ConnectAsync(string appServerUrl, CancellationToken ct, string? token = null)
@@ -6312,11 +6305,8 @@ internal sealed class FakeAppServerClientFactory(FakeAppServerOutcome outcome) :
             () => SupportsDynamicToolRebind,
             () => SupportsRuntimeAdditionalContext,
             () => UseMismatchedToolThreadId,
-            () => ConnectionStatus,
             () => FollowUpDraftRepository,
             () => FollowUpDraftBranch,
-            request => LastAppConnectionConnectRequest = request,
-            request => AppBindingContextBlockUpsertRequests.Add(request),
             result =>
             {
                 LastToolResult = result;
@@ -6335,11 +6325,8 @@ internal sealed class FakeAppServerClient(
     Func<bool> supportsDynamicToolRebind,
     Func<bool> supportsRuntimeAdditionalContext,
     Func<bool> useMismatchedToolThreadId,
-    Func<AppBindingConnectionStatus> getConnectionStatus,
     Func<string?> getFollowUpDraftRepository,
     Func<string?> getFollowUpDraftBranch,
-    Action<AppBindingConnectionConnectRequest> captureConnectionConnect,
-    Action<AppBindingContextBlockUpsertRequest> upsertContextBlock,
     Action<AppServerDynamicToolResult> captureToolResult) : IDotCraftAppServerClient
 {
     private readonly Channel<AppServerNotification> _notifications = Channel.CreateUnbounded<AppServerNotification>();
@@ -6353,14 +6340,6 @@ internal sealed class FakeAppServerClient(
 
     public void SetDynamicToolHandler(Func<AppServerDynamicToolCall, CancellationToken, Task<AppServerDynamicToolResult>> handler) =>
         _dynamicToolHandler = handler;
-
-    public IDisposable ServeUiResources(string uriPrefix, string folderPath) => EmptyDisposable.Instance;
-
-    private sealed class EmptyDisposable : IDisposable
-    {
-        public static readonly EmptyDisposable Instance = new();
-        public void Dispose() { }
-    }
 
     public Task<string> StartThreadAsync(AppServerThreadStartRequest request, CancellationToken ct)
     {
@@ -6437,7 +6416,7 @@ internal sealed class FakeAppServerClient(
                                 }
                             }
                         }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-                        var firstResult = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-review-1", "oratorio", "SubmitReviewDraft", firstArguments), CancellationToken.None);
+                        var firstResult = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-review-1", "oratorio_run", "SubmitReviewDraft", firstArguments), CancellationToken.None);
                         captureToolResult(firstResult);
 
                         var retryArguments = JsonSerializer.SerializeToElement(new
@@ -6466,7 +6445,7 @@ internal sealed class FakeAppServerClient(
                                 }
                             }
                         }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-                        var retryResult = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-review-2", "oratorio", "SubmitReviewDraft", retryArguments), CancellationToken.None);
+                        var retryResult = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-review-2", "oratorio_run", "SubmitReviewDraft", retryArguments), CancellationToken.None);
                         captureToolResult(retryResult);
                     }
                     else
@@ -6704,7 +6683,7 @@ internal sealed class FakeAppServerClient(
                             comments
                         }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                         var toolThreadId = useMismatchedToolThreadId() ? "thread-mismatch" : threadId;
-                        var result = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-review-1", "oratorio", "SubmitReviewDraft", arguments), CancellationToken.None);
+                        var result = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-review-1", "oratorio_run", "SubmitReviewDraft", arguments), CancellationToken.None);
                         captureToolResult(result);
                     }
                 }
@@ -6741,7 +6720,7 @@ internal sealed class FakeAppServerClient(
                         proposedPrBody = "Implements the requested workflow."
                     }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                     var toolThreadId = useMismatchedToolThreadId() ? "thread-mismatch" : threadId;
-                    var result = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-implementation-1", "oratorio", "SubmitImplementationDraft", arguments), CancellationToken.None);
+                    var result = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-implementation-1", "oratorio_run", "SubmitImplementationDraft", arguments), CancellationToken.None);
                     captureToolResult(result);
                 }
 
@@ -6768,7 +6747,7 @@ internal sealed class FakeAppServerClient(
                         comments = Array.Empty<object>()
                     }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                     var toolThreadId = useMismatchedToolThreadId() ? "thread-mismatch" : threadId;
-                    var reviewResult = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-review-1", "oratorio", "SubmitReviewDraft", reviewArguments), CancellationToken.None);
+                    var reviewResult = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-review-1", "oratorio_run", "SubmitReviewDraft", reviewArguments), CancellationToken.None);
                     captureToolResult(reviewResult);
 
                     var arguments = JsonSerializer.SerializeToElement(new
@@ -6787,7 +6766,7 @@ internal sealed class FakeAppServerClient(
                             }
                         }
                     }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-                    var result = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-follow-up-1", "oratorio", "SubmitFollowUpDraft", arguments), CancellationToken.None);
+                    var result = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-follow-up-1", "oratorio_run", "SubmitFollowUpDraft", arguments), CancellationToken.None);
                     captureToolResult(result);
                 }
 
@@ -6809,7 +6788,7 @@ internal sealed class FakeAppServerClient(
                         body = "Agent answer from DotCraft."
                     }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
                     var toolThreadId = useMismatchedToolThreadId() ? "thread-mismatch" : threadId;
-                    var result = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-discussion-1", "oratorio", "SubmitDiscussionReply", arguments), CancellationToken.None);
+                    var result = await _dynamicToolHandler(new AppServerDynamicToolCall(toolThreadId, turnId, "call-discussion-1", "oratorio_run", "SubmitDiscussionReply", arguments), CancellationToken.None);
                     captureToolResult(result);
                 }
 
@@ -6858,96 +6837,6 @@ internal sealed class FakeAppServerClient(
 
     public Task<IReadOnlyList<ModelInfoDto>> ListModelsAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<ModelInfoDto>>([new("fake-model", "Fake Model", "test")]);
-
-    public Task<AppBindingConnectionRequestInfo> GetAppConnectionRequestAsync(AppBindingConnectionRequestGetRequest request, CancellationToken ct) =>
-        Task.FromResult(new AppBindingConnectionRequestInfo(
-            request.AppId,
-            request.ConnectionRequestId,
-            "Oratorio",
-            "example-org",
-            "Test workspace",
-            "test-user",
-            DateTimeOffset.UtcNow.AddMinutes(10)));
-
-    public Task<AppBindingConnectionStatus> CompleteAppConnectionAsync(AppBindingConnectionConnectRequest request, CancellationToken ct)
-    {
-        captureConnectionConnect(request);
-        return Task.FromResult(new AppBindingConnectionStatus(
-            request.AppId,
-            "connected",
-            ConnectedAt: DateTimeOffset.UtcNow,
-            AccountLabel: request.AccountLabel));
-    }
-
-    public Task<AppBindingConnectionStatus> RefreshAppConnectionMetadataAsync(AppBindingConnectionMetadataRefreshRequest request, CancellationToken ct) =>
-        Task.FromResult(new AppBindingConnectionStatus(request.AppId, "connected"));
-
-    public Task<AppBindingConnectionStatus> GetAppConnectionStatusAsync(AppBindingConnectionStatusRequest request, CancellationToken ct) =>
-        Task.FromResult(getConnectionStatus());
-
-    public Task<AppBindingRequestInfo> GetAppBindingRequestAsync(AppBindingRequestGetRequest request, CancellationToken ct) =>
-        Task.FromResult(new AppBindingRequestInfo(
-            request.AppId,
-            request.BindingRequestId,
-            "thread-test-1",
-            "Oratorio",
-            "example-org",
-            "threadMenu",
-            [AppServerDynamicToolCatalog.BoardReadScope, AppServerDynamicToolCatalog.BoardManageScope],
-            [
-                new AppBindingScopeInfo(AppServerDynamicToolCatalog.BoardReadScope, "Read boards", "Read Oratorio board state.", "read"),
-                new AppBindingScopeInfo(AppServerDynamicToolCatalog.BoardManageScope, "Manage boards", "Manage Oratorio board state.", "mutate")
-            ],
-            ["ListBoardItems", "GetBoardItem", "CreateBoardTask", "QueueReviewRound"],
-            [
-                new AppBindingToolInfo("ListBoardItems", AppServerDynamicToolCatalog.BoardReadScope, "read", "direct"),
-                new AppBindingToolInfo("GetBoardItem", AppServerDynamicToolCatalog.BoardReadScope, "read", "direct"),
-                new AppBindingToolInfo("CreateBoardTask", AppServerDynamicToolCatalog.BoardManageScope, "mutate", "deferred"),
-                new AppBindingToolInfo("QueueReviewRound", AppServerDynamicToolCatalog.BoardManageScope, "mutate", "deferred")
-            ],
-            DateTimeOffset.UtcNow.AddMinutes(10),
-            ThreadTitle: "Test thread"));
-
-    public Task<AppBindingAcceptResponse> AcceptAppBindingAsync(AppBindingAcceptRequest request, CancellationToken ct) =>
-        Task.FromResult(new AppBindingAcceptResponse(new AppBindingWire(
-            BindingId: "binding-test-1",
-            ThreadId: "thread-test-1",
-            AppId: AppServerDynamicToolCatalog.AppId,
-            State: "active",
-            ConnectionState: "connected",
-            GrantedScopes: request.GrantedScopes,
-            AttachedToolCount: 0,
-            LastChangedAt: DateTimeOffset.UtcNow)));
-
-    public Task<AppBindingAttachToolsResponse> AttachAppBindingToolsAsync(AppBindingAttachToolsRequest request, CancellationToken ct) =>
-        Task.FromResult(new AppBindingAttachToolsResponse(
-            new AppBindingWire(
-                request.BindingId,
-                request.ThreadId,
-                request.AppId,
-                "active",
-                "connected",
-                [],
-                request.Tools.Count,
-                DateTimeOffset.UtcNow),
-            request.Tools.Count,
-            []));
-
-    public Task<AppBindingContextBlockUpsertResponse> UpsertAppBindingContextBlockAsync(
-        AppBindingContextBlockUpsertRequest request,
-        CancellationToken ct)
-    {
-        upsertContextBlock(request);
-        return Task.FromResult(new AppBindingContextBlockUpsertResponse(
-            JsonSerializer.SerializeToElement(new
-            {
-                request.BlockId,
-                request.Kind,
-                request.Title,
-                request.Visibility,
-                request.Version
-            }, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
-    }
 
     public IAsyncEnumerable<AppServerNotification> ReadNotificationsAsync(CancellationToken ct) =>
         outcome is FakeAppServerOutcome.TimeoutAfterTurnStarted or FakeAppServerOutcome.TimeoutAfterTurnStartedWithoutTerminal
