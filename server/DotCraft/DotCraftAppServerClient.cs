@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DotCraft.Sdk.AppBinding;
 using DotCraft.Sdk.Wire;
 using Oratorio.Server.Api;
 using SdkClient = DotCraft.Sdk.AppServer.DotCraftClient;
@@ -28,9 +29,8 @@ public interface IDotCraftAppServerClient : IAsyncDisposable
 {
     bool SupportsDynamicToolRebind { get; }
     bool SupportsRuntimeAdditionalContext { get; }
+    DotCraftAppBindingClient AppBindings { get; }
     Task InitializeAsync(CancellationToken ct);
-    Task<T> RequestAsync<T>(string method, object? parameters, CancellationToken ct) =>
-        throw new NotSupportedException($"The test/client adapter does not implement '{method}'.");
     void SetDynamicToolHandler(Func<AppServerDynamicToolCall, CancellationToken, Task<AppServerDynamicToolResult>> handler);
     Task<string> StartThreadAsync(AppServerThreadStartRequest request, CancellationToken ct);
     Task ResumeThreadAsync(
@@ -116,29 +116,6 @@ public sealed record AppServerNotification(string Method, JsonElement Params);
 
 public sealed record AppServerThreadReadResult(string ThreadId, IReadOnlyList<ConversationItemDto> Items);
 
-public sealed record AppBindingConnectionRequestInfo(
-    string AppId,
-    string ConnectionRequestId,
-    string DisplayName,
-    string DeveloperName,
-    string WorkspaceLabel,
-    string UserLabel,
-    DateTimeOffset ExpiresAt);
-
-public sealed record AppBindingRequestInfo(
-    string AppId,
-    string BindingRequestId,
-    string ThreadId,
-    string DisplayName,
-    string DeveloperName,
-    string Source,
-    DateTimeOffset ExpiresAt,
-    string? ThreadTitle = null,
-    string? Reason = null,
-    string BindingId = "",
-    string State = "connecting");
-
-
 public sealed class DotCraftAppServerClientFactory : IDotCraftAppServerClientFactory
 {
     public async Task<IDotCraftAppServerClient> ConnectAsync(string appServerUrl, CancellationToken ct, string? token = null)
@@ -166,10 +143,9 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
 
     public bool SupportsRuntimeAdditionalContext => client.Capabilities.RuntimeAdditionalContext;
 
-    public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
+    public DotCraftAppBindingClient AppBindings => client.AppBindings;
 
-    public Task<T> RequestAsync<T>(string method, object? parameters, CancellationToken ct) =>
-        client.RequestAsync<T>(method, parameters, ct);
+    public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
 
     public void SetDynamicToolHandler(Func<AppServerDynamicToolCall, CancellationToken, Task<AppServerDynamicToolResult>> handler)
     {

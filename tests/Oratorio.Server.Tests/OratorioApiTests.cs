@@ -6335,6 +6335,8 @@ internal sealed class FakeAppServerClient(
 
     public bool SupportsDynamicToolRebind => supportsDynamicToolRebind();
     public bool SupportsRuntimeAdditionalContext => supportsRuntimeAdditionalContext();
+    public global::DotCraft.Sdk.AppBinding.DotCraftAppBindingClient AppBindings =>
+        throw new NotSupportedException("The general AppServer test fake does not exercise App Binding.");
 
     public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
 

@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
+using DotCraft.Sdk.AppBinding;
 using Microsoft.Extensions.Options;
 using Oratorio.Server.Api;
 using Oratorio.Server.Services;
@@ -27,13 +29,12 @@ public sealed class OratorioAppBindingService(
         {
             await using var client = await clientFactory.ConnectAsync(bridge.Endpoint, ct);
             await client.InitializeAsync(ct);
-            await AuthenticateAsync(client, durable, ct);
-            var status = await client.RequestAsync<AppConnectionStatusWire>(
-                "app/connection/status", new { appId = durable.AppId }, ct);
+            await AuthenticateAsync(client.AppBindings, durable, ct);
+            var status = await client.AppBindings.GetConnectionStatusAsync(durable.AppId, ct);
             return new DotCraftAppBindingStatusResponse(
                 durable.AppId, true, bridge.Configured, status.State == "connected", status.State,
                 bridge.WorkspacePath, bridge.Endpoint, bridge.EndpointSource, durable.AccountLabel,
-                null, status.ExpiresAt, status.Diagnostic,
+                ParseTimestamp(status.ConnectedAt), ParseTimestamp(status.ExpiresAt), status.Diagnostic,
                 status.State == "connected" ? "DotCraft is connected to Oratorio." : status.Diagnostic ?? "DotCraft connection is unavailable.");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -45,30 +46,31 @@ public sealed class OratorioAppBindingService(
 
     public async Task<OratorioAppBindingInspection> InspectAsync(string handoffUrl, CancellationToken ct)
     {
-        var handoff = OratorioAppBindingHandoff.FromUrl(handoffUrl);
+        var handoff = ParseHandoff(handoffUrl);
         await using var client = await ConnectAsync(handoff, ct);
         if (handoff.Operation == OratorioAppBindingOperations.Connect)
         {
-            var request = await client.RequestAsync<AppBindingConnectionRequestInfo>(
-                "app/connection/request/get",
-                new { connectionRequestId = handoff.RequestId, requestToken = handoff.RequestToken }, ct);
+            var request = await client.AppBindings.GetConnectionRequestAsync<JsonElement>(new
+            {
+                connectionRequestId = handoff.RequestId,
+                requestToken = handoff.RequestToken
+            }, ct);
             return new(handoff.Operation, request, null);
         }
 
-        await AuthenticateStoredPrincipalAsync(client, ct);
-        var binding = await client.RequestAsync<AppBindingRequestInfo>(
-            "app/binding/request/get",
-            new { bindingRequestId = handoff.RequestId, requestToken = handoff.RequestToken }, ct);
+        await AuthenticateStoredPrincipalAsync(client.AppBindings, ct);
+        var binding = await client.AppBindings.GetBindingRequestAsync(
+            handoff.AppId, handoff.RequestId, handoff.RequestToken, ct);
         return new(handoff.Operation, null, binding);
     }
 
     public async Task<OratorioAppBindingApprovalResult> ApproveAsync(string handoffUrl, string? surfaceBaseUrl, CancellationToken ct)
     {
-        var handoff = OratorioAppBindingHandoff.FromUrl(handoffUrl);
+        var handoff = ParseHandoff(handoffUrl);
         await using var client = await ConnectAsync(handoff, ct);
         return handoff.Operation == OratorioAppBindingOperations.Connect
-            ? await CompleteConnectionAsync(client, handoff, ct)
-            : await ActivateBindingAsync(client, handoff, surfaceBaseUrl, ct);
+            ? await CompleteConnectionAsync(client.AppBindings, handoff, ct)
+            : await ActivateBindingAsync(client.AppBindings, handoff, surfaceBaseUrl, ct);
     }
 
     public async Task RebindPersistedAsync(string? surfaceBaseUrl, CancellationToken ct)
@@ -76,20 +78,16 @@ public sealed class OratorioAppBindingService(
         if (!bindingStore.TryLoad(out var durable) || durable.Bindings is not { Count: > 0 }) return;
         await using var client = await clientFactory.ConnectAsync(durable.AppServerUrl, ct);
         await client.InitializeAsync(ct);
-        await AuthenticateAsync(client, durable, ct);
+        await AuthenticateAsync(client.AppBindings, durable, ct);
         foreach (var binding in durable.Bindings)
         {
             if (!TryBuildMcpEndpoint(surfaceBaseUrl, binding.BindingId, out var endpoint)) continue;
             var bearer = mcpRuntime.Issue(binding.BindingId, binding.AuthorityRevision);
             try
             {
-                await client.RequestAsync<JsonElement>("app/binding/rebind", new
-                {
-                    bindingId = binding.BindingId,
-                    authorityRevision = binding.AuthorityRevision,
-                    endpoint,
-                    bearer
-                }, ct);
+                await client.AppBindings.RebindAsync(
+                    binding.BindingId, binding.AuthorityRevision, endpoint, bearer,
+                    cancellationToken: ct);
             }
             catch
             {
@@ -100,29 +98,22 @@ public sealed class OratorioAppBindingService(
     }
 
     private async Task<OratorioAppBindingApprovalResult> CompleteConnectionAsync(
-        IDotCraftAppServerClient client, OratorioAppBindingHandoff handoff, CancellationToken ct)
+        DotCraftAppBindingClient appBindings, AppBindingHandoff handoff, CancellationToken ct)
     {
-        var result = await client.RequestAsync<AppConnectionConnectWire>("app/connection/connect", new
-        {
-            connectionRequestId = handoff.RequestId,
-            requestToken = handoff.RequestToken,
-            accountLabel = "Oratorio"
-        }, ct);
+        var result = await appBindings.CompleteConnectionAsync(
+            new CompleteConnectionRequest(handoff.RequestId, handoff.RequestToken, "Oratorio"), ct);
         bindingStore.Save(new OratorioDotCraftBinding(
             ResolveAppServerUrl(handoff), handoff.AppId, result.Principal.PrincipalId,
-            secretProtector.Protect(result.Credential), result.Principal.ExpiresAt, "Oratorio", []));
+            secretProtector.Protect(result.Credential), RequireTimestamp(result.Principal.ExpiresAt), "Oratorio", []));
         return new(handoff.Operation, "connected", null);
     }
 
     private async Task<OratorioAppBindingApprovalResult> ActivateBindingAsync(
-        IDotCraftAppServerClient client, OratorioAppBindingHandoff handoff, string? surfaceBaseUrl, CancellationToken ct)
+        DotCraftAppBindingClient appBindings, AppBindingHandoff handoff, string? surfaceBaseUrl, CancellationToken ct)
     {
-        var durable = await AuthenticateStoredPrincipalAsync(client, ct);
-        var request = await client.RequestAsync<AppBindingRequestInfo>("app/binding/request/get", new
-        {
-            bindingRequestId = handoff.RequestId,
-            requestToken = handoff.RequestToken
-        }, ct);
+        var durable = await AuthenticateStoredPrincipalAsync(appBindings, ct);
+        var request = await appBindings.GetBindingRequestAsync(
+            handoff.AppId, handoff.RequestId, handoff.RequestToken, ct);
         if (!TryBuildMcpEndpoint(surfaceBaseUrl, request.BindingId, out var endpoint))
             throw OratorioApiException.Validation("Oratorio must expose a loopback HTTP endpoint for App Binding.");
 
@@ -131,12 +122,9 @@ public sealed class OratorioAppBindingService(
         JsonElement activated;
         try
         {
-            activated = await client.RequestAsync<JsonElement>("app/binding/activate", new
-            {
-                bindingRequestId = handoff.RequestId,
-                endpoint,
-                bearer
-            }, ct);
+            activated = await appBindings.ActivateAsync(
+                handoff.RequestId, endpoint, bearer,
+                cancellationToken: ct);
         }
         catch
         {
@@ -157,45 +145,43 @@ public sealed class OratorioAppBindingService(
             request.BindingId);
     }
 
-    private async Task<OratorioDotCraftBinding> AuthenticateStoredPrincipalAsync(IDotCraftAppServerClient client, CancellationToken ct)
+    private async Task<OratorioDotCraftBinding> AuthenticateStoredPrincipalAsync(
+        DotCraftAppBindingClient appBindings, CancellationToken ct)
     {
         if (!bindingStore.TryLoad(out var durable))
             throw OratorioApiException.Validation("Connect Oratorio to DotCraft before accepting a thread binding.");
-        await AuthenticateAsync(client, durable, ct);
+        await AuthenticateAsync(appBindings, durable, ct);
         return bindingStore.TryLoad(out var refreshed) ? refreshed : durable;
     }
 
-    private async Task AuthenticateAsync(IDotCraftAppServerClient client, OratorioDotCraftBinding durable, CancellationToken ct)
+    private async Task AuthenticateAsync(
+        DotCraftAppBindingClient appBindings, OratorioDotCraftBinding durable, CancellationToken ct)
     {
         var credential = secretProtector.Unprotect(durable.ProtectedCredential);
         if (string.IsNullOrWhiteSpace(credential))
             throw OratorioApiException.Validation("The saved DotCraft principal credential is unavailable.");
-        await client.RequestAsync<JsonElement>("app/connection/authenticate", new
-        {
-            appId = durable.AppId,
-            credential
-        }, ct);
+        await appBindings.AuthenticateAsync(durable.AppId, credential, ct);
         if (durable.PrincipalExpiresAt <= DateTimeOffset.UtcNow.AddDays(7))
         {
-            var refreshed = await client.RequestAsync<AppConnectionConnectWire>(
-                "app/connection/refresh", new { }, ct);
+            var refreshedPayload = await appBindings.RefreshCredentialAsync(ct);
+            var refreshed = DotCraftAppBindingClient.Deserialize<AppConnectionConnectResult>(refreshedPayload);
             bindingStore.Save(durable with
             {
                 PrincipalId = refreshed.Principal.PrincipalId,
                 ProtectedCredential = secretProtector.Protect(refreshed.Credential),
-                PrincipalExpiresAt = refreshed.Principal.ExpiresAt
+                PrincipalExpiresAt = RequireTimestamp(refreshed.Principal.ExpiresAt)
             });
         }
     }
 
-    private async Task<IDotCraftAppServerClient> ConnectAsync(OratorioAppBindingHandoff handoff, CancellationToken ct)
+    private async Task<IDotCraftAppServerClient> ConnectAsync(AppBindingHandoff handoff, CancellationToken ct)
     {
         var client = await clientFactory.ConnectAsync(ResolveAppServerUrl(handoff), ct);
         await client.InitializeAsync(ct);
         return client;
     }
 
-    private string ResolveAppServerUrl(OratorioAppBindingHandoff handoff) =>
+    private string ResolveAppServerUrl(AppBindingHandoff handoff) =>
         !string.IsNullOrWhiteSpace(handoff.AppServerUrl) ? handoff.AppServerUrl :
         !string.IsNullOrWhiteSpace(dotCraftOptions.Value.AppServerUrl) ? dotCraftOptions.Value.AppServerUrl :
         throw OratorioApiException.Validation("DotCraft AppServer endpoint was not provided by the handoff.");
@@ -209,13 +195,37 @@ public sealed class OratorioAppBindingService(
         return true;
     }
 
+    private static AppBindingHandoff ParseHandoff(string url)
+    {
+        AppBindingHandoff handoff;
+        try
+        {
+            handoff = AppBindingHandoff.Parse(
+                url,
+                expectedScheme: "oratorio",
+                expectedAppId: AppServerDynamicToolCatalog.AppId);
+        }
+        catch (FormatException ex)
+        {
+            throw OratorioApiException.Validation(ex.Message);
+        }
+
+        if (handoff.Operation is not (OratorioAppBindingOperations.Connect or OratorioAppBindingOperations.Bind))
+            throw OratorioApiException.Validation($"Unsupported App Binding operation '{handoff.Operation}'.");
+        return handoff;
+    }
+
+    private static DateTimeOffset RequireTimestamp(string value) =>
+        ParseTimestamp(value) ?? throw OratorioApiException.Validation("DotCraft returned an invalid App Binding expiry timestamp.");
+
+    private static DateTimeOffset? ParseTimestamp(string? value) =>
+        DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var parsed)
+            ? parsed
+            : null;
+
     private static DotCraftAppBindingStatusResponse Status(DotCraftStatusResponse bridge, bool available, string state, string? message) =>
         new(AppServerDynamicToolCatalog.AppId, available, bridge.Configured, false, state,
             bridge.WorkspacePath, bridge.Endpoint, bridge.EndpointSource, null, null, null, state, message ?? "DotCraft connection is unavailable.");
-
-    private sealed record AppConnectionConnectWire(AppPrincipalWire Principal, string Credential);
-    private sealed record AppPrincipalWire(string PrincipalId, string AppId, string UserId, DateTimeOffset ExpiresAt);
-    private sealed record AppConnectionStatusWire(string AppId, string State, DateTimeOffset? ExpiresAt, string? Diagnostic);
 }
 
 public static class OratorioAppBindingOperations
@@ -224,28 +234,5 @@ public static class OratorioAppBindingOperations
     public const string Bind = "bind";
 }
 
-public sealed record OratorioAppBindingHandoff(string Operation, string AppId, string RequestId, string RequestToken, string? AppServerUrl)
-{
-    public static OratorioAppBindingHandoff FromUrl(string url)
-    {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || !string.Equals(uri.Scheme, "oratorio", StringComparison.OrdinalIgnoreCase))
-            throw OratorioApiException.Validation("Invalid Oratorio App Binding handoff URL.");
-        var operation = uri.AbsolutePath.Trim('/').ToLowerInvariant();
-        if (operation.Length == 0) operation = uri.Host.ToLowerInvariant();
-        if (operation is not (OratorioAppBindingOperations.Connect or OratorioAppBindingOperations.Bind))
-            throw OratorioApiException.Validation($"Unsupported App Binding operation '{operation}'.");
-        var query = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
-            .Select(part => part.Split('=', 2))
-            .ToDictionary(part => Uri.UnescapeDataString(part[0]), part => part.Length == 2 ? Uri.UnescapeDataString(part[1]) : string.Empty, StringComparer.OrdinalIgnoreCase);
-        string? Read(params string[] keys) => keys.Select(key => query.GetValueOrDefault(key)).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
-        var requestId = Read("request", "requestId");
-        var token = Read("token", "requestToken");
-        if (requestId is null || token is null) throw OratorioApiException.Validation("The handoff URL is missing request id or token.");
-        var appId = Read("app", "appId") ?? AppServerDynamicToolCatalog.AppId;
-        if (appId != AppServerDynamicToolCatalog.AppId) throw OratorioApiException.Validation($"Unsupported App Binding app id '{appId}'.");
-        return new(operation, appId, requestId, token, Read("endpoint", "appServer"));
-    }
-}
-
-public sealed record OratorioAppBindingInspection(string Operation, AppBindingConnectionRequestInfo? Connection, AppBindingRequestInfo? Binding);
+public sealed record OratorioAppBindingInspection(string Operation, JsonElement? Connection, AppBindingRequestInfo? Binding);
 public sealed record OratorioAppBindingApprovalResult(string Operation, string State, string? BindingId);
