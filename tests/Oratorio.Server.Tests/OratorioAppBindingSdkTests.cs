@@ -28,6 +28,7 @@ public sealed class OratorioAppBindingSdkTests
         {
             var store = new OratorioDotCraftBindingStore(Path.Combine(stateDirectory, "binding.json"));
             using var services = new ServiceCollection().BuildServiceProvider();
+            var boardSurfaceRuntime = new OratorioBoardSurfaceRuntime();
             var service = new OratorioAppBindingService(
                 factory,
                 null!,
@@ -35,11 +36,12 @@ public sealed class OratorioAppBindingSdkTests
                 store,
                 new PassthroughSecretProtector(),
                 new OratorioBindingMcpRuntime(services.GetRequiredService<IServiceScopeFactory>()),
+                boardSurfaceRuntime,
                 NullLogger<OratorioAppBindingService>.Instance);
 
             var approveTask = service.ApproveAsync(
                 "oratorio://dotcraft/connect?app=com.dotharness.oratorio&request=connect_req_1&token=request-token&endpoint=ws%3A%2F%2F127.0.0.1%3A9100%2Fws",
-                surfaceBaseUrl: null,
+                "http://127.0.0.1:5199",
                 CancellationToken.None);
 
             using (var outbound = await transport.ReadOutboundAsync().WaitAsync(Timeout))
@@ -65,6 +67,32 @@ public sealed class OratorioAppBindingSdkTests
                         },
                         credential = "credential-1"
                     }
+                });
+            }
+
+            using (var authenticate = await transport.ReadOutboundAsync().WaitAsync(Timeout))
+            {
+                Assert.Equal("app/connection/authenticate", authenticate.RootElement.GetProperty("method").GetString());
+                var parameters = authenticate.RootElement.GetProperty("params");
+                Assert.Equal("com.dotharness.oratorio", parameters.GetProperty("appId").GetString());
+                Assert.Equal("credential-1", parameters.GetProperty("credential").GetString());
+                await transport.PushResultAsync(authenticate, new { });
+            }
+
+            using (var publish = await transport.ReadOutboundAsync().WaitAsync(Timeout))
+            {
+                Assert.Equal("app/surface/publish", publish.RootElement.GetProperty("method").GetString());
+                var parameters = publish.RootElement.GetProperty("params");
+                Assert.Equal("board", parameters.GetProperty("surfaceId").GetString());
+                Assert.Equal("http://127.0.0.1:5199/dotcraft/surfaces/board/api/v1", parameters.GetProperty("endpoint").GetString());
+                Assert.Equal(boardSurfaceRuntime.Bearer, parameters.GetProperty("bearer").GetString());
+                await transport.PushResultAsync(publish, new
+                {
+                    appId = "com.dotharness.oratorio",
+                    surfaceId = "board",
+                    endpoint = "http://127.0.0.1:5199/dotcraft/surfaces/board/api/v1",
+                    bearer = boardSurfaceRuntime.Bearer,
+                    expiresAt = "2026-07-16T12:02:00Z"
                 });
             }
 
@@ -110,6 +138,7 @@ public sealed class OratorioAppBindingSdkTests
                 store,
                 new PassthroughSecretProtector(),
                 new OratorioBindingMcpRuntime(services.GetRequiredService<IServiceScopeFactory>()),
+                new OratorioBoardSurfaceRuntime(),
                 NullLogger<OratorioAppBindingService>.Instance);
 
             var approveTask = service.ApproveAsync(
@@ -195,6 +224,7 @@ public sealed class OratorioAppBindingSdkTests
                 store,
                 new PassthroughSecretProtector(),
                 new OratorioBindingMcpRuntime(services.GetRequiredService<IServiceScopeFactory>()),
+                new OratorioBoardSurfaceRuntime(),
                 NullLogger<OratorioAppBindingService>.Instance);
 
             var rebindTask = service.RebindPersistedAsync("http://127.0.0.1:5199", CancellationToken.None);

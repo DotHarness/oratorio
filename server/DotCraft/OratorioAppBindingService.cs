@@ -15,6 +15,7 @@ public sealed class OratorioAppBindingService(
     OratorioDotCraftBindingStore bindingStore,
     IConfigurationSecretProtector secretProtector,
     OratorioBindingMcpRuntime mcpRuntime,
+    OratorioBoardSurfaceRuntime boardSurfaceRuntime,
     ILogger<OratorioAppBindingService> logger)
 {
     public async Task<DotCraftAppBindingStatusResponse> GetConnectionStatusAsync(CancellationToken ct)
@@ -69,7 +70,7 @@ public sealed class OratorioAppBindingService(
         var handoff = ParseHandoff(handoffUrl);
         await using var client = await ConnectAsync(handoff, ct);
         return handoff.Operation == OratorioAppBindingOperations.Connect
-            ? await CompleteConnectionAsync(client.AppBindings, handoff, ct)
+            ? await CompleteConnectionAsync(client.AppBindings, handoff, surfaceBaseUrl, ct)
             : await ActivateBindingAsync(client.AppBindings, handoff, surfaceBaseUrl, ct);
     }
 
@@ -97,14 +98,28 @@ public sealed class OratorioAppBindingService(
         }
     }
 
-    private async Task<OratorioAppBindingApprovalResult> CompleteConnectionAsync(
-        DotCraftAppBindingClient appBindings, AppBindingHandoff handoff, CancellationToken ct)
+    /// <summary>Authenticates the saved application principal and republishes its board surface.</summary>
+    public async Task PublishSurfacePersistedAsync(string surfaceBaseUrl, CancellationToken ct)
     {
+        if (!bindingStore.TryLoad(out var durable)) return;
+        await using var client = await clientFactory.ConnectAsync(durable.AppServerUrl, ct);
+        await client.InitializeAsync(ct);
+        await AuthenticateAsync(client.AppBindings, durable, ct);
+        await PublishBoardSurfaceAsync(client.AppBindings, surfaceBaseUrl, ct);
+    }
+
+    private async Task<OratorioAppBindingApprovalResult> CompleteConnectionAsync(
+        DotCraftAppBindingClient appBindings, AppBindingHandoff handoff, string? surfaceBaseUrl, CancellationToken ct)
+    {
+        var endpoint = BuildBoardSurfaceEndpoint(surfaceBaseUrl);
         var result = await appBindings.CompleteConnectionAsync(
             new CompleteConnectionRequest(handoff.RequestId, handoff.RequestToken, "Oratorio"), ct);
         bindingStore.Save(new OratorioDotCraftBinding(
             ResolveAppServerUrl(handoff), handoff.AppId, result.Principal.PrincipalId,
             secretProtector.Protect(result.Credential), RequireTimestamp(result.Principal.ExpiresAt), "Oratorio", []));
+        await appBindings.AuthenticateAsync(handoff.AppId, result.Credential, ct);
+        await appBindings.PublishSurfaceAsync(
+            OratorioBoardSurfaceRuntime.SurfaceId, endpoint, boardSurfaceRuntime.Bearer, ct);
         return new(handoff.Operation, "connected", null);
     }
 
@@ -185,6 +200,28 @@ public sealed class OratorioAppBindingService(
         !string.IsNullOrWhiteSpace(handoff.AppServerUrl) ? handoff.AppServerUrl :
         !string.IsNullOrWhiteSpace(dotCraftOptions.Value.AppServerUrl) ? dotCraftOptions.Value.AppServerUrl :
         throw OratorioApiException.Validation("DotCraft AppServer endpoint was not provided by the handoff.");
+
+    private async Task PublishBoardSurfaceAsync(
+        DotCraftAppBindingClient appBindings, string surfaceBaseUrl, CancellationToken ct)
+    {
+        await appBindings.PublishSurfaceAsync(
+            OratorioBoardSurfaceRuntime.SurfaceId,
+            BuildBoardSurfaceEndpoint(surfaceBaseUrl),
+            boardSurfaceRuntime.Bearer,
+            ct);
+    }
+
+    private string BuildBoardSurfaceEndpoint(string? surfaceBaseUrl)
+    {
+        try
+        {
+            return boardSurfaceRuntime.BuildEndpoint(surfaceBaseUrl ?? string.Empty);
+        }
+        catch (ArgumentException)
+        {
+            throw OratorioApiException.Validation("Oratorio must expose a loopback HTTP endpoint for the board surface.");
+        }
+    }
 
     private static bool TryBuildMcpEndpoint(string? surfaceBaseUrl, string bindingId, out string endpoint)
     {
