@@ -1,74 +1,65 @@
-using System.Text.Json;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 
 namespace Oratorio.Server.DotCraft;
 
 /// <summary>
-/// On startup, silently re-announces Oratorio's current loopback surface endpoint
-/// to DotCraft using the persisted durable binding. Because Oratorio Desktop may
-/// bind a new dynamic port each launch, this keeps the DotCraft-side apiBase live
-/// so the embedded board reconnects with no manual re-bind. It is best-effort: if
-/// DotCraft's app-server is not running, it logs and exits quietly.
+/// Rebinds saved MCP authorities after restart and periodically republishes the app-owned board surface.
 /// </summary>
 public sealed class OratorioAppBindingReannounceWorker(
     IHostApplicationLifetime lifetime,
     IServer server,
-    IDotCraftAppServerClientFactory clientFactory,
-    OratorioDotCraftBindingStore bindingStore,
-    ILogger<OratorioAppBindingReannounceWorker> logger) : IHostedService
+    OratorioAppBindingService appBindingService,
+    ILogger<OratorioAppBindingReannounceWorker> logger) : BackgroundService
 {
-    private CancellationTokenRegistration _registration;
+    private const int SurfacePublishIntervalSeconds = 60;
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Run after the server has bound its address so the live loopback URL is known.
-        _registration = lifetime.ApplicationStarted.Register(
-            () => _ = ReannounceAsync(lifetime.ApplicationStopping));
-        return Task.CompletedTask;
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = lifetime.ApplicationStarted.Register(() => started.TrySetResult());
+        await started.Task.WaitAsync(stoppingToken);
+
+        var baseUrl = ResolveLiveBaseUrl();
+        if (baseUrl is null)
+        {
+            logger.LogDebug("Skipping DotCraft re-announce: no live loopback surface URL resolved.");
+            return;
+        }
+
+        await TryRebindAsync(baseUrl, stoppingToken);
+        await TryPublishSurfaceAsync(baseUrl, stoppingToken);
+
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(SurfacePublishIntervalSeconds));
+        while (await timer.WaitForNextTickAsync(stoppingToken))
+        {
+            await TryPublishSurfaceAsync(baseUrl, stoppingToken);
+        }
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
-    {
-        _registration.Dispose();
-        return Task.CompletedTask;
-    }
-
-    private async Task ReannounceAsync(CancellationToken ct)
+    private async Task TryRebindAsync(string baseUrl, CancellationToken ct)
     {
         try
         {
-            if (!bindingStore.TryLoad(out var binding))
-            {
-                return;
-            }
-
-            var baseUrl = ResolveLiveBaseUrl();
-            var metadata = OratorioAppBindingService.BuildPublicConnectionMetadata(baseUrl);
-            if (metadata is null)
-            {
-                logger.LogDebug("Skipping DotCraft re-announce: no live loopback surface URL resolved.");
-                return;
-            }
-
-            var proof = JsonDocument.Parse(binding.ConnectionProofJson).RootElement.Clone();
-
-            await using var client = await clientFactory.ConnectAsync(binding.AppServerUrl, ct);
-            await client.InitializeAsync(ct);
-            await client.RefreshAppConnectionMetadataAsync(
-                new AppBindingConnectionMetadataRefreshRequest(binding.AppId, proof, metadata),
-                ct);
-
-            logger.LogInformation(
-                "Re-announced Oratorio loopback surface to DotCraft for {AppId} at {BaseUrl}.",
-                binding.AppId,
-                baseUrl);
+            await appBindingService.RebindPersistedAsync(baseUrl, ct);
+            logger.LogInformation("Rebound persisted Oratorio MCP bindings at {BaseUrl}.", baseUrl);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // DotCraft may simply not be running yet; the board falls back to its
-            // friendly "Open Oratorio" state and recovers on the next refresh.
-            logger.LogDebug(ex, "Skipped DotCraft re-announce (app-server may be unavailable).");
+            logger.LogDebug(ex, "Skipped DotCraft MCP rebind (app-server may be unavailable).");
+        }
+    }
+
+    private async Task TryPublishSurfaceAsync(string baseUrl, CancellationToken ct)
+    {
+        try
+        {
+            await appBindingService.PublishSurfacePersistedAsync(baseUrl, ct);
+            logger.LogInformation("Published the Oratorio board surface at {BaseUrl}.", baseUrl);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogDebug(ex, "Skipped DotCraft board surface publish (app-server may be unavailable); retrying later.");
         }
     }
 
@@ -80,19 +71,16 @@ public sealed class OratorioAppBindingReannounceWorker(
             return null;
         }
 
-        // Prefer an explicit loopback address; the desktop launches the server with
-        // ASPNETCORE_URLS=http://127.0.0.1:<port>, so the first address is loopback.
         foreach (var address in addresses)
         {
-            if (Uri.TryCreate(address, UriKind.Absolute, out var uri) && uri.IsLoopback)
+            if (Uri.TryCreate(address, UriKind.Absolute, out var uri) &&
+                uri.Scheme == Uri.UriSchemeHttp &&
+                uri.IsLoopback)
             {
                 return uri.GetLeftPart(UriPartial.Authority);
             }
         }
 
-        return addresses
-            .Select(address => Uri.TryCreate(address, UriKind.Absolute, out var uri) ? uri : null)
-            .FirstOrDefault(uri => uri is not null)?
-            .GetLeftPart(UriPartial.Authority);
+        return null;
     }
 }

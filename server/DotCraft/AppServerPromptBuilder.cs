@@ -14,21 +14,21 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
     private const string RunContractInstructions = """
         Oratorio owns this DotCraft thread's board/run lifecycle. Follow the current turn facts and use only the Oratorio runtime tools exposed for that turn.
         - Oratorio performs external delivery; do not push, merge, approve, request changes, create PRs/MRs, or mutate GitHub/GitLab directly.
-        - Propose separate work with oratorio.SubmitFollowUpDraft when available.
-        - Use oratorio.SubmitDiscussionReply only when the current turn is an Agent Discussion Turn.
+        - Propose separate work with oratorio_run.SubmitFollowUpDraft when available.
+        - Use oratorio_run.SubmitDiscussionReply only when the current turn is an Agent Discussion Turn.
         """;
 
     private const string DiscussionTurnInstructions = """
         Agent Discussion Turns:
         - When the user turn identifies an Oratorio Agent Discussion Turn, answer only that operator question.
-        - Call oratorio.SubmitDiscussionReply with the discussionTurnId supplied in the user turn/context and your Markdown reply.
-        - If the user turn lists open findings and the discussion shows one is a non-issue or already handled, you may resolve it with oratorio.ResolveReviewFinding; otherwise leave it open.
+        - Call oratorio_run.SubmitDiscussionReply with the discussionTurnId supplied in the user turn/context and your Markdown reply.
+        - If the user turn lists open findings and the discussion shows one is a non-issue or already handled, you may resolve it with oratorio_run.ResolveReviewFinding; otherwise leave it open.
         - Do not modify files or turn the question into follow-up work.
         """;
 
     private const string ReviewDraftIntroInstructions = """
-        During Oratorio PR/MR review-analysis runs when oratorio.SubmitReviewDraft is available:
-        - Call oratorio.SubmitReviewDraft with the final draft; retry only when the tool asks you to repair anchors.
+        During Oratorio PR/MR review-analysis runs when oratorio_run.SubmitReviewDraft is available:
+        - Call oratorio_run.SubmitReviewDraft with the final draft; retry only when the tool asks you to repair anchors.
         - Clean review: summary.body `No issues found.`, majorCount 0, minorCount 0, suggestionCount 0, comments: [].
         - Findings review: summary.body `Found N issue.` or `Found N issues.`, with details in inline comments.
         - Prioritize actionable bugs and investigation flags.
@@ -43,21 +43,21 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
         - For each fixable RIGHT-side inline finding, provide suggestion.oldText and suggestion.newText. oldText must be the exact current contiguous right-side diff text to replace, including enough surrounding lines to be unique; Oratorio derives the GitHub/GitLab review anchor.
         - Do not submit top-level line/startLine/suggestionReplacement fields for code suggestions.
         - For non-suggestion findings, provide commentOnly with a commentable changed/context line and reason as one of: needsHumanDecision, requiresLargerChange, cannotAnchorSafely, investigateOnly, leftSideOrDeletion.
-        - If oratorio.SubmitReviewDraft fails with reviewDraftSuggestionRequired, reviewDraftAnchorNotCommentable, reviewDraftSuggestionTextNotFound, or reviewDraftSuggestionTextAmbiguous, repair the suggestion/commentOnly payload and call oratorio.SubmitReviewDraft again before your final response.
+        - If oratorio_run.SubmitReviewDraft fails with reviewDraftSuggestionRequired, reviewDraftAnchorNotCommentable, reviewDraftSuggestionTextNotFound, or reviewDraftSuggestionTextAmbiguous, repair the suggestion/commentOnly payload and call oratorio_run.SubmitReviewDraft again before your final response.
         - Count only accepted concrete code suggestions in suggestionCount; do not count prose-only findings or follow-up ideas as suggestions.
         - Do not place machine-readable review JSON in the final answer.
         """;
 
     private const string ImplementationDraftInstructions = """
-        During Oratorio implementation runs when oratorio.SubmitImplementationDraft is available:
+        During Oratorio implementation runs when oratorio_run.SubmitImplementationDraft is available:
         - Modify only files inside the Oratorio-managed execution worktree named in the user turn.
-        - When your implementation draft is ready, call oratorio.SubmitImplementationDraft with summary, tests, risks, changedFiles, proposedCommitMessage, proposedPrTitle, and proposedPrBody.
+        - When your implementation draft is ready, call oratorio_run.SubmitImplementationDraft with summary, tests, risks, changedFiles, proposedCommitMessage, proposedPrTitle, and proposedPrBody.
         - Do not place machine-readable implementation JSON in the final answer.
         """;
 
     private const string FollowUpDraftInstructions = """
-        During Oratorio review or implementation runs when oratorio.SubmitFollowUpDraft is available:
-        - If you identify follow-up work that should be split from the current round, call oratorio.SubmitFollowUpDraft with proposals.
+        During Oratorio review or implementation runs when oratorio_run.SubmitFollowUpDraft is available:
+        - If you identify follow-up work that should be split from the current round, call oratorio_run.SubmitFollowUpDraft with proposals.
         - Follow-up drafts are advisory, not hidden requirements for this round.
         """;
 
@@ -408,12 +408,12 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
 
             if (string.Equals(previousRetryAttempt.ErrorCode, "reviewDraftRequired", StringComparison.Ordinal))
             {
-                prompt.AppendLine("- Reuse the prior analysis when available, repair any rejected Review Draft payload, and call oratorio.SubmitReviewDraft.");
-                prompt.AppendLine("- Do not finish this turn until oratorio.SubmitReviewDraft returns a successful result, including for a clean review.");
+                prompt.AppendLine("- Reuse the prior analysis when available, repair any rejected Review Draft payload, and call oratorio_run.SubmitReviewDraft.");
+                prompt.AppendLine("- Do not finish this turn until oratorio_run.SubmitReviewDraft returns a successful result, including for a clean review.");
             }
             else if (previousRetryAttempt.ErrorCode is "appServerTurnFailed" or "appServerTurnCancelled")
             {
-                prompt.AppendLine("- Continue the interrupted review, verify the result against the current target, and complete the required oratorio.SubmitReviewDraft delivery before finishing.");
+                prompt.AppendLine("- Continue the interrupted review, verify the result against the current target, and complete the required oratorio_run.SubmitReviewDraft delivery before finishing.");
             }
             else
             {
@@ -522,7 +522,7 @@ public sealed class AppServerPromptBuilder(OratorioDbContext db)
         sb.AppendLine(ReviewDraftIntroInstructions.Trim());
         sb.AppendLine("- When the user turn lists a Review diff range, first inspect its file list/stat and focused per-path diffs before concluding the PR/MR is clean.");
         sb.AppendLine(ReviewDraftDiffInstructions.Trim());
-        sb.AppendLine("- When the user turn lists open findings from earlier published review rounds, call oratorio.ResolveReviewFinding for each finding that the current head now addresses, and do not re-report still-present findings as new comments.");
+        sb.AppendLine("- When the user turn lists open findings from earlier published review rounds, call oratorio_run.ResolveReviewFinding for each finding that the current head now addresses, and do not re-report still-present findings as new comments.");
         return sb.ToString().Trim();
     }
 

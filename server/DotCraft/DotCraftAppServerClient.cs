@@ -1,14 +1,15 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DotCraft.Sdk.AppBinding;
 using DotCraft.Sdk.Wire;
 using Oratorio.Server.Api;
 using SdkClient = DotCraft.Sdk.AppServer.DotCraftClient;
 using SdkClientOptions = DotCraft.Sdk.AppServer.DotCraftClientOptions;
 using SdkDynamicToolCall = DotCraft.Sdk.AppServer.DynamicToolCall;
-using SdkDynamicToolMeta = DotCraft.Sdk.AppServer.DynamicToolMeta;
 using SdkDynamicToolResult = DotCraft.Sdk.AppServer.DynamicToolResult;
-using SdkDynamicToolSpec = DotCraft.Sdk.AppServer.DynamicToolSpec;
-using SdkDynamicToolUiMeta = DotCraft.Sdk.AppServer.DynamicToolUiMeta;
+using SdkDynamicToolDeclaration = DotCraft.Sdk.AppServer.RuntimeDynamicToolDeclaration;
+using SdkDynamicToolFunction = DotCraft.Sdk.AppServer.RuntimeDynamicToolFunction;
+using SdkDynamicToolNamespace = DotCraft.Sdk.AppServer.RuntimeDynamicToolNamespace;
 using SdkSessionIdentity = DotCraft.Sdk.AppServer.SessionIdentity;
 using SdkThreadResumeRequest = DotCraft.Sdk.AppServer.DotCraftThreadResumeRequest;
 using SdkThreadStartRequest = DotCraft.Sdk.AppServer.DotCraftThreadStartRequest;
@@ -28,6 +29,7 @@ public interface IDotCraftAppServerClient : IAsyncDisposable
 {
     bool SupportsDynamicToolRebind { get; }
     bool SupportsRuntimeAdditionalContext { get; }
+    DotCraftAppBindingClient AppBindings { get; }
     Task InitializeAsync(CancellationToken ct);
     void SetDynamicToolHandler(Func<AppServerDynamicToolCall, CancellationToken, Task<AppServerDynamicToolResult>> handler);
     Task<string> StartThreadAsync(AppServerThreadStartRequest request, CancellationToken ct);
@@ -43,21 +45,7 @@ public interface IDotCraftAppServerClient : IAsyncDisposable
     Task InterruptTurnAsync(string threadId, string turnId, CancellationToken ct);
     Task<AppServerThreadReadResult> ReadThreadAsync(string threadId, CancellationToken ct);
     Task<IReadOnlyList<ModelInfoDto>> ListModelsAsync(CancellationToken ct);
-    Task<AppBindingConnectionRequestInfo> GetAppConnectionRequestAsync(AppBindingConnectionRequestGetRequest request, CancellationToken ct);
-    Task<AppBindingConnectionStatus> GetAppConnectionStatusAsync(AppBindingConnectionStatusRequest request, CancellationToken ct);
-    Task<AppBindingConnectionStatus> CompleteAppConnectionAsync(AppBindingConnectionConnectRequest request, CancellationToken ct);
-    Task<AppBindingConnectionStatus> RefreshAppConnectionMetadataAsync(AppBindingConnectionMetadataRefreshRequest request, CancellationToken ct);
-    Task<AppBindingRequestInfo> GetAppBindingRequestAsync(AppBindingRequestGetRequest request, CancellationToken ct);
-    Task<AppBindingAcceptResponse> AcceptAppBindingAsync(AppBindingAcceptRequest request, CancellationToken ct);
-    Task<AppBindingAttachToolsResponse> AttachAppBindingToolsAsync(AppBindingAttachToolsRequest request, CancellationToken ct);
-    Task<AppBindingContextBlockUpsertResponse> UpsertAppBindingContextBlockAsync(AppBindingContextBlockUpsertRequest request, CancellationToken ct);
     IAsyncEnumerable<AppServerNotification> ReadNotificationsAsync(CancellationToken ct);
-
-    /// <summary>
-    /// Serves every file in <paramref name="folderPath"/> as a DotCraft Interactive Tool UI
-    /// resource under the given <c>ui://</c> prefix (answered on <c>item/resource/read</c>).
-    /// </summary>
-    IDisposable ServeUiResources(string uriPrefix, string folderPath);
 }
 
 public sealed record AppServerThreadStartRequest(
@@ -84,20 +72,16 @@ public sealed record AppServerDynamicToolSpec(
     JsonElement InputSchema,
     bool DeferLoading = false,
     AppServerToolApprovalDescriptor? Approval = null,
-    // This wrapper is serialized directly onto the app/binding/attachTools wire, so the field
-    // MUST be `_meta` (not `ui`) to match DotCraft's DynamicToolSpec contract.
     [property: JsonPropertyName("_meta")] AppServerDynamicToolMeta? Meta = null);
 
 /// <summary>
-/// Extensible <c>_meta</c> envelope on a dynamic tool spec (MCP Apps); carries the Interactive
-/// Tool UI declaration.
+/// Historical metadata retained only for Runtime Dynamic result deserialization.
 /// </summary>
 public sealed record AppServerDynamicToolMeta(
     AppServerDynamicToolUiMeta? Ui = null);
 
 /// <summary>
-/// DotCraft Interactive Tool UI declaration (`_meta.ui`): the `ui://` resource DotCraft Desktop
-/// renders for this tool's results, in a sandboxed iframe with a postMessage bridge.
+/// Historical UI descriptor retained only at the read boundary.
 /// </summary>
 public sealed record AppServerDynamicToolUiMeta(
     string ResourceUri,
@@ -132,136 +116,6 @@ public sealed record AppServerNotification(string Method, JsonElement Params);
 
 public sealed record AppServerThreadReadResult(string ThreadId, IReadOnlyList<ConversationItemDto> Items);
 
-public sealed record AppBindingConnectionRequestGetRequest(
-    string AppId,
-    string ConnectionRequestId,
-    string RequestToken);
-
-public sealed record AppBindingConnectionRequestInfo(
-    string AppId,
-    string ConnectionRequestId,
-    string DisplayName,
-    string DeveloperName,
-    string WorkspaceLabel,
-    string UserLabel,
-    DateTimeOffset ExpiresAt);
-
-public sealed record AppBindingConnectionConnectRequest(
-    string ConnectionRequestId,
-    string RequestToken,
-    string AppId,
-    string? AccountLabel = null,
-    DateTimeOffset? ExpiresAt = null,
-    object? ConnectionProof = null,
-    object? PublicMetadata = null);
-
-public sealed record AppBindingConnectionStatusRequest(string AppId);
-
-public sealed record AppBindingConnectionMetadataRefreshRequest(
-    string AppId,
-    object ConnectionProof,
-    object PublicMetadata);
-
-public sealed record AppBindingConnectionStatus(
-    string AppId,
-    string State,
-    DateTimeOffset? ConnectedAt = null,
-    DateTimeOffset? ExpiresAt = null,
-    string? AccountLabel = null,
-    string? Diagnostic = null);
-
-public sealed record AppBindingRequestGetRequest(
-    string AppId,
-    string BindingRequestId,
-    string RequestToken);
-
-public sealed record AppBindingRequestInfo(
-    string AppId,
-    string BindingRequestId,
-    string ThreadId,
-    string DisplayName,
-    string DeveloperName,
-    string Source,
-    IReadOnlyList<string> RequestedScopes,
-    IReadOnlyList<AppBindingScopeInfo> ScopeCatalog,
-    IReadOnlyList<string> RequestedTools,
-    IReadOnlyList<AppBindingToolInfo> ToolCatalog,
-    DateTimeOffset ExpiresAt,
-    string? ThreadTitle = null,
-    string? Reason = null);
-
-public sealed record AppBindingScopeInfo(
-    string Id,
-    string DisplayName,
-    string Description,
-    string Risk,
-    bool? DefaultSelected = null);
-
-public sealed record AppBindingToolInfo(
-    string Name,
-    string Scope,
-    string Risk,
-    string DefaultExposure,
-    string? Description = null);
-
-public sealed record AppBindingAcceptRequest(
-    string BindingRequestId,
-    string RequestToken,
-    string GrantId,
-    IReadOnlyList<string> GrantedScopes,
-    DateTimeOffset? ExpiresAt = null,
-    string ApprovalMode = "appAccepted",
-    string? ApprovedBy = null,
-    string? AuditRef = null);
-
-public sealed record AppBindingAcceptResponse(AppBindingWire Binding);
-
-public sealed record AppBindingAttachToolsRequest(
-    string BindingId,
-    string ThreadId,
-    string AppId,
-    string GrantId,
-    IReadOnlyList<AppServerDynamicToolSpec> Tools,
-    IReadOnlyList<string>? DirectToolNames = null,
-    IReadOnlyList<string>? DeferredToolNames = null,
-    object? GrantProof = null);
-
-public sealed record AppBindingAttachToolsResponse(
-    AppBindingWire Binding,
-    int AcceptedToolCount,
-    IReadOnlyList<string> Warnings);
-
-public sealed record AppBindingContextBlockUpsertRequest(
-    string BindingId,
-    string AppId,
-    string GrantId,
-    string BlockId,
-    string Kind,
-    string Title,
-    string Content,
-    int Order,
-    string Version,
-    DateTimeOffset? ExpiresAt = null,
-    string? Visibility = null);
-
-public sealed record AppBindingContextBlockUpsertResponse(JsonElement Block);
-
-public sealed record AppBindingWire(
-    string BindingId,
-    string ThreadId,
-    string AppId,
-    string State,
-    string ConnectionState,
-    IReadOnlyList<string> GrantedScopes,
-    int AttachedToolCount,
-    DateTimeOffset LastChangedAt,
-    string? DisplayName = null,
-    string? ToolNamespace = null,
-    DateTimeOffset? ExpiresAt = null,
-    string? ApprovalMode = null,
-    string? AuditRef = null,
-    string? Diagnostic = null);
-
 public sealed class DotCraftAppServerClientFactory : IDotCraftAppServerClientFactory
 {
     public async Task<IDotCraftAppServerClient> ConnectAsync(string appServerUrl, CancellationToken ct, string? token = null)
@@ -288,6 +142,8 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
     public bool SupportsDynamicToolRebind => client.Capabilities.DynamicToolRebind;
 
     public bool SupportsRuntimeAdditionalContext => client.Capabilities.RuntimeAdditionalContext;
+
+    public DotCraftAppBindingClient AppBindings => client.AppBindings;
 
     public Task InitializeAsync(CancellationToken ct) => Task.CompletedTask;
 
@@ -402,57 +258,6 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
         }
     }
 
-    public Task<AppBindingConnectionStatus> CompleteAppConnectionAsync(
-        AppBindingConnectionConnectRequest request,
-        CancellationToken ct) =>
-        client.AppBindings.ConnectAsync<AppBindingConnectionStatus>(request, ct);
-
-    public Task<AppBindingConnectionStatus> RefreshAppConnectionMetadataAsync(
-        AppBindingConnectionMetadataRefreshRequest request,
-        CancellationToken ct) =>
-        client.RequestAsync<AppBindingConnectionStatus>(
-            "app/connection/refreshMetadata",
-            request,
-            ct);
-
-    public Task<AppBindingConnectionStatus> GetAppConnectionStatusAsync(
-        AppBindingConnectionStatusRequest request,
-        CancellationToken ct) =>
-        client.AppBindings.GetConnectionStatusAsync<AppBindingConnectionStatus>(request, ct);
-
-    public Task<AppBindingConnectionRequestInfo> GetAppConnectionRequestAsync(
-        AppBindingConnectionRequestGetRequest request,
-        CancellationToken ct) =>
-        client.AppBindings.GetConnectionRequestAsync<AppBindingConnectionRequestInfo>(request, ct);
-
-    public Task<AppBindingRequestInfo> GetAppBindingRequestAsync(
-        AppBindingRequestGetRequest request,
-        CancellationToken ct) =>
-        client.AppBindings.GetBindingRequestAsync<AppBindingRequestInfo>(request, ct);
-
-    public Task<AppBindingAcceptResponse> AcceptAppBindingAsync(
-        AppBindingAcceptRequest request,
-        CancellationToken ct) =>
-        client.AppBindings.AcceptBindingAsync<AppBindingAcceptResponse>(request, ct);
-
-    public Task<AppBindingAttachToolsResponse> AttachAppBindingToolsAsync(
-        AppBindingAttachToolsRequest request,
-        CancellationToken ct) =>
-        client.AppBindings.AttachToolsAsync<AppBindingAttachToolsResponse>(
-            request with { Tools = request.Tools },
-            ct);
-
-    public Task<AppBindingContextBlockUpsertResponse> UpsertAppBindingContextBlockAsync(
-        AppBindingContextBlockUpsertRequest request,
-        CancellationToken ct) =>
-        client.RequestAsync<AppBindingContextBlockUpsertResponse>(
-            "app/binding/context/upsert",
-            request,
-            ct);
-
-    public IDisposable ServeUiResources(string uriPrefix, string folderPath) =>
-        client.ServeStaticUiResources(uriPrefix, folderPath);
-
     public async IAsyncEnumerable<AppServerNotification> ReadNotificationsAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
@@ -468,8 +273,26 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
         await client.DisposeAsync();
     }
 
-    private static IReadOnlyList<SdkDynamicToolSpec>? ToSdkTools(IReadOnlyList<AppServerDynamicToolSpec>? tools) =>
-        tools?.Select(ToSdkTool).ToArray();
+    private static IReadOnlyList<SdkDynamicToolDeclaration>? ToSdkTools(IReadOnlyList<AppServerDynamicToolSpec>? tools)
+    {
+        if (tools is null)
+            return null;
+
+        var declarations = tools
+            .Where(tool => string.IsNullOrWhiteSpace(tool.Namespace))
+            .Select(tool => (SdkDynamicToolDeclaration)ToSdkTool(tool))
+            .ToList();
+        declarations.AddRange(tools
+            .Where(tool => !string.IsNullOrWhiteSpace(tool.Namespace))
+            .GroupBy(tool => tool.Namespace!, StringComparer.Ordinal)
+            .Select(group => (SdkDynamicToolDeclaration)new SdkDynamicToolNamespace(
+                group.Key,
+                group.Key == "oratorio_run"
+                    ? "Run-specific Oratorio callbacks for the active project workflow."
+                    : $"Oratorio tools in the {group.Key} namespace.",
+                group.Select(tool => (SdkDynamicToolDeclaration)ToSdkTool(tool)).ToArray())));
+        return declarations;
+    }
 
     private static IReadOnlyDictionary<string, SdkRuntimeAdditionalContextEntry>? ToSdkAdditionalContext(
         IReadOnlyDictionary<string, AppServerRuntimeAdditionalContextEntry>? additionalContext) =>
@@ -478,9 +301,8 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
             entry => new SdkRuntimeAdditionalContextEntry(entry.Value.Value, entry.Value.Kind),
             StringComparer.Ordinal);
 
-    private static SdkDynamicToolSpec ToSdkTool(AppServerDynamicToolSpec tool) =>
+    private static SdkDynamicToolFunction ToSdkTool(AppServerDynamicToolSpec tool) =>
         new(
-            tool.Namespace,
             tool.Name,
             tool.Description,
             tool.InputSchema,
@@ -491,13 +313,7 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
                     tool.Approval.Kind,
                     tool.Approval.TargetArgument,
                     tool.Approval.Operation,
-                    tool.Approval.OperationArgument),
-            tool.Meta?.Ui is null
-                ? null
-                : new SdkDynamicToolMeta(new SdkDynamicToolUiMeta(
-                    tool.Meta.Ui.ResourceUri,
-                    tool.Meta.Ui.Visibility,
-                    PrefersBorder: tool.Meta.Ui.PrefersBorder)));
+                    tool.Approval.OperationArgument));
 
     private static IReadOnlyList<SdkTurnInputPart> NormalizeInput(IReadOnlyList<TurnInputPartDto> input) =>
         input
@@ -522,8 +338,7 @@ public sealed class DotCraftAppServerClient(SdkClient client) : IDotCraftAppServ
             result.ContentItems?.Select(item => new SdkToolContentItem(item.Type, item.Text)).ToArray(),
             result.StructuredResult,
             result.ErrorCode,
-            result.ErrorMessage,
-            result.Meta);
+            result.ErrorMessage);
 
     private static ConversationItemDto ToConversationItem(JsonElement item, string? fallbackTurnId)
     {

@@ -85,6 +85,8 @@ builder.Services.AddScoped<OratorioAppBindingToolHandler>();
 builder.Services.AddScoped<AutoReviewDispatchService>();
 builder.Services.AddScoped<ImplementationFollowUpDispatchService>();
 builder.Services.AddSingleton<OratorioAppBindingService>();
+builder.Services.AddSingleton<OratorioBindingMcpRuntime>();
+builder.Services.AddSingleton<OratorioBoardSurfaceRuntime>();
 builder.Services.AddScoped<OratorioSeeder>();
 builder.Services.AddScoped<OratorioSchemaMigrator>();
 builder.Services.AddSingleton<BoardEventHub>();
@@ -110,8 +112,27 @@ builder.Services.AddHostedService<OratorioAppBindingReannounceWorker>();
 
 var app = builder.Build();
 
-app.UseCors("DesktopRenderer");
 app.UseWebSockets();
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments(
+            OratorioBoardSurfaceRuntime.SurfacePath,
+            out var remainingPath))
+    {
+        var surface = context.RequestServices.GetRequiredService<OratorioBoardSurfaceRuntime>();
+        if (!surface.Authorize(context.Request.Headers.Authorization.ToString()))
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        context.Request.Path = new PathString("/api/v1").Add(remainingPath);
+    }
+
+    await next();
+});
+app.UseRouting();
+app.UseCors("DesktopRenderer");
 app.Use(async (context, next) =>
 {
     try
@@ -146,6 +167,9 @@ app.MapGet("/health", () => new
 
 app.MapOratorioApi();
 app.MapBoardStream();
+app.MapMethods("/dotcraft/bindings/{bindingId}/mcp", ["POST", "DELETE"],
+    (HttpContext context, string bindingId, OratorioBindingMcpRuntime runtime) =>
+        runtime.HandleAsync(context, bindingId));
 
 RegisterStartupBanner(app);
 

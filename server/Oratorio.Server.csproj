@@ -16,11 +16,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.1" />
-    <PackageReference Include="DotCraft.Sdk" Version="0.1.0" />
+    <PackageReference Include="DotCraft.Sdk" Version="0.4.0" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- DotCraft Interactive Tool UI documents served on item/resource/read. -->
+    <!-- Bundled MCP Apps documents served through standard resources/read. -->
     <Content Include="UiResources\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

@@ -6,11 +6,8 @@ using Oratorio.Server.Services;
 namespace Oratorio.Server.DotCraft;
 
 public sealed record OratorioAppBindingGrantContext(
-    string AppId,
     string BindingId,
-    string ThreadId,
-    string GrantId,
-    IReadOnlySet<string> GrantedScopes);
+    long AuthorityRevision);
 
 public sealed class OratorioAppBindingToolHandler(OratorioService service)
 {
@@ -21,21 +18,6 @@ public sealed class OratorioAppBindingToolHandler(OratorioService service)
         AppServerDynamicToolCall call,
         CancellationToken ct)
     {
-        if (!string.Equals(context.AppId, AppServerDynamicToolCatalog.AppId, StringComparison.Ordinal))
-        {
-            return Failed("InvalidAppBinding", "The grant is not for the Oratorio App Binding app id.");
-        }
-
-        if (!string.Equals(call.ThreadId, context.ThreadId, StringComparison.Ordinal))
-        {
-            return Failed("InvalidAppBindingThread", "The tool call thread does not match this Oratorio grant.");
-        }
-
-        if (!string.Equals(call.Namespace, AppServerDynamicToolCatalog.Namespace, StringComparison.Ordinal))
-        {
-            return Failed("UnsupportedTool", "Only tools in the oratorio namespace are supported.");
-        }
-
         try
         {
             return call.Tool switch
@@ -62,12 +44,6 @@ public sealed class OratorioAppBindingToolHandler(OratorioService service)
         JsonElement arguments,
         CancellationToken ct)
     {
-        var scopeFailure = RequireScope(context, AppServerDynamicToolCatalog.BoardReadScope);
-        if (scopeFailure is not null)
-        {
-            return scopeFailure;
-        }
-
         var args = ReadArguments<ListBoardItemsArguments>(arguments);
         var result = await service.ListItemsAsync(
             state: args.State,
@@ -88,7 +64,7 @@ public sealed class OratorioAppBindingToolHandler(OratorioService service)
                 result.Items,
                 result.NextCursor,
                 context.BindingId,
-                context.GrantId
+                context.AuthorityRevision
             });
     }
 
@@ -97,12 +73,6 @@ public sealed class OratorioAppBindingToolHandler(OratorioService service)
         JsonElement arguments,
         CancellationToken ct)
     {
-        var scopeFailure = RequireScope(context, AppServerDynamicToolCatalog.BoardReadScope);
-        if (scopeFailure is not null)
-        {
-            return scopeFailure;
-        }
-
         var args = ReadArguments<ItemIdArguments>(arguments);
         RequireNonEmpty(args.ItemId, "itemId");
         var result = await service.GetTaskDetailAsync(args.ItemId!, ct);
@@ -112,7 +82,7 @@ public sealed class OratorioAppBindingToolHandler(OratorioService service)
             {
                 Detail = result,
                 context.BindingId,
-                context.GrantId
+                context.AuthorityRevision
             });
     }
 
@@ -121,12 +91,6 @@ public sealed class OratorioAppBindingToolHandler(OratorioService service)
         JsonElement arguments,
         CancellationToken ct)
     {
-        var scopeFailure = RequireScope(context, AppServerDynamicToolCatalog.BoardManageScope);
-        if (scopeFailure is not null)
-        {
-            return scopeFailure;
-        }
-
         var args = ReadArguments<CreateBoardTaskArguments>(arguments);
         RequireNonEmpty(args.Title, "title");
         var result = await service.CreateLocalTaskAsync(
@@ -144,7 +108,7 @@ public sealed class OratorioAppBindingToolHandler(OratorioService service)
             {
                 Detail = result,
                 context.BindingId,
-                context.GrantId
+                context.AuthorityRevision
             });
     }
 
@@ -153,12 +117,6 @@ public sealed class OratorioAppBindingToolHandler(OratorioService service)
         JsonElement arguments,
         CancellationToken ct)
     {
-        var scopeFailure = RequireScope(context, AppServerDynamicToolCatalog.BoardManageScope);
-        if (scopeFailure is not null)
-        {
-            return scopeFailure;
-        }
-
         var args = ReadArguments<QueueReviewRoundArguments>(arguments);
         RequireNonEmpty(args.ItemId, "itemId");
         var detail = await service.GetTaskDetailAsync(args.ItemId!, ct);
@@ -179,17 +137,8 @@ public sealed class OratorioAppBindingToolHandler(OratorioService service)
             {
                 Detail = result,
                 context.BindingId,
-                context.GrantId
+                context.AuthorityRevision
             });
-    }
-
-    private static AppServerDynamicToolResult? RequireScope(
-        OratorioAppBindingGrantContext context,
-        string scope)
-    {
-        return context.GrantedScopes.Contains(scope)
-            ? null
-            : Failed("AppBindingScopeDenied", $"The Oratorio grant does not include scope '{scope}'.");
     }
 
     private static T ReadArguments<T>(JsonElement arguments) =>

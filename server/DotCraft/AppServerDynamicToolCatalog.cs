@@ -4,34 +4,79 @@ namespace Oratorio.Server.DotCraft;
 
 public static class AppServerDynamicToolCatalog
 {
-    public const string Namespace = "oratorio";
+    public const string Namespace = "oratorio_run";
     public const string AppId = "com.dotharness.oratorio";
-    public const string BoardReadScope = "board.read";
-    public const string BoardManageScope = "board.manage";
     public const string SubmitDiscussionReplyName = "SubmitDiscussionReply";
-    public const string SubmitDiscussionReplyId = "oratorio.SubmitDiscussionReply";
+    public const string SubmitDiscussionReplyId = "oratorio_run.SubmitDiscussionReply";
     public const string ResolveReviewFindingName = "ResolveReviewFinding";
-    public const string ResolveReviewFindingId = "oratorio.ResolveReviewFinding";
+    public const string ResolveReviewFindingId = "oratorio_run.ResolveReviewFinding";
     public const string SubmitReviewDraftName = "SubmitReviewDraft";
-    public const string SubmitReviewDraftId = "oratorio.SubmitReviewDraft";
+    public const string SubmitReviewDraftId = "oratorio_run.SubmitReviewDraft";
     public const string SubmitImplementationDraftName = "SubmitImplementationDraft";
-    public const string SubmitImplementationDraftId = "oratorio.SubmitImplementationDraft";
+    public const string SubmitImplementationDraftId = "oratorio_run.SubmitImplementationDraft";
     public const string SubmitFollowUpDraftName = "SubmitFollowUpDraft";
-    public const string SubmitFollowUpDraftId = "oratorio.SubmitFollowUpDraft";
+    public const string SubmitFollowUpDraftId = "oratorio_run.SubmitFollowUpDraft";
     public const string ListBoardItemsName = "ListBoardItems";
     public const string GetBoardItemName = "GetBoardItem";
     public const string CreateBoardTaskName = "CreateBoardTask";
     public const string QueueReviewRoundName = "QueueReviewRound";
-    public const string BoardToolsContextBlockId = "oratorio.boardTools";
-    public const string BoardToolsContextBlockTitle = "Oratorio board tools";
 
-    /// <summary>DotCraft Interactive Tool UI resources (served on <c>item/resource/read</c>).</summary>
+    /// <summary>Bundled MCP Apps resources served by the binding MCP server.</summary>
     public const string UiResourcePrefix = "ui://oratorio";
     public const string BoardUiResourceUri = $"{UiResourcePrefix}/board.html";
     public const string ItemUiResourceUri = $"{UiResourcePrefix}/item.html";
     public const string ReviewUiResourceUri = $"{UiResourcePrefix}/review.html";
+    public const string BoardNamespaceDescription = "Inspect and manage the authorized Oratorio project board. Read current board state before making claims; use mutation tools only when the user asks to change Oratorio state.";
 
     private static readonly string[] ModelAndAppVisibility = ["model", "app"];
+
+    public static IReadOnlyList<object> McpBoardTools(JsonSerializerOptions jsonOptions) =>
+        BoardTools(jsonOptions)
+            .Select(tool => (object)new
+            {
+                name = tool.Name,
+                description = tool.Description,
+                inputSchema = tool.InputSchema,
+                annotations = new
+                {
+                    readOnlyHint = tool.Name is ListBoardItemsName or GetBoardItemName,
+                    destructiveHint = false,
+                    openWorldHint = false
+                },
+                _meta = tool.Meta is null ? null : new
+                {
+                    ui = new
+                    {
+                        resourceUri = tool.Meta.Ui!.ResourceUri,
+                        visibility = tool.Meta.Ui.Visibility
+                    }
+                }
+            })
+            .ToArray();
+
+    public static IReadOnlyList<object> McpAppResources() =>
+    [
+        McpResource(BoardUiResourceUri, "Oratorio board", "board.html"),
+        McpResource(ItemUiResourceUri, "Oratorio item", "item.html"),
+        McpResource(ReviewUiResourceUri, "Oratorio review", "review.html")
+    ];
+
+    public static string? ResolveUiFile(string? uri) => uri switch
+    {
+        BoardUiResourceUri => "board.html",
+        ItemUiResourceUri => "item.html",
+        ReviewUiResourceUri => "review.html",
+        _ => null
+    };
+
+    private static object McpResource(string uri, string name, string fileName) => new
+    {
+        uri,
+        name,
+        description = $"Bundled Oratorio MCP App: {fileName}",
+        mimeType = "text/html;profile=mcp-app",
+        _meta = new { ui = new { prefersBorder = true } }
+    };
 
     public static AppServerDynamicToolSpec SubmitDiscussionReply(JsonSerializerOptions jsonOptions) =>
         new(
@@ -71,54 +116,13 @@ public static class AppServerDynamicToolCatalog
                 required = new[] { "findingId", "resolutionKind" }
             }, jsonOptions));
 
-    public static IReadOnlyList<AppServerDynamicToolSpec> AppBoundManagerTools(
-        JsonSerializerOptions jsonOptions,
-        IReadOnlySet<string> grantedScopes)
-    {
-        var tools = new List<AppServerDynamicToolSpec>();
-        if (grantedScopes.Contains(BoardReadScope))
-        {
-            tools.Add(ListBoardItems(jsonOptions));
-            tools.Add(GetBoardItem(jsonOptions));
-        }
-
-        if (grantedScopes.Contains(BoardManageScope))
-        {
-            tools.Add(CreateBoardTask(jsonOptions));
-            tools.Add(QueueReviewRound(jsonOptions));
-        }
-
-        return tools;
-    }
-
-    public static string AppBoundManagerToolsContext(IReadOnlySet<string> grantedScopes)
-    {
-        var toolNames = new List<string>();
-        if (grantedScopes.Contains(BoardReadScope))
-        {
-            toolNames.Add(ListBoardItemsName);
-            toolNames.Add(GetBoardItemName);
-        }
-
-        if (grantedScopes.Contains(BoardManageScope))
-        {
-            toolNames.Add(CreateBoardTaskName);
-            toolNames.Add(QueueReviewRoundName);
-        }
-
-        var availableTools = toolNames.Count == 0
-            ? "none"
-            : string.Join(", ", toolNames);
-        return $"""
-            Oratorio exposes app-bound board tools in this thread.
-
-            When the user asks about Oratorio tasks, board status, queued work, item details, local task creation, or review queueing, search for and load the relevant Oratorio tool first instead of guessing from conversation memory.
-
-            Available Oratorio board tools for this binding: {availableTools}.
-
-            Read-only board inspection uses {ListBoardItemsName} and {GetBoardItemName}. Board mutations use {CreateBoardTaskName} and {QueueReviewRoundName} and may require approval.
-            """;
-    }
+    public static IReadOnlyList<AppServerDynamicToolSpec> BoardTools(JsonSerializerOptions jsonOptions) =>
+    [
+        ListBoardItems(jsonOptions),
+        GetBoardItem(jsonOptions),
+        CreateBoardTask(jsonOptions),
+        QueueReviewRound(jsonOptions)
+    ];
 
     public static AppServerDynamicToolSpec ListBoardItems(JsonSerializerOptions jsonOptions) =>
         new(

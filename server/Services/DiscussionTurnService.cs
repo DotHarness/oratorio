@@ -159,7 +159,7 @@ public sealed class DiscussionTurnService(
     {
         if (call.Namespace != AppServerDynamicToolCatalog.Namespace || call.Tool != AppServerDynamicToolCatalog.SubmitDiscussionReplyName)
         {
-            return new AppServerDynamicToolResult(false, ErrorCode: "UnsupportedTool", ErrorMessage: "Only oratorio.SubmitDiscussionReply is supported by this handler.");
+            return new AppServerDynamicToolResult(false, ErrorCode: "UnsupportedTool", ErrorMessage: "Only oratorio_run.SubmitDiscussionReply is supported by this handler.");
         }
 
         SubmitDiscussionReplyRequest request;

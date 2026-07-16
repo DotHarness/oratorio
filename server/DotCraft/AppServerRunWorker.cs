@@ -663,7 +663,7 @@ public sealed class AppServerRunWorker(
         if (run.Purpose == RunPurpose.Implementation && run.Item.Kind is ItemKind.Issue or ItemKind.LocalTask && (run.Item.Kind == ItemKind.LocalTask || run.Item.Source is "github" or "gitlab"))
         {
             dynamicTools.Add(new AppServerDynamicToolSpec(
-                Namespace: "oratorio",
+                Namespace: AppServerDynamicToolCatalog.Namespace,
                 Name: "SubmitImplementationDraft",
                 Description: "Submit a structured implementation draft after modifying the Oratorio-managed worktree. Oratorio stores the draft and performs commit, push, and review target creation when policy allows.",
                 InputSchema: JsonSerializer.SerializeToElement(new
@@ -686,7 +686,7 @@ public sealed class AppServerRunWorker(
         if (run.Item.Source is "github" or "gitlab" && run.Item.Kind == ItemKind.PullRequest)
         {
             dynamicTools.Add(new AppServerDynamicToolSpec(
-                Namespace: "oratorio",
+                Namespace: AppServerDynamicToolCatalog.Namespace,
                 Name: "SubmitReviewDraft",
                 Description: "Submit a structured review draft with one summary and optional inline comments. Oratorio stores the draft for operator review.",
                 InputSchema: JsonSerializer.SerializeToElement(new
@@ -763,7 +763,7 @@ public sealed class AppServerRunWorker(
         }
 
         dynamicTools.Add(new AppServerDynamicToolSpec(
-            Namespace: "oratorio",
+            Namespace: AppServerDynamicToolCatalog.Namespace,
             Name: "SubmitFollowUpDraft",
             Description: "Submit draft follow-up work proposals. Oratorio stores them for operator review and can turn them into local tasks.",
             InputSchema: JsonSerializer.SerializeToElement(new
@@ -803,7 +803,7 @@ public sealed class AppServerRunWorker(
         AppServerDynamicToolCall call,
         CancellationToken ct)
     {
-        if (call.Namespace != "oratorio" || call.Tool is not ("SubmitReviewDraft" or "SubmitImplementationDraft" or "SubmitFollowUpDraft" or "SubmitDiscussionReply" or "ResolveReviewFinding"))
+        if (call.Namespace != AppServerDynamicToolCatalog.Namespace || call.Tool is not ("SubmitReviewDraft" or "SubmitImplementationDraft" or "SubmitFollowUpDraft" or "SubmitDiscussionReply" or "ResolveReviewFinding"))
         {
             return new AppServerDynamicToolResult(false, ErrorCode: "UnsupportedTool", ErrorMessage: "Only Oratorio runtime dynamic tools exposed for this run are supported.");
         }
@@ -1257,7 +1257,7 @@ public sealed class AppServerRunWorker(
                     clock.UtcNow,
                     RunStatus.Failed,
                     "reviewDraftRequired",
-                    "Source review runs must submit oratorio.SubmitReviewDraft before completing.",
+                    "Source review runs must submit oratorio_run.SubmitReviewDraft before completing.",
                     allowRetry: true);
                 await RecordFailedReviewGateAsync(scope, run, ct);
                 await db.SaveChangesAsync(ct);
